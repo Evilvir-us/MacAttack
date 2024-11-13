@@ -21,7 +21,7 @@ import configparser
 def get_token(session, url, mac_address):
     try:
         handshake_url = f"{url}/portal.php?type=stb&action=handshake&JsHttpRequest=1-xml"
-        cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "Europe/London"}
+        cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "America/Los_Angeles"}
         headers = {"User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)"}
         response = session.get(handshake_url, cookies=cookies, headers=headers, timeout=10)
         response.raise_for_status()
@@ -130,7 +130,7 @@ class RequestThread(QThread):
     def get_token(self, session, url, mac_address):
         try:
             handshake_url = f"{url}/portal.php?type=stb&action=handshake&JsHttpRequest=1-xml"
-            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "Europe/London"}
+            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "America/Los_Angeles"}
             headers = {"User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)"}
             response = session.get(handshake_url, cookies=cookies, headers=headers, timeout=10)
             response.raise_for_status()
@@ -149,7 +149,7 @@ class RequestThread(QThread):
     def get_genres(self, session, url, mac_address, token):
         try:
             genres_url = f"{url}/portal.php?type=itv&action=get_genres&JsHttpRequest=1-xml"
-            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "Europe/London"}
+            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "America/Los_Angeles"}
             headers = {
                 "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
                 "Authorization": "Bearer " + token,
@@ -179,7 +179,7 @@ class RequestThread(QThread):
     def get_vod_categories(self, session, url, mac_address, token):
         try:
             vod_url = f"{url}/portal.php?type=vod&action=get_categories&JsHttpRequest=1-xml"
-            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "Europe/London"}
+            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "America/Los_Angeles"}
             headers = {
                 "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
                 "Authorization": "Bearer " + token,
@@ -208,7 +208,7 @@ class RequestThread(QThread):
     def get_series_categories(self, session, url, mac_address, token):
         try:
             series_url = f"{url}/portal.php?type=series&action=get_categories&JsHttpRequest=1-xml"
-            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "Europe/London"}
+            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "America/Los_Angeles"}
             headers = {
                 "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
                 "Authorization": "Bearer " + token,
@@ -241,7 +241,7 @@ class RequestThread(QThread):
     ):
         try:
             channels = []
-            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "Europe/London"}
+            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "America/Los_Angeles"}
             headers = {
                 "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
                 "Authorization": f"Bearer {token}",
@@ -838,6 +838,9 @@ class MacAttack(QMainWindow):
         # GiveUp: Like throwing in the towel, but with less dignity. But hey, we tried, right?
         print("GiveUp method has been called. We tried, but it's over.")  # Console printout
         self.running = False
+        if self.output_file:
+            self.output_file.close()
+            self.output_file = None  # Reset the file reference if needed
         self.start_button.setDisabled(False)
         self.stop_button.setDisabled(True)
 
@@ -1141,7 +1144,7 @@ class MacAttack(QMainWindow):
                 cookies = {
                     "mac": mac_address,
                     "stb_lang": "en",
-                    "timezone": "Europe/London",
+                    "timezone": "America/Los_Angeles",
                 }
                 headers = {
                     "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
@@ -1268,7 +1271,7 @@ class MacAttack(QMainWindow):
                         cookies = {
                             "mac": mac_address,
                             "stb_lang": "en",
-                            "timezone": "Europe/London",
+                            "timezone": "America/Los_Angeles",
                         }
                         headers = {
                             "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
@@ -1313,7 +1316,7 @@ class MacAttack(QMainWindow):
                     cookies = {
                         "mac": mac_address,
                         "stb_lang": "en",
-                        "timezone": "Europe/London",
+                        "timezone": "America/Los_Angeles",
                     }
                     headers = {
                         "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
