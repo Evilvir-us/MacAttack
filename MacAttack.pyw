@@ -340,8 +340,14 @@ class MacAttack(QMainWindow):
         QTabBar::tab {
             background-color: #444444;
             color: white;
-            padding: 5px;
-            border-radius: 3px;  /* Optional: rounded corners for tab buttons */
+            padding-top: 5px;  /* Adds 5px top padding */
+            padding-right: 5px;  /* Adds 5px right padding */
+            padding-bottom: 5px; /* Adds 5px bottom padding */
+            padding-left: 5px;   /* Adds 5px left padding */
+            border-top-left-radius: 8px;  /* Rounded top-left corner */
+            border-top-right-radius: 8px; /* Rounded top-right corner */
+            border-bottom-left-radius: 0px;  /* No rounding on bottom-left */
+            border-bottom-right-radius: 0px; /* No rounding on bottom-right */
         }
 
         QTabBar::tab:selected {
@@ -369,6 +375,7 @@ class MacAttack(QMainWindow):
         self.main_layout.setSpacing(0)  
 
         # Create the tabs (Top-level tabs)
+        self.main_layout.addSpacing(8)  # Adds space
         self.tabs = QTabWidget(self)  # This is for the "Mac Attack" and "Mac VideoPlayer" tabs
         self.main_layout.addWidget(self.tabs)
         
@@ -385,6 +392,7 @@ class MacAttack(QMainWindow):
         self.update_mac_label_signal.connect(self.update_mac_label)
         self.update_output_text_signal.connect(self.update_output_text)
         self.update_error_text_signal.connect(self.update_error_text)
+        self.tabs.currentChanged.connect(self.on_tab_change)
         
     def update_mac_label(self, text):
         """Update the MAC address label in the main thread."""
@@ -435,6 +443,30 @@ class MacAttack(QMainWindow):
         combined_layout.addWidget(self.start_button)
         combined_layout.addWidget(self.stop_button)
 
+        self.start_button.setDisabled(False)
+        self.stop_button.setDisabled(True)
+
+
+        # Set a stylesheet to make the background grey when disabled
+        self.stop_button.setStyleSheet("""
+            QPushButton:disabled {
+                background-color: grey;
+            }
+            QPushButton:enabled {
+                background-color: red;
+            }
+        """)
+        self.start_button.setStyleSheet("""
+            QPushButton:disabled {
+                background-color: grey;
+            }
+            QPushButton:enabled {
+                background-color: green;
+            
+            }
+        """)
+
+
         # Add spacer to the right of the Stop button
         right_spacer = QSpacerItem(10, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
         combined_layout.addItem(right_spacer)
@@ -469,7 +501,7 @@ class MacAttack(QMainWindow):
             border-right: 12px solid #2E2E2E;
             border-bottom: 0px;
         """)
-        self.error_text.setPlainText("Error LOG:\nIt's normal for a few errors to appear down here.\nwhen speed is set high\nIf errors are getting spammed, lower the speed.")
+        self.error_text.setHtml("Error LOG:<br>It's normal for a few errors to appear down here.<br>If <b>\"Empty response\"</b> errors are getting spammed, lower the speed.")
         self.error_text.setReadOnly(True)
         layout.addWidget(self.error_text)
         layout.addSpacing(15)  # Adds space
@@ -500,6 +532,7 @@ class MacAttack(QMainWindow):
         self.hostname_layout = QHBoxLayout()  # Create a horizontal layout
         self.hostname_layout.setContentsMargins(0, 0, 0, 0)
         self.hostname_layout.setSpacing(0)
+        self.left_layout.addSpacing(8)  # Adds space
         self.hostname_label = QLabel("Host:")
         self.hostname_layout.addWidget(self.hostname_label)
         self.hostname_input = QLineEdit()
@@ -510,20 +543,24 @@ class MacAttack(QMainWindow):
         self.mac_layout = QHBoxLayout()
         self.mac_layout.setContentsMargins(0, 0, 0, 0)
         self.mac_layout.setSpacing(0)
+        self.left_layout.addSpacing(8)  # Adds space
         self.mac_label = QLabel("MAC:")
         self.mac_layout.addWidget(self.mac_label)
         self.mac_input = QLineEdit()
         self.mac_layout.addWidget(self.mac_input)
         self.left_layout.addLayout(self.mac_layout)
-
+        
+        self.left_layout.addSpacing(8)  # Adds space
         self.get_playlist_button = QPushButton("Get Playlist")
         self.left_layout.addWidget(self.get_playlist_button)
         self.get_playlist_button.clicked.connect(self.get_playlist)
-
+        self.left_layout.addSpacing(8)  # Adds space
         # Create a QTabWidget (for "Live", "Movies", "Series")
         self.tab_widget = QTabWidget()
         self.left_layout.addWidget(self.tab_widget)
-
+        self.get_playlist_button.setFixedWidth(120)
+        self.left_layout.setAlignment(self.get_playlist_button, Qt.AlignCenter)
+        
         # Dictionary to hold tab data
         self.tab_data = {}
 
@@ -583,9 +620,6 @@ class MacAttack(QMainWindow):
         self.video_frame = QWidget(self)  # Changed from QFrame to QWidget for direct size management
         self.video_frame.setStyleSheet("background-color: black;")  # Ensure black background for video area
 
-        # VLC dynamic width
-        new_width = self.width() - 360
-        self.video_frame.setMinimumWidth(new_width)
 
         main_layout.addWidget(self.video_frame)
 
@@ -596,8 +630,13 @@ class MacAttack(QMainWindow):
         elif sys.platform == "darwin":  # for MacOS
             self.videoPlayer.set_nsobject(int(self.video_frame.winId()))
 
-        self.videoPlayer.set_media(self.instance.media_new('https://iptv.evilvir.us/skull4K.mp4'))  # Load skull
-        self.videoPlayer.play()  # Start playing the video
+
+        # Determine the correct path for the video
+        if getattr(sys, 'frozen', False):  # Check if running as a bundled executable
+            video_path = os.path.join(sys._MEIPASS, 'video', 'skull.mp4')
+        else:
+            video_path = os.path.join('video', 'skull.mp4')  # For normal Python execution
+        self.videoPlayer.set_media(self.instance.media_new(video_path))  # Load skull
 
         self.videoPlayer.video_set_mouse_input(False)
         self.videoPlayer.video_set_key_input(False)
@@ -607,7 +646,7 @@ class MacAttack(QMainWindow):
         self.progress_animation.setDuration(1000)  # Duration of the animation (in milliseconds)
         self.progress_animation.setEasingCurve(QEasingCurve.Linear)  # Smooth progress change
            
-    def save_settings(self):
+    def SaveTheDay(self):
         """Save user settings, including window geometry, to the configuration file."""
         import os
         import configparser
@@ -683,8 +722,8 @@ class MacAttack(QMainWindow):
     def TestDrive(self):
         # The "Let's hit the gas and see what happens" function
         self.running = True
-        #self.start_button.setDisabled(True)
-        #self.start_button.setDisabled(False)
+        self.start_button.setDisabled(True)
+        self.stop_button.setDisabled(False)
 
         self.iptv_link = self.iptv_link_entry.text()
         self.parsed_url = urlparse(self.iptv_link)
@@ -693,12 +732,9 @@ class MacAttack(QMainWindow):
         self.base_url = f"http://{self.host}:{self.port}"
 
         num_tests = self.concurrent_tests.value()
-        # Limit to a maximum of 10 concurrent tests, 'cause we’re not running a circus here.
+        # Limit to a maximum of 15 concurrent tests, 'cause we’re not running a circus here.
         if num_tests > 15:
             num_tests = 15
-
-        # Save current settings to a file so they don’t get lost forever
-        self.SaveTheDay()
 
         # Start threads to test MACs
         for _ in range(num_tests):
@@ -706,13 +742,14 @@ class MacAttack(QMainWindow):
             thread.daemon = True
             thread.start()
             self.threads.append(thread)
-        self.save_settings()
+        self.SaveTheDay()
             
     def RandomMacGenerator(self, prefix="00:1A:79:"):
         # Create random MACs. Purely for mischief. Don't tell anyone.
         return f"{prefix}{random.randint(0, 255):02X}:{random.randint(0, 255):02X}:{random.randint(0, 255):02X}"
             
     def BigMacAttack(self):
+        self.error_count = 0
         # BigMacAttack: Two all-beef patties, special sauce, lettuce, cheese, pickles, onions, on a sesame seed bun.
         while self.running:  # Loop will continue as long as self.running is True
             mac = self.RandomMacGenerator()  # Generate a random MAC
@@ -778,31 +815,20 @@ class MacAttack(QMainWindow):
             # Catch all relevant exceptions and ensure the loop continues
             except (json.decoder.JSONDecodeError, requests.exceptions.RequestException, TypeError) as e:
                 if "Expecting value: line 1 column 1 (char 0)" in str(e):
-                    self.update_error_text_signal.emit(
-                        f"Error for MAC: {mac} : {str(e).replace('Expecting value: line 1 column 1 (char 0)', 'Empty response')}"
-                    )
+                    if self.error_count >= 6:
+                        self.update_error_text_signal.emit(
+                            f"Error for MAC: {mac} : {str(e).replace('Expecting value: line 1 column 1 (char 0)', 'Empty response')}"
+                        )
+                    self.error_count += 1  # Increment the error count
                 else:
-                    self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
+                    if self.error_count >= 6: #skipping emitting the first 6 errors. Because, laziness.
+                        self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
+                    self.error_count += 1  # Increment the error count
                      
-    def SaveTheDay(self):
-        # Saving the day by storing our preferences so we can be lazy
-        settings = {
-            'url': self.iptv_link_entry.text(),
-            'speed': self.concurrent_tests.value()
-        }
-
-        # Ensuring the sacred settings folder is there
-        user_profile = os.environ['USERPROFILE']
-        settings_dir = os.path.join(user_profile, "Evilvir.us")
-        os.makedirs(settings_dir, exist_ok=True)
-        settings_file = os.path.join(settings_dir, "iptv_checker_settings.json")
-
-        with open(settings_file, 'w') as file:
-            json.dump(settings, file)
 
     def OutputMastermind(self):
         # Fancy file-naming because why not complicate things?
-        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        current_time = datetime.now().strftime("%m%d_%H%M%S")
         sanitized_url = self.base_url.replace("http://", "").replace("https://", "").replace("/", "_").replace(":", "-")
         filename = f"{sanitized_url}_{current_time}.txt"
         return filename
@@ -812,8 +838,8 @@ class MacAttack(QMainWindow):
         # GiveUp: Like throwing in the towel, but with less dignity. But hey, we tried, right?
         print("GiveUp method has been called. We tried, but it's over.")  # Console printout
         self.running = False
-        # self.start_button.setDisabled(False)
-        # self.start_button.setDisabled(True)
+        self.start_button.setDisabled(False)
+        self.stop_button.setDisabled(True)
 
         if hasattr(self, 'output_file') and self.output_file:
             self.output_file.close()
@@ -840,7 +866,7 @@ class MacAttack(QMainWindow):
         mac_address = self.mac_input.text()
 
         if not hostname_input or not mac_address:
-            self.error_label.setText("ERROR: Unable to connect to the host")
+            self.error_label.setText("ERROR: Missing input.")
             self.error_label.show()
             logging.warning(
                 "User attempted to get playlist without entering all required fields."
@@ -1449,17 +1475,22 @@ class MacAttack(QMainWindow):
                     self.error_label.hide()   
                     self.videoPlayer.play()  # Play the video
                     self.tabs.tabBar().setVisible(True)
-    
+
+    def on_tab_change(self, index):
+        """Method to handle video playback when the Mac VideoPlayer tab is selected"""
+        if self.tabs.tabText(index) == "Mac VideoPlayer":
+            self.videoPlayer.play()  # Play the video when Mac VideoPlayer tab is selected
+        else:
+            self.videoPlayer.pause()  # Pause the video when the tab is not selected    
     def resizeEvent(self, event):
-        # Calculate new width with a minimum constraint to prevent zero or negative sizes
-        new_width = max(self.width() - 290, 300)  # keeping the playlist side @ 360, and make the window no smaller than 370
-        # Set the new minimum width for the video frame
+        # VLC dynamic width
+        new_width = self.width() - 250
         self.video_frame.setMinimumWidth(new_width)
   
     
     def closeEvent(self, event):
         # Save settings when the window is about to close
-        self.save_settings()
+        self.SaveTheDay()
 
         # Accept the close event
         event.accept()
