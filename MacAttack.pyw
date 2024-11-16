@@ -1,5 +1,5 @@
 import os
-import re 
+import re
 import json
 import random
 import threading
@@ -9,7 +9,7 @@ import vlc
 import base64
 from PyQt5.QtCore import QByteArray, QBuffer, Qt, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer, QSize
 from PyQt5.QtGui import QPixmap, QIcon, QStandardItemModel, QStandardItem
-from PyQt5.QtWidgets import QMainWindow, QApplication, QVBoxLayout, QLineEdit, QLabel, QPushButton, QWidget, QTabWidget, QMessageBox, QListView, QHBoxLayout, QAbstractItemView, QProgressBar, QSpinBox, QTextEdit, QSpacerItem, QSizePolicy
+from PyQt5.QtWidgets import QMainWindow, QApplication, QVBoxLayout, QLineEdit, QLabel, QPushButton, QWidget, QTabWidget, QMessageBox, QListView, QHBoxLayout, QCheckBox, QAbstractItemView, QProgressBar, QSpinBox, QTextEdit, QSpacerItem, QSizePolicy
 import requests
 import concurrent.futures
 import logging
@@ -18,10 +18,7 @@ import configparser
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-
-
 #logging.basicConfig(level=logging.DEBUG)  # Set to DEBUG for detailed logs
-
 
 def get_token(session, url, mac_address):
     try:
@@ -39,13 +36,12 @@ def get_token(session, url, mac_address):
             return None
     except Exception as e:
         logging.error(f"Error getting token: {e}")
-
         return None
 
 class RequestThread(QThread):
-    request_complete = pyqtSignal(dict)  # Signal to emit when request is complete
-    update_progress = pyqtSignal(int)  # Signal to emit progress updates
-    channels_loaded = pyqtSignal(list)  # Signal to emit channels when loaded
+    request_complete = pyqtSignal(dict)  # Signal emitted when the request is complete
+    update_progress = pyqtSignal(int)  # Signal for progress updates
+    channels_loaded = pyqtSignal(list)  # Signal emitted when channels are loaded
     
     def __init__(self, base_url, mac_address, category_type=None, category_id=None):
         super().__init__()
@@ -56,7 +52,7 @@ class RequestThread(QThread):
 
     def run(self):
         try:
-            # Check if thread was interrupted at the start
+            # Check if the thread is interrupted at the start
             if self.isInterruptionRequested():
                 logging.debug("RequestThread was interrupted at the start.")
                 self.request_complete.emit({})
@@ -76,7 +72,7 @@ class RequestThread(QThread):
 
             if token:
                 if self.category_type and self.category_id:
-                    self.update_progress.emit(1)  # Token retrieval complete
+                    self.update_progress.emit(1)  # Indicating token retrieval is complete
                     channels = self.get_channels(session, self.base_url, self.mac_address, token, self.category_type, self.category_id)
                     
                     if self.isInterruptionRequested():
@@ -89,7 +85,7 @@ class RequestThread(QThread):
                 else:
                     self.fetch_and_emit_playlist_data(session, token)
             else:
-                self.request_complete.emit({})  # Emit empty data if token fails
+                self.request_complete.emit({})  # Emit empty data if token retrieval fails
                 self.update_progress.emit(0)
 
         except Exception as e:
@@ -98,14 +94,14 @@ class RequestThread(QThread):
             logging.debug("Thread cleanup complete.")
             
     def requestInterruption(self):
-        # This is how you request interruption in QThread.
+        # Request to interrupt the thread
         super().requestInterruption()
 
     def fetch_and_emit_playlist_data(self, session, token):
-        # Simulating the playlist fetching process
+        # Simulate fetching playlist data
         data = {"Live": [], "Movies": [], "Series": []}
 
-        # Fetching genres for Live tab
+        # Fetch genres for the Live tab
         self.update_progress.emit(1)
         genres = self.get_genres(session, self.base_url, self.mac_address, token)
         if genres:
@@ -117,7 +113,7 @@ class RequestThread(QThread):
         # Update progress after fetching genres
         self.update_progress.emit(40)
 
-        # Fetching VOD categories for Movies tab
+        # Fetch VOD categories for the Movies tab
         vod_categories = self.get_vod_categories(session, self.base_url, self.mac_address, token)
         if vod_categories:
             data["Movies"].extend(vod_categories)
@@ -125,15 +121,16 @@ class RequestThread(QThread):
         # Update progress after fetching VOD categories
         self.update_progress.emit(70)
 
-        # Fetching Series categories for Series tab
+        # Fetch Series categories for the Series tab
         series_categories = self.get_series_categories(session, self.base_url, self.mac_address, token)
         if series_categories:
             data["Series"].extend(series_categories)
 
         # Final progress update
         self.update_progress.emit(100)
-        # Emit the complete data through the signal
+        # Emit the completed data
         self.request_complete.emit(data)
+
 
     def get_token(self, session, url, mac_address):
         try:
@@ -151,7 +148,6 @@ class RequestThread(QThread):
                 return None
         except Exception as e:
             logging.error(f"Error getting token: {e}")
-
             return None
 
     def get_genres(self, session, url, mac_address, token):
@@ -178,7 +174,7 @@ class RequestThread(QThread):
                 return genres
             else:
                 logging.warning("No genres data found.")
-                self.request_complete.emit({})  # Emit empty data if token fails
+                self.request_complete.emit({})  # Emit empty data if no genres are found
                 return []
         except Exception as e:
             logging.error(f"Error getting genres: {e}")
@@ -254,6 +250,7 @@ class RequestThread(QThread):
             }
 
             def fetch_page(page_number):
+                # Build URL based on the category type
                 if category_type == "IPTV":
                     channels_url = f"{url}/portal.php?type=itv&action=get_ordered_list&genre={category_id}&JsHttpRequest=1-xml&p={page_number}"
                 elif category_type == "VOD":
@@ -296,30 +293,30 @@ class RequestThread(QThread):
 
             channels.extend(first_page_data)
 
-            # Calculate the total number of pages to fetch based on total_items
+            # Calculate total pages based on total_items
             pages_to_fetch = (total_items // 10) + (1 if total_items % 10 != 0 else 0)
 
             logging.debug(f"Total pages to fetch: {pages_to_fetch} (based on {total_items} total items)")
 
-            # Emit initial progress (1% at the start)
+            # Emit initial progress
             self.update_progress.emit(1)
 
-            # Fetch the rest of the pages in parallel
+            # Fetch remaining pages in parallel
             with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
-                page_numbers = range(2, pages_to_fetch + 1)  # Start from page 2 since page 1 is already fetched
+                page_numbers = range(2, pages_to_fetch + 1)
                 results = executor.map(fetch_page, page_numbers)
 
-                total_fetched = len(first_page_data)  # Start with the first page's data
-                for i, (result, _) in enumerate(results, start=2):  # start from page 2
+                total_fetched = len(first_page_data)
+                for i, (result, _) in enumerate(results, start=2):  # Start from page 2
                     if result:
                         channels.extend(result)
                         total_fetched += len(result)
 
-                    # Emit progress after each page is fetched
+                    # Emit progress after each page
                     progress = int((total_fetched / total_items) * 100)
                     self.update_progress.emit(progress)
 
-            # Final progress (100% after all pages are fetched)
+            # Final progress update
             self.update_progress.emit(100)
 
             logging.debug(f"Total channels fetched: {len(channels)}")
@@ -328,7 +325,43 @@ class RequestThread(QThread):
         except Exception as e:
             logging.error(f"An error occurred while retrieving channels: {str(e)}")
             return []
+
             
+class VideoPlayerWorker(QThread):
+    # Signal to emit stream URL when the request is successful
+    stream_url_ready = pyqtSignal(str)
+    # Signal to emit error message if the request fails
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, stream_url, cookies):
+        super().__init__()
+        self.stream_url = stream_url
+        self.cookies = cookies
+        self.session = requests.Session()
+        self.session.cookies.update(self.cookies)  # Update session with provided cookies
+
+    def run(self):
+        try:
+            # Set a timeout to prevent hanging requests
+            timeout = 10  # seconds
+            response = self.session.get(self.stream_url, timeout=timeout)
+            
+            if response.status_code == 200:
+                # Emit the final stream URL if successful
+                self.stream_url_ready.emit(response.url)
+            else:
+                # Emit error if the request fails
+                error_message = f"Failed to fetch stream. HTTP Status Code: {response.status_code}"
+                self.error_occurred.emit(error_message)
+        except requests.Timeout:
+            # Handle request timeout
+            self.error_occurred.emit("Request timed out while fetching stream.")
+        except requests.ConnectionError:
+            # Handle connection issues (e.g., no internet connection)
+            self.error_occurred.emit("Connection error while fetching stream.")
+        except Exception as e:
+            # Emit error for any other unexpected issues
+            self.error_occurred.emit(f"An unexpected error occurred: {str(e)}")
             
 class MacAttack(QMainWindow):
     update_mac_label_signal = pyqtSignal(str)
@@ -341,15 +374,32 @@ class MacAttack(QMainWindow):
         self.set_window_icon()
         self.setWindowTitle("MacAttack by Evilvirus")
         self.setGeometry(200, 200, 600, 500)
+        # Remove title bar and make window resizable
+        # Remove the FramelessWindowHint to allow resizing
+        # Remove title bar but keep the window resizable
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)  # Frameless with window resizing allowed
+        self.setAttribute(Qt.WA_TranslucentBackground)  #Make background translucent
 
         self.running = False
         self.threads = []
         self.output_file = None
         
+        self.video_worker = None  # Initialize to None
+        
+        # Initialize cookies and requests session
+        self.cookies = {
+            "mac": "00:11:22:33:44:55",  # Default MAC address (you can change this later)
+            "stb_lang": "en",
+            "timezone": "America/Los_Angeles",
+        }
+
+        self.session = requests.Session()
+        self.session.cookies.update(self.cookies)  # Apply cookies to session       
+        
         # Set the Fusion theme with dark mode
         QApplication.setStyle("Fusion")
 
-# Set dark style for the whole application
+        # Set dark style for the whole application
         dark_stylesheet = """
         QWidget {
             background-color: #2e2e2e;
@@ -360,17 +410,13 @@ class MacAttack(QMainWindow):
         QLineEdit, QPushButton, QTabWidget {
             background-color: #444444;
             color: white;
-            border: 1px solid #666666;
+            border: 0px solid #666666;
             padding: 5px;
-            border-radius: 3px;  /* Optional: rounded corners for a modern look */
+            border-radius: 3px;  /* Rounded corners for a modern look */
         }
 
         QLineEdit:focus, QPushButton:pressed {
             background-color: #666666;
-        }
-
-        QTabWidget::pane {
-            background-color: #333333;       
         }
 
         QTabBar::tab {
@@ -380,8 +426,8 @@ class MacAttack(QMainWindow):
             padding-right: 5px;  /* Adds 5px right padding */
             padding-bottom: 5px; /* Adds 5px bottom padding */
             padding-left: 5px;   /* Adds 5px left padding */
-            border-top-left-radius: 8px;  /* Rounded top-left corner */
-            border-top-right-radius: 8px; /* Rounded top-right corner */
+            border-top-left-radius: 10px;  /* Rounded top-left corner */
+            border-top-right-radius: 10px; /* Rounded top-right corner */
             border-bottom-left-radius: 0px;  /* No rounding on bottom-left */
             border-bottom-right-radius: 0px; /* No rounding on bottom-right */
         }
@@ -407,13 +453,38 @@ class MacAttack(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.main_layout = QVBoxLayout(self.central_widget)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.setSpacing(0)  
+        self.main_layout.setSpacing(0)
+
+        # Top bar layout
+        self.topbar_layout = QHBoxLayout()  # Create a horizontal layout
+        self.topbar_layout.setContentsMargins(30, 5, 0, 0)
+        self.topbar_layout.setSpacing(0)
+
+        # Top bar content (left label and tabs)
+        #self.topbar_left_label = QLabel("test:")
+        #self.topbar_layout.addWidget(self.topbar_left_label)
 
         # Create the tabs (Top-level tabs)
-        self.main_layout.addSpacing(0)  # Adds space
         self.tabs = QTabWidget(self)  # This is for the "Mac Attack" and "Mac VideoPlayer" tabs
-        self.main_layout.addWidget(self.tabs)
-        
+        self.topbar_layout.addWidget(self.tabs)
+
+        # Create a minimize button with a "-" label
+        self.topbar_minimize_button = QPushButton("-")
+        self.topbar_minimize_button.setFixedSize(20, 20)  # size adjustment
+        self.topbar_minimize_button.clicked.connect(self.showMinimized)  # Connect to minimize the app
+
+        # Create a close button with "X"
+        self.topbar_close_button = QPushButton("X")
+        self.topbar_close_button.setFixedSize(20, 20)  # size adjustment
+        self.topbar_close_button.clicked.connect(self.close)  # Connect to close the app
+
+        # Add buttons to the layout with appropriate alignment
+        self.topbar_layout.addWidget(self.topbar_minimize_button, alignment=Qt.AlignTop | Qt.AlignRight)
+        self.topbar_layout.addWidget(self.topbar_close_button, alignment=Qt.AlignTop | Qt.AlignRight)
+
+        # Add top bar layout to the main layout
+        self.main_layout.addLayout(self.topbar_layout)
+
         # Create the tabs content
         self.mac_attack_frame = QWidget()
         self.build_mac_attack_gui(self.mac_attack_frame)
@@ -422,12 +493,46 @@ class MacAttack(QMainWindow):
         self.mac_videoPlayer_frame = QWidget()
         self.build_mac_videoPlayer_gui(self.mac_videoPlayer_frame)
         self.tabs.addTab(self.mac_videoPlayer_frame, "Mac VideoPlayer")
+
+        # Add Settings Tab
+        self.Settings_frame = QWidget()
+        self.build_Settings_gui(self.Settings_frame)
+        self.tabs.addTab(self.Settings_frame, "Settings")
+
+        # Bottom bar layout
+        self.bottombar_layout = QHBoxLayout()  # Create a horizontal layout
+        self.bottombar_layout.setContentsMargins(0, 30, 0, 0)
+        self.bottombar_layout.setSpacing(0)
+
+        # Add bottom bar layout to the main layout
+        self.main_layout.addLayout(self.bottombar_layout)
+        
+        
         self.load_settings()
+
         # Connect the signals to their respective update methods
         self.update_mac_label_signal.connect(self.update_mac_label)
         self.update_output_text_signal.connect(self.update_output_text)
         self.update_error_text_signal.connect(self.update_error_text)
         self.tabs.currentChanged.connect(self.on_tab_change)
+        
+        # Make the window resizable by adding a mouse event handler
+        self.setMouseTracking(True)
+        self.setAttribute(Qt.WA_OpaquePaintEvent)
+        self.resizing = False
+        self.moving = False
+        self.resize_start_pos = None
+        self.move_start_pos = None
+
+    def build_Settings_gui(self, Settings_frame):
+        # Create the layout for the settings frame
+        Settings_layout = QVBoxLayout(Settings_frame)
+
+        # autoload macs
+        self.autoloadmac_checkbox = QCheckBox("Load MAC into the player tab instantly when discovered")
+        #self.autoloadmac_checkbox.stateChanged.connect(self.on_load_max_checkbox_state_changed)
+        Settings_layout.addWidget(self.autoloadmac_checkbox)
+        Settings_frame.setLayout(Settings_layout)
         
     def update_mac_label(self, text):
         """Update the MAC address label in the main thread."""
@@ -536,7 +641,7 @@ class MacAttack(QMainWindow):
             border-right: 12px solid #2E2E2E;
             border-bottom: 0px;
         """)
-        self.error_text.setHtml("Error LOG:<br>It's normal for a few errors to appear down here.<br>If <b>\"Empty response\"</b> errors are getting spammed, lower the speed.")
+        self.error_text.setHtml("Error LOG:<br>It's normal for a few errors to appear down here.<br>If <b>Empty response</b> errors are getting spammed, lower the speed.")
         self.error_text.setReadOnly(True)
         layout.addWidget(self.error_text)
         layout.addSpacing(15)  # Adds space
@@ -556,7 +661,7 @@ class MacAttack(QMainWindow):
         # Main layout with two sections: left (controls) and right (video + buttons)
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(10)  # Optional spacing between sections
+        main_layout.setSpacing(10) 
 
         # LEFT SECTION: Controls and other widgets
         self.left_layout = QVBoxLayout()
@@ -610,6 +715,14 @@ class MacAttack(QMainWindow):
         # Dictionary to hold tab data
         self.tab_data = {}
 
+        
+        # Add left margin to self.left_layout
+        self.left_layout.setContentsMargins(10, 0, 0, 0)
+
+        # Add a left margin to self.tab_widget
+        self.tab_widget.setContentsMargins(10, 0, 0, 0)
+        
+        
         for tab_name in ["Live", "Movies", "Series"]:
             tab = QWidget()
             tab_layout = QVBoxLayout(tab)
@@ -657,7 +770,13 @@ class MacAttack(QMainWindow):
 
         
         # Add left layout to main layout
-        main_layout.addLayout(self.left_layout)
+        # Create a QWidget to hold left_layout to set fixed size
+        self.left_widget = QWidget()
+        self.left_widget.setLayout(self.left_layout)
+        self.left_widget.setFixedWidth(240)
+
+        main_layout.addWidget(self.left_widget)
+
 
         # RIGHT SECTION: Video area and controls
         right_layout = QVBoxLayout()
@@ -667,7 +786,7 @@ class MacAttack(QMainWindow):
         # Video frame
         self.video_frame = QWidget(self)
         self.video_frame.setStyleSheet("background-color: black;")
-        self.video_frame.setMinimumWidth(640)  # Set a minimum size for visibility
+        #self.video_frame.setMinimumWidth(640)  # Set a minimum size for visibility
         right_layout.addWidget(self.video_frame)
 
         # Add right layout to main layout
@@ -699,9 +818,17 @@ class MacAttack(QMainWindow):
         self.progress_animation = QPropertyAnimation(self.progress_bar, b"value")
         self.progress_animation.setDuration(1000)
         self.progress_animation.setEasingCurve(QEasingCurve.Linear)
+        self.mac_input.textChanged.connect(self.update_mac_cookie)
+
+    def update_mac_cookie(self):
+        # Update the MAC cookie whenever the user changes the input
+        mac_address = self.mac_input.text()
+        self.cookies["mac"] = mac_address
+        self.session.cookies.update(self.cookies)  # Apply updated cookies to session
+        logging.debug(f"Updated MAC address to: {mac_address}")
         
     def SaveTheDay(self):
-        """Save user settings, including window geometry, to the configuration file."""
+        """Save user settings, including window geometry, active tab, and other preferences to the configuration file."""
         import os
         import configparser
         
@@ -714,7 +841,9 @@ class MacAttack(QMainWindow):
             'iptv_link': self.iptv_link_entry.text(),
             'concurrent_tests': self.concurrent_tests.value(),
             'hostname': self.hostname_input.text(),
-            'mac': self.mac_input.text()
+            'mac': self.mac_input.text(),
+            'autoloadmac': str(self.autoloadmac_checkbox.isChecked()),  # Save the checkbox state
+            'active_tab': str(self.tabs.currentIndex())  # Save the index of the active tab
         }
         
         config['Window'] = {
@@ -726,10 +855,10 @@ class MacAttack(QMainWindow):
         
         with open(file_path, 'w') as configfile:
             config.write(configfile)
-        logging.debug("Settings saved.")   
-        
+        logging.debug("Settings saved.")
+    
     def load_settings(self):
-        """Load user settings from the configuration file and apply them to the UI elements and window geometry."""
+        """Load user settings from the configuration file and apply them to the UI elements, including the active tab."""
         import os
         import configparser
         
@@ -746,6 +875,14 @@ class MacAttack(QMainWindow):
             self.hostname_input.setText(config.get('Settings', 'hostname', fallback=""))
             self.mac_input.setText(config.get('Settings', 'mac', fallback=""))
             
+            # Load autoloadmac_checkbox state
+            autoloadmac_state = config.get('Settings', 'autoloadmac', fallback="False")
+            self.autoloadmac_checkbox.setChecked(autoloadmac_state == "True")  # Set checkbox based on saved state
+            
+            # Load active tab
+            active_tab = config.getint('Settings', 'active_tab', fallback=0)  # Default to first tab if not found
+            self.tabs.setCurrentIndex(active_tab)  # Set the active tab
+            
             # Load window geometry settings
             if config.has_section('Window'):
                 self.resize(config.getint('Window', 'width', fallback=800), 
@@ -754,7 +891,7 @@ class MacAttack(QMainWindow):
                           config.getint('Window', 'y', fallback=200))
             logging.debug("Settings loaded.")
         else:
-            logging.debug("No settings file found.") 
+            logging.debug("No settings file found.")
         
     def set_window_icon(self):
         # Base64 encoded image string (replace with your own base64 string)
@@ -850,6 +987,13 @@ class MacAttack(QMainWindow):
 
                             if count > 0:
                                 logging.debug("Mac found")
+                                # Check if the autoloadmac_checkbox is checked
+                                if self.autoloadmac_checkbox.isChecked():
+                                    # Insert the base URL into the hostname_input field
+                                    self.hostname_input.setText(self.base_url)                                   
+                                    # Insert the mac value into the mac_input field
+                                    self.mac_input.setText(mac)
+
                                 if self.output_file is None:
                                     output_filename = self.OutputMastermind()
                                     self.output_file = open(output_filename, "a")
@@ -859,7 +1003,7 @@ class MacAttack(QMainWindow):
 
                                 # Write result_message to the output file
                                 self.output_file.write(result_message)
-                                self.output_file.flush()  # Optional: Ensures data is written immediately
+                                self.output_file.flush()  #Ensures data is written immediately
                             else:
                                 result_message = f"MAC: {mac} connects, but has 0 channels. Bummer."
                                 self.update_error_text_signal.emit(result_message)
@@ -871,7 +1015,7 @@ class MacAttack(QMainWindow):
                 if "Expecting value: line 1 column 1 (char 0)" in str(e):
                     if self.error_count >= 6:
                         self.update_error_text_signal.emit(
-                            f"Error for MAC: {mac} : {str(e).replace('Expecting value: line 1 column 1 (char 0)', 'Empty response')}"
+                            f"Error for MAC: {mac} : {str(e).replace('Expecting value: line 1 column 1 (char 0)', '<b>Empty response</b>')}"
                         )
                     self.error_count += 1  # Increment the error count
                 else:
@@ -977,7 +1121,6 @@ class MacAttack(QMainWindow):
             return
 
         for tab_name, tab_data in data.items():
-            # Change this line to use self.tab_data instead of self.tabs
             tab_info = self.tab_data.get(tab_name)  # Use the dictionary with tab data
             if not tab_info:
                 logging.info(f"Unknown tab name: {tab_name}")
@@ -990,7 +1133,7 @@ class MacAttack(QMainWindow):
             
 
         logging.debug("Playlist data loaded into tabs.")
-        self.current_request_thread = None  # Reset the current thread
+        self.current_request_thread = None
 
     def update_playlist_view(self, tab_name):
         tab_info = self.tab_data[tab_name]
@@ -999,7 +1142,7 @@ class MacAttack(QMainWindow):
         tab_info["current_view"] = "categories"
 
         # Retrieve playlist_view
-        playlist_view = tab_info["playlist_view"]  # <-- Add this line
+        playlist_view = tab_info["playlist_view"]  
 
         if tab_info["navigation_stack"]:
             go_back_item = QStandardItem("Go Back")
@@ -1457,42 +1600,112 @@ class MacAttack(QMainWindow):
     def launch_videoPlayer(self, stream_url):
         self.error_label.setVisible(False)
         logging.debug(f"Launching media player with URL: {stream_url}")
-        
-        # Stop the media player if it's already playing
+
+        # If there is an existing worker thread, make sure to stop it first
+        if self.video_worker is not None and self.video_worker.isRunning():
+            print("Stopping previous worker thread before starting a new one.")
+            self.video_worker.quit()  # Safely stop the worker
+            if not self.video_worker.wait(3000):  # 3000ms timeout
+                print("Warning: Worker thread did not stop in time.")
+                if self.video_worker is not None and self.video_worker.isRunning():
+                    print("Forcefully stopping the worker thread.")
+                    self.video_worker.quit()
+                    self.video_worker.terminate()  # Forcefully terminate, use cautiously
+                    self.video_worker.wait()  # Wait for termination
+
+        # Preload the media to minimize the delay when playing
         if self.videoPlayer.is_playing():
             self.videoPlayer.stop()
 
-        # Clear any previous media
         self.videoPlayer.set_media(None)
-
-        # Create new media for the new stream URL
         media = self.instance.media_new(stream_url)
         self.videoPlayer.set_media(media)
 
-        # Play the new stream
+        # Start the worker thread to fetch stream URL in the background
+        self.video_worker = VideoPlayerWorker(stream_url, self.cookies)
+        self.video_worker.stream_url_ready.connect(self.on_stream_url_ready)
+        self.video_worker.error_occurred.connect(self.on_error_occurred)
+
+        # Start the thread (but don't play the video yet)
+        self.video_worker.start()
+
+        # Delay the actual video play call until the media is ready
+        QTimer.singleShot(100, self.videoPlayer.play)
+
+    def on_stream_url_ready(self, stream_url):
+        logging.debug(f"Stream URL fetched: {stream_url}")
+        
+        # This code will be triggered once the media is ready to play
         self.videoPlayer.play()
 
         # Function to check for errors after a delay
-        def delayed_error_check():
-            if not self.videoPlayer.is_playing():
-                self.on_player_error(None)  # Trigger the error handler manually
+    def delayed_error_check():
+        if not self.videoPlayer.is_playing():
+            self.on_player_error(None)  # Trigger the error handler manually
 
         # Use QTimer for delayed error check on the main thread
-        QTimer.singleShot(8000, delayed_error_check)
+        QTimer.singleShot(2000, delayed_error_check)
+
+    def on_error_occurred(self, error_message):
+        logging.error(f" {error_message}")
+        self.error_label.setText(f"Error: {error_message}")
+        self.error_label.setVisible(True)
+
 
     def on_player_error(self, event):
         self.error_label.setVisible(False)
         """Handle VLC errors."""
         self.error_label.setText("ERROR: Can't load the stream.")
         self.error_label.setVisible(True)   
+
         
     def mousePressEvent(self, event): #Pause/play video
+        # Begin resizing when clicking on the border
+        if event.button() == Qt.LeftButton:
+            # Get mouse position
+            pos = event.pos()
+
+            # Check if within the top 30 pixels but excluding the corners (left 20, right 20, top 20)
+            if 0 < pos.x() < self.width() - 30 and 0 < pos.y() < 30:
+                self.moving = True
+                self.move_start_pos = event.globalPos()  # Global position for moving
+            # Check if near the borders (left, right, bottom) for resizing
+            elif pos.x() < 20 or pos.x() > self.width() - 20 or pos.y() < 20 or pos.y() > self.height() - 20:
+                self.resizing = True
+                self.resize_start_pos = event.pos()        
+        
         if self.tabs.currentIndex() == 1:  # Ensure we're on the Mac VideoPlayer tab
             if event.button() == Qt.LeftButton:  # Only respond to left-clicks
-                if self.videoPlayer.is_playing():  # Check if the video is currently playing
-                    self.videoPlayer.pause()  # Pause the video
-                else:
-                    self.videoPlayer.play()  # Play the video
+                if not self.resizing and not self.moving:
+                    if self.videoPlayer.is_playing():  # Check if the video is currently playing
+                        self.videoPlayer.pause()  # Pause the video
+                    else:
+                        self.videoPlayer.play()  # Play the video
+
+
+    def mouseMoveEvent(self, event):
+        if self.moving:
+            # Move the window based on mouse movement
+            delta = event.globalPos() - self.move_start_pos
+            self.move(self.pos() + delta)
+            self.move_start_pos = event.globalPos()
+
+        elif self.resizing:
+            # Resize the window based on mouse movement
+            delta = event.pos() - self.resize_start_pos
+            new_width = self.width() + delta.x()
+            new_height = self.height() + delta.y()
+
+            # Update window size while ensuring minimum size
+            self.resize(max(new_width, 200), max(new_height, 200))
+
+            # Update starting position for resizing
+            self.resize_start_pos = event.pos()
+            
+    def mouseReleaseEvent(self, event):
+        self.resizing = False
+        self.moving = False
+
 
     def mouseDoubleClickEvent(self, event): #Fullscreen video
         
@@ -1522,6 +1735,7 @@ class MacAttack(QMainWindow):
                         widget = self.progress_layout.itemAt(i).widget()
                         if widget:
                             widget.hide()
+                    self.left_widget.hide()
                     self.spacer.changeSize(0, 0)  # Make it disappear
 
                     self.showFullScreen()
@@ -1534,7 +1748,19 @@ class MacAttack(QMainWindow):
                     #self.left_layout.setSpacing(0)  # No space between widgets
                     self.videoPlayer.play()  # Play the video
                     self.tabs.tabBar().setVisible(False)
+                    # Hide each widget in the topbar layout
+                    for widget in self.topbar_layout.children():
+                        widget.setVisible(False)
 
+                    # Hide each widget in the bottombar layout
+                    for widget in self.bottombar_layout.children():
+                        widget.setVisible(False)
+                    self.topbar_layout.setContentsMargins(0, 0, 0, 0)
+                    self.bottombar_layout.setContentsMargins(0, 0, 0, 0)
+                    for widget in self.topbar_layout.children():
+                        widget.setVisible(False)
+                    self.topbar_minimize_button.setVisible(False)
+                    self.topbar_close_button.setVisible(False)
                 else:
                     # Restore window state to normal
                     self.showNormal()  # Restore to normal window state
@@ -1561,12 +1787,20 @@ class MacAttack(QMainWindow):
                         if widget:
                             widget.show()
                     self.spacer.changeSize(10, 0)  # Resets to original spacing
-
-                    self.left_layout.setContentsMargins(0, 0, 0, 0)
+                    self.left_widget.show()
                     self.left_layout.setSpacing(5)  # Adjust spacing if necessary
                     self.error_label.setVisible(False)   
                     self.videoPlayer.play()  # Play the video
                     self.tabs.tabBar().setVisible(True)
+                    # Add left margin to self.left_layout
+                    self.left_layout.setContentsMargins(10, 0, 0, 0)
+
+                    # Add a left margin to self.tab_widget
+                    self.tab_widget.setContentsMargins(10, 0, 0, 0) 
+                    self.topbar_minimize_button.setVisible(True)
+                    self.topbar_close_button.setVisible(True)
+                    self.topbar_layout.setContentsMargins(30, 5, 0, 0)
+                    self.bottombar_layout.setContentsMargins(0, 30, 0, 0)
 
     def on_tab_change(self, index):
         """Method to handle video playback when the Mac VideoPlayer tab is selected"""
@@ -1574,10 +1808,10 @@ class MacAttack(QMainWindow):
             self.videoPlayer.play()  # Play the video when Mac VideoPlayer tab is selected
         else:
             self.videoPlayer.pause()  # Pause the video when the tab is not selected    
-    def resizeEvent(self, event):
+    #def resizeEvent(self, event):
         # VLC dynamic width
-        new_width = self.width() - 270
-        self.video_frame.setMinimumWidth(new_width)
+    #    new_width = self.width() - 270
+    #    self.video_frame.setMinimumWidth(new_width)
   
     
     def closeEvent(self, event):
