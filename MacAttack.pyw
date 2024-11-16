@@ -372,11 +372,7 @@ class MacAttack(QMainWindow):
         self.set_window_icon()
         self.setWindowTitle("MacAttack by Evilvirus")
         self.setGeometry(200, 200, 1141, 523)
-        # Remove title bar and make window resizable
-        # Remove the FramelessWindowHint to allow resizing
-        # Remove title bar but keep the window resizable
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)  # Frameless with window resizing allowed
-        #self.setAttribute(Qt.WA_TranslucentBackground)  #Make background translucent
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)  
 
         self.running = False
         self.threads = []
@@ -857,14 +853,7 @@ class MacAttack(QMainWindow):
         self.progress_animation = QPropertyAnimation(self.progress_bar, b"value")
         self.progress_animation.setDuration(1000)
         self.progress_animation.setEasingCurve(QEasingCurve.Linear)
-#        self.mac_input.textChanged.connect(self.update_mac_cookie)
 
-#    def update_mac_cookie(self):
-#        # Update the MAC cookie whenever the user changes the input
-#        mac_address = self.mac_input.text()
-#        self.cookies["mac"] = mac_address
-#        self.session.cookies.update(self.cookies)  # Apply updated cookies to session
-#        logging.debug(f"Updated MAC address to: {mac_address}")
         
     def SaveTheDay(self):
         """Save user settings, including window geometry, active tab, and other preferences to the configuration file."""
@@ -987,7 +976,7 @@ class MacAttack(QMainWindow):
 
             try:
                 s = requests.Session()  # Create a session
-#                s.cookies.update({'mac': mac})
+                s.cookies.update({'mac': mac})
                 url = f"{self.base_url}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
 
                 res = s.get(url, timeout=10, allow_redirects=False)
