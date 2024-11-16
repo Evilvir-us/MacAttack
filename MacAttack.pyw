@@ -18,7 +18,7 @@ import configparser
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-#logging.basicConfig(level=logging.DEBUG)  # Set to DEBUG for detailed logs
+logging.basicConfig(level=logging.DEBUG)  # Set to DEBUG for detailed logs
 
 def get_token(session, url, mac_address):
     try:
@@ -333,12 +333,10 @@ class VideoPlayerWorker(QThread):
     # Signal to emit error message if the request fails
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, stream_url, cookies):
+    def __init__(self, stream_url):
         super().__init__()
         self.stream_url = stream_url
-        self.cookies = cookies
         self.session = requests.Session()
-        self.session.cookies.update(self.cookies)  # Update session with provided cookies
 
     def run(self):
         try:
@@ -351,7 +349,7 @@ class VideoPlayerWorker(QThread):
                 self.stream_url_ready.emit(response.url)
             else:
                 # Emit error if the request fails
-                error_message = f"Failed to fetch stream. HTTP Status Code: {response.status_code}"
+                error_message = f"Failed to load, {response.status_code}"
                 self.error_occurred.emit(error_message)
         except requests.Timeout:
             # Handle request timeout
@@ -373,7 +371,7 @@ class MacAttack(QMainWindow):
         self.current_request_thread = None  # This ensures the attribute exists
         self.set_window_icon()
         self.setWindowTitle("MacAttack by Evilvirus")
-        self.setGeometry(200, 200, 600, 500)
+        self.setGeometry(200, 200, 1141, 523)
         # Remove title bar and make window resizable
         # Remove the FramelessWindowHint to allow resizing
         # Remove title bar but keep the window resizable
@@ -386,21 +384,11 @@ class MacAttack(QMainWindow):
         
         self.video_worker = None  # Initialize to None
         
-        # Initialize cookies and requests session
-        self.cookies = {
-            "mac": "00:11:22:33:44:55",  # Default MAC address (you can change this later)
-            "stb_lang": "en",
-            "timezone": "America/Los_Angeles",
-        }
 
-        self.session = requests.Session()
-        self.session.cookies.update(self.cookies)  # Apply cookies to session       
-        
-        # Set the Fusion theme with dark mode
         QApplication.setStyle("Fusion")
 
-        # Set dark style for the whole application
-        dark_stylesheet = """
+        # Set the style for the whole application
+        theme = """
         QWidget {
             background-color: #2e2e2e;
             color: white;
@@ -445,8 +433,16 @@ class MacAttack(QMainWindow):
         QProgressBar::chunk {
             background-color: #1e90ff;  /* Blue chunk */
         }
+        
+        QCheckBox::indicator {
+            background-color: red;
+            border: 1px solid #b0b0b0;
+        }
+        QCheckBox::indicator:checked {
+            background-color: green;
+        }                
         """
-        self.setStyleSheet(dark_stylesheet)
+        self.setStyleSheet(theme)
 
         # Main layout
         self.central_widget = QWidget(self)
@@ -551,9 +547,11 @@ class MacAttack(QMainWindow):
         Settings_layout.addWidget(self.autoloadmac_checkbox)
         
         # dunno checkbox
-        self.dunno_checkbox = QCheckBox("another setting checkbox")
-        Settings_layout.addWidget(self.dunno_checkbox)
+        #self.dunno_checkbox = QCheckBox("another setting checkbox")
+        #Settings_layout.addWidget(self.dunno_checkbox)
 
+
+        Settings_layout.addSpacing(150)  # Adds space
         # Add the "Tips" label
         tips_label = QLabel("Tips")
         tips_label.setAlignment(Qt.AlignTop)
@@ -566,8 +564,12 @@ class MacAttack(QMainWindow):
         Settings_layout.addWidget(line2)
 
         # Add the numbered list of tips directly below the line
-        tips_text = QLabel("1.) Set the speed really slow for some providers, if you are getting only empty responses, going too fast with some providers will get your IP blocked.\n"
-                           "2.) Only open 1 stream at a time per MAC, so you don’t get that MAC banned.")
+        tips_text = QLabel("1.) Use a VPN while scanning in order to stop your IP address from getting banned.\n"
+                           "2.) Only open 1 video stream at a time per MAC, so you don’t get that MAC banned.\n"
+                           "\n"
+                           "\n"
+                           "If you're getting error 456/458, either the MAC, or your ip has been banned."
+                           )
         tips_text.setAlignment(Qt.AlignTop)
         Settings_layout.addWidget(tips_text)
 
@@ -713,9 +715,6 @@ class MacAttack(QMainWindow):
         self.hostname_layout.setContentsMargins(0, 0, 0, 0)
         self.hostname_layout.setSpacing(0)
         
-        # Create a spacer item with fixed width
-        self.spacer = QSpacerItem(10, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
-        self.hostname_layout.addItem(self.spacer)        
         
         
         
@@ -728,7 +727,7 @@ class MacAttack(QMainWindow):
         self.mac_layout = QHBoxLayout()
         self.mac_layout.setContentsMargins(0, 0, 0, 0)
         self.mac_layout.setSpacing(0)
-        self.mac_layout.addItem(self.spacer)   
+        #self.mac_layout.addItem(self.spacer)   
         self.mac_label = QLabel("MAC:")
         self.mac_layout.addWidget(self.mac_label)
         self.mac_input = QLineEdit()
@@ -738,9 +737,9 @@ class MacAttack(QMainWindow):
         self.playlist_layout = QHBoxLayout()
         self.playlist_layout.setContentsMargins(0, 0, 0, 0)
         self.playlist_layout.setSpacing(0)
-        self.playlist_layout.addItem(self.spacer) 
-        self.playlist_layout.addItem(self.spacer) 
-        self.playlist_layout.addItem(self.spacer) 
+        #self.playlist_layout.addItem(self.spacer)
+        # Create a spacer item with fixed width
+        self.spacer = QSpacerItem(30, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)       
         self.playlist_layout.addItem(self.spacer) 
         
         self.get_playlist_button = QPushButton("Get Playlist")
@@ -796,7 +795,7 @@ class MacAttack(QMainWindow):
         self.progress_layout = QHBoxLayout()
         self.progress_layout.setContentsMargins(0, 0, 0, 0)
         self.progress_layout.setSpacing(0)
-        self.progress_layout.addItem(self.spacer)   
+        #self.progress_layout.addItem(self.spacer)   
  
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
@@ -858,14 +857,14 @@ class MacAttack(QMainWindow):
         self.progress_animation = QPropertyAnimation(self.progress_bar, b"value")
         self.progress_animation.setDuration(1000)
         self.progress_animation.setEasingCurve(QEasingCurve.Linear)
-        self.mac_input.textChanged.connect(self.update_mac_cookie)
+#        self.mac_input.textChanged.connect(self.update_mac_cookie)
 
-    def update_mac_cookie(self):
-        # Update the MAC cookie whenever the user changes the input
-        mac_address = self.mac_input.text()
-        self.cookies["mac"] = mac_address
-        self.session.cookies.update(self.cookies)  # Apply updated cookies to session
-        logging.debug(f"Updated MAC address to: {mac_address}")
+#    def update_mac_cookie(self):
+#        # Update the MAC cookie whenever the user changes the input
+#        mac_address = self.mac_input.text()
+#        self.cookies["mac"] = mac_address
+#        self.session.cookies.update(self.cookies)  # Apply updated cookies to session
+#        logging.debug(f"Updated MAC address to: {mac_address}")
         
     def SaveTheDay(self):
         """Save user settings, including window geometry, active tab, and other preferences to the configuration file."""
@@ -988,7 +987,7 @@ class MacAttack(QMainWindow):
 
             try:
                 s = requests.Session()  # Create a session
-                s.cookies.update({'mac': mac})
+#                s.cookies.update({'mac': mac})
                 url = f"{self.base_url}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
 
                 res = s.get(url, timeout=10, allow_redirects=False)
@@ -1107,11 +1106,8 @@ class MacAttack(QMainWindow):
         mac_address = self.mac_input.text()
 
         if not hostname_input or not mac_address:
-            self.error_label.setText("ERROR: Missing input.")
+            self.error_label.setText("ERROR: Missing input")
             self.error_label.setVisible(True)
-            logging.warning(
-                "User attempted to get playlist without entering all required fields."
-            )
             return
 
         parsed_url = urlparse(hostname_input)
@@ -1641,16 +1637,15 @@ class MacAttack(QMainWindow):
         self.error_label.setVisible(False)
         logging.debug(f"Launching media player with URL: {stream_url}")
 
-        # If there is an existing worker thread, make sure to stop it first
+        # If there is an existing worker thread, stop it first
         if self.video_worker is not None and self.video_worker.isRunning():
-            print("Stopping previous worker thread before starting a new one.")
             self.video_worker.quit()  # Safely stop the worker
-            if not self.video_worker.wait(3000):  # 3000ms timeout
+            if not self.video_worker.wait(3000):  # 3s timeout
                 print("Warning: Worker thread did not stop in time.")
                 if self.video_worker is not None and self.video_worker.isRunning():
                     print("Forcefully stopping the worker thread.")
                     self.video_worker.quit()
-                    self.video_worker.terminate()  # Forcefully terminate, use cautiously
+                    self.video_worker.terminate()  # Forcefully terminate
                     self.video_worker.wait()  # Wait for termination
 
         # Preload the media to minimize the delay when playing
@@ -1662,14 +1657,13 @@ class MacAttack(QMainWindow):
         self.videoPlayer.set_media(media)
 
         # Start the worker thread to fetch stream URL in the background
-        self.video_worker = VideoPlayerWorker(stream_url, self.cookies)
+        self.video_worker = VideoPlayerWorker(stream_url)
         self.video_worker.stream_url_ready.connect(self.on_stream_url_ready)
         self.video_worker.error_occurred.connect(self.on_error_occurred)
 
         # Start the thread (but don't play the video yet)
         self.video_worker.start()
-
-        # Delay the actual video play call until the media is ready
+        # Delay the actual video play call
         QTimer.singleShot(100, self.videoPlayer.play)
 
     def on_stream_url_ready(self, stream_url):
@@ -1679,24 +1673,24 @@ class MacAttack(QMainWindow):
         self.videoPlayer.play()
 
         # Function to check for errors after a delay
-    def delayed_error_check():
-        if not self.videoPlayer.is_playing():
-            self.on_player_error(None)  # Trigger the error handler manually
-
-        # Use QTimer for delayed error check on the main thread
-        QTimer.singleShot(2000, delayed_error_check)
-
+#    def delayed_error_check():
+#        if not self.videoPlayer.is_playing():
+#            self.on_player_error(None)  # Trigger the error handler manually
+#
+#        # Use QTimer for delayed error check on the main thread
+#        QTimer.singleShot(2000, delayed_error_check)
+#
     def on_error_occurred(self, error_message):
-        logging.error(f" {error_message}")
-        self.error_label.setText(f"Error: {error_message}")
+        logging.error(error_message)
+        self.error_label.setText(error_message)
         self.error_label.setVisible(True)
 
 
-    def on_player_error(self, event):
-        self.error_label.setVisible(False)
-        """Handle VLC errors."""
-        self.error_label.setText("ERROR: Can't load the stream.")
-        self.error_label.setVisible(True)   
+#    def on_player_error(self, event):
+#        self.error_label.setVisible(False)
+#        """Handle VLC errors."""
+#        self.error_label.setText("ERROR: Can't load the stream.")
+#        self.error_label.setVisible(True)   
 
         
     def mousePressEvent(self, event): #Pause/play video
