@@ -9,7 +9,7 @@ import vlc
 import base64
 from PyQt5.QtCore import QByteArray, QBuffer, Qt, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer, QSize
 from PyQt5.QtGui import QPixmap, QIcon, QStandardItemModel, QStandardItem
-from PyQt5.QtWidgets import QMainWindow, QApplication, QVBoxLayout, QLineEdit, QLabel, QPushButton, QWidget, QTabWidget, QMessageBox, QListView, QHBoxLayout, QCheckBox, QAbstractItemView, QProgressBar, QSpinBox, QTextEdit, QSpacerItem, QSizePolicy
+from PyQt5.QtWidgets import QMainWindow, QFrame, QApplication, QVBoxLayout, QLineEdit, QLabel, QPushButton, QWidget, QTabWidget, QMessageBox, QListView, QHBoxLayout, QCheckBox, QAbstractItemView, QProgressBar, QSpinBox, QTextEdit, QSpacerItem, QSizePolicy
 import requests
 import concurrent.futures
 import logging
@@ -378,7 +378,7 @@ class MacAttack(QMainWindow):
         # Remove the FramelessWindowHint to allow resizing
         # Remove title bar but keep the window resizable
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)  # Frameless with window resizing allowed
-        self.setAttribute(Qt.WA_TranslucentBackground)  #Make background translucent
+        #self.setAttribute(Qt.WA_TranslucentBackground)  #Make background translucent
 
         self.running = False
         self.threads = []
@@ -524,16 +524,56 @@ class MacAttack(QMainWindow):
         self.resize_start_pos = None
         self.move_start_pos = None
 
+        if self.tabs.currentIndex() == 1:  # Ensure we're on the Mac VideoPlayer tab
+           self.videoPlayer.play()  # Play the video
+
+
     def build_Settings_gui(self, Settings_frame):
         # Create the layout for the settings frame
         Settings_layout = QVBoxLayout(Settings_frame)
 
-        # autoload macs
+        # Set alignment to top
+        Settings_layout.setAlignment(Qt.AlignTop)
+
+        # Add the "Settings" label
+        settings_label = QLabel("Settings")
+        settings_label.setAlignment(Qt.AlignTop)
+        Settings_layout.addWidget(settings_label)
+
+        # Add a line under the "Settings" label
+        line1 = QFrame()
+        line1.setFrameShape(QFrame.HLine)
+        line1.setFrameShadow(QFrame.Sunken)
+        Settings_layout.addWidget(line1)
+
+        # autoload macs checkbox
         self.autoloadmac_checkbox = QCheckBox("Load MAC into the player tab instantly when discovered")
-        #self.autoloadmac_checkbox.stateChanged.connect(self.on_load_max_checkbox_state_changed)
         Settings_layout.addWidget(self.autoloadmac_checkbox)
-        Settings_frame.setLayout(Settings_layout)
         
+        # dunno checkbox
+        self.dunno_checkbox = QCheckBox("another setting checkbox")
+        Settings_layout.addWidget(self.dunno_checkbox)
+
+        # Add the "Tips" label
+        tips_label = QLabel("Tips")
+        tips_label.setAlignment(Qt.AlignTop)
+        Settings_layout.addWidget(tips_label)
+
+        # Add a line under the "Tips" label
+        line2 = QFrame()
+        line2.setFrameShape(QFrame.HLine)
+        line2.setFrameShadow(QFrame.Sunken)
+        Settings_layout.addWidget(line2)
+
+        # Add the numbered list of tips directly below the line
+        tips_text = QLabel("1.) Set the speed really slow for some providers, if you are getting only empty responses, going too fast with some providers will get your IP blocked.\n"
+                           "2.) Only open 1 stream at a time per MAC, so you don’t get that MAC banned.")
+        tips_text.setAlignment(Qt.AlignTop)
+        Settings_layout.addWidget(tips_text)
+
+        Settings_frame.setLayout(Settings_layout)
+
+    
     def update_mac_label(self, text):
         """Update the MAC address label in the main thread."""
         self.brute_mac_label.setText(text)
