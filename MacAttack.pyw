@@ -542,9 +542,9 @@ class MacAttack(QMainWindow):
         self.autoloadmac_checkbox = QCheckBox("Load MAC into the player tab instantly when discovered")
         Settings_layout.addWidget(self.autoloadmac_checkbox)
         
-        # dunno checkbox
-        #self.dunno_checkbox = QCheckBox("another setting checkbox")
-        #Settings_layout.addWidget(self.dunno_checkbox)
+        # autostop checkbox
+        self.autostop_checkbox = QCheckBox("Stop the attack whenever a MAC is found")
+        Settings_layout.addWidget(self.autostop_checkbox)
 
 
         Settings_layout.addSpacing(150)  # Adds space
@@ -665,7 +665,7 @@ class MacAttack(QMainWindow):
             background-color: #10273d;
             border: 12px solid #2E2E2E;
         """)
-        self.output_text.setPlainText("Output LOG:\nResults will appear here.\n\n")
+        self.output_text.setPlainText("Output LOG:\nResults will appear here.\n")
         self.output_text.setReadOnly(True)
         layout.addWidget(self.output_text)
 
@@ -870,7 +870,8 @@ class MacAttack(QMainWindow):
             'concurrent_tests': self.concurrent_tests.value(),
             'hostname': self.hostname_input.text(),
             'mac': self.mac_input.text(),
-            'autoloadmac': str(self.autoloadmac_checkbox.isChecked()),  # Save the checkbox state
+            'autoloadmac': str(self.autoloadmac_checkbox.isChecked()),  # Save autoloadmac checkbox state
+            'autostop': str(self.autostop_checkbox.isChecked()),  # Save autostop checkbox state
             'active_tab': str(self.tabs.currentIndex())  # Save the index of the active tab
         }
         
@@ -906,6 +907,10 @@ class MacAttack(QMainWindow):
             # Load autoloadmac_checkbox state
             autoloadmac_state = config.get('Settings', 'autoloadmac', fallback="False")
             self.autoloadmac_checkbox.setChecked(autoloadmac_state == "True")  # Set checkbox based on saved state
+            
+            # Load autostop_checkbox state
+            autostop_state = config.get('Settings', 'autostop', fallback="False")
+            self.autostop_checkbox.setChecked(autostop_state == "True")  # Set checkbox based on saved state
             
             # Load active tab
             active_tab = config.getint('Settings', 'active_tab', fallback=0)  # Default to first tab if not found
@@ -1026,12 +1031,15 @@ class MacAttack(QMainWindow):
                                     output_filename = self.OutputMastermind()
                                     self.output_file = open(output_filename, "a")
 
-                                result_message = f"{self.iptv_link}\nMAC = {mac}\nExpiry = {expiry}\nChannels = {count}\n\n"
+                                result_message = f"{self.iptv_link}\nMAC = {mac}\nExpiry = {expiry}\nChannels = {count}\n"
                                 self.update_output_text_signal.emit(result_message)  # Emit signal to update QTextEdit
 
                                 # Write result_message to the output file
                                 self.output_file.write(result_message)
                                 self.output_file.flush()  #Ensures data is written immediately
+                                if self.autostop_checkbox.isChecked():
+                                    logging.debug("autostop_checkbox is checked, stopping...")
+                                    self.stop_button.click()                             
                             else:
                                 result_message = f"MAC: {mac} connects, but has 0 channels. Bummer."
                                 self.update_error_text_signal.emit(result_message)
@@ -1066,7 +1074,7 @@ class MacAttack(QMainWindow):
         self.running = False
         if self.output_file:
             self.output_file.close()
-            self.output_file = None  # Reset the file reference if needed
+            self.output_file = None  # Reset the file reference
         self.start_button.setDisabled(False)
         self.stop_button.setDisabled(True)
 
