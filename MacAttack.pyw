@@ -131,7 +131,6 @@ class RequestThread(QThread):
         # Emit the completed data
         self.request_complete.emit(data)
 
-
     def get_token(self, session, url, mac_address):
         try:
             handshake_url = f"{url}/portal.php?type=stb&action=handshake&JsHttpRequest=1-xml"
@@ -307,7 +306,7 @@ class RequestThread(QThread):
                 results = executor.map(fetch_page, page_numbers)
 
                 total_fetched = len(first_page_data)
-                for i, (result, _) in enumerate(results, start=2):  # Start from page 2
+                for i, (result, _) in enumerate(results, start=2):  # Start from page 2, we already have page 1
                     if result:
                         channels.extend(result)
                         total_fetched += len(result)
@@ -441,7 +440,6 @@ class MacAttack(QMainWindow):
         self.topbar_layout.setContentsMargins(30, 5, 0, 0)
         self.topbar_layout.setSpacing(0)
 
-
         # Create the tabs (Top-level tabs)
         self.tabs = QTabWidget(self)  # This is for the "Mac Attack" and "Mac VideoPlayer" tabs
         self.topbar_layout.addWidget(self.tabs)
@@ -492,7 +490,6 @@ class MacAttack(QMainWindow):
         self.update_error_text_signal.connect(self.update_error_text)
         self.tabs.currentChanged.connect(self.on_tab_change)
 
-
         # Make the window resizable by adding a mouse event handler
         self.setMouseTracking(True)
         self.setAttribute(Qt.WA_OpaquePaintEvent)
@@ -500,7 +497,6 @@ class MacAttack(QMainWindow):
         self.moving = False
         self.resize_start_pos = None
         self.move_start_pos = None 
-
 
         if self.tabs.currentIndex() == 1:  # Ensure we're on the Mac VideoPlayer tab
             self.videoPlayer.play()  # Play the video
@@ -558,25 +554,16 @@ class MacAttack(QMainWindow):
         self.get_playlist_button.clicked.connect(self.get_playlist)
         
         self.left_layout.addLayout(self.playlist_layout)
-        
-        
+              
         # Add the search input field above the tabs
         self.search_input = QLineEdit(self)
-        self.search_input.setPlaceholderText("Search Playlist... (will fix later)")
+        self.search_input.setPlaceholderText("Search Playlist...")
         self.search_input.textChanged.connect(self.filter_playlist)  # Connect to the filtering function
         self.left_layout.addWidget(self.search_input, alignment=Qt.AlignLeft)
-        
-        
-        
         
         # Create a QTabWidget (for "Live", "Movies", "Series")
         self.tab_widget = QTabWidget()
         self.left_layout.addWidget(self.tab_widget)
-
-
-
-
-
 
         # Dictionary to hold tab data
         self.tab_data = {}
@@ -675,8 +662,6 @@ class MacAttack(QMainWindow):
         self.progress_animation.setDuration(1000)
         self.progress_animation.setEasingCurve(QEasingCurve.Linear)
 
-
-
     def filter_playlist(self):
         search_term = self.search_input.text().lower()
 
@@ -768,8 +753,6 @@ class MacAttack(QMainWindow):
         self.current_request_thread = self.request_thread  # Set the current request thread
         logging.info("Started new RequestThread for playlist.")
 
-
-
     def build_Settings_gui(self, Settings_frame):
         # Create the layout for the settings frame
         Settings_layout = QVBoxLayout(Settings_frame)
@@ -781,7 +764,6 @@ class MacAttack(QMainWindow):
         settings_label = QLabel("Settings")
         settings_label.setAlignment(Qt.AlignTop)
         Settings_layout.addWidget(settings_label)
-
         # Add a line under the "Settings" label
         line1 = QFrame()
         line1.setFrameShape(QFrame.HLine)
@@ -795,21 +777,19 @@ class MacAttack(QMainWindow):
         # autostop checkbox
         self.autostop_checkbox = QCheckBox("Stop the attack whenever a MAC is found")
         Settings_layout.addWidget(self.autostop_checkbox)
-
-
         Settings_layout.addSpacing(150)  # Adds space
+
         # Add the "Tips" label
         tips_label = QLabel("Tips")
         tips_label.setAlignment(Qt.AlignTop)
         Settings_layout.addWidget(tips_label)
-
         # Add a line under the "Tips" label
         line2 = QFrame()
         line2.setFrameShape(QFrame.HLine)
         line2.setFrameShadow(QFrame.Sunken)
         Settings_layout.addWidget(line2)
 
-        # Add the numbered list of tips directly below the line
+        # Add the list of tips
         tips_text = QLabel("1.) Use a VPN while scanning in order to stop your IP address from getting banned.\n"
                            "2.) Only open 1 video stream at a time per MAC, so you don’t get that MAC banned.\n"
                            "\n"
@@ -822,8 +802,7 @@ class MacAttack(QMainWindow):
         Settings_layout.addWidget(tips_text)
 
         Settings_frame.setLayout(Settings_layout)
-
-    
+   
     def update_mac_label(self, text):
         """Update the MAC address label in the main thread."""
         self.brute_mac_label.setText(text)
@@ -876,8 +855,7 @@ class MacAttack(QMainWindow):
         self.start_button.setDisabled(False)
         self.stop_button.setDisabled(True)
 
-
-        # Set a stylesheet to make the background grey when disabled
+        # button colors
         self.stop_button.setStyleSheet("""
             QPushButton:disabled {
                 background-color: grey;
@@ -895,7 +873,6 @@ class MacAttack(QMainWindow):
             
             }
         """)
-
 
         # Add spacer to the right of the Stop button
         right_spacer = QSpacerItem(10, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
@@ -1267,7 +1244,6 @@ class MacAttack(QMainWindow):
             logging.error(f"Exception in retrieve_channels: {e}")
             self.error_label.setText("An error occurred while retrieving channels.")
             self.error_label.setVisible(True)
-
 
     def start_new_thread(self, tab_name, category_type, category_id):
         self.request_thread = RequestThread(self.base_url, self.mac_address, category_type, category_id)
@@ -1715,31 +1691,13 @@ class MacAttack(QMainWindow):
 
     def on_stream_url_ready(self, stream_url):
         logging.debug(f"Stream URL fetched: {stream_url}")
-        
-        # This code will be triggered once the media is ready to play
         self.videoPlayer.play()
 
-        # Function to check for errors after a delay
-#    def delayed_error_check():
-#        if not self.videoPlayer.is_playing():
-#            self.on_player_error(None)  # Trigger the error handler manually
-#
-#        # Use QTimer for delayed error check on the main thread
-#        QTimer.singleShot(2000, delayed_error_check)
-#
     def on_error_occurred(self, error_message):
         logging.error(error_message)
         self.error_label.setText(error_message)
         self.error_label.setVisible(True)
-
-
-#    def on_player_error(self, event):
-#        self.error_label.setVisible(False)
-#        """Handle VLC errors."""
-#        self.error_label.setText("ERROR: Can't load the stream.")
-#        self.error_label.setVisible(True)   
-
-        
+       
     def mousePressEvent(self, event): #Pause/play video
         # Begin resizing when clicking on the border
         if event.button() == Qt.LeftButton:
@@ -1762,7 +1720,6 @@ class MacAttack(QMainWindow):
                         self.videoPlayer.pause()  # Pause the video
                     else:
                         self.videoPlayer.play()  # Play the video
-
 
     def mouseMoveEvent(self, event):
         if self.moving:
