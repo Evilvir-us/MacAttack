@@ -565,7 +565,7 @@ class MacAttack(QMainWindow):
               
         # Add the search input field above the tabs
         self.search_input = QLineEdit(self)
-        self.search_input.setPlaceholderText("Search Playlist...")
+        self.search_input.setPlaceholderText("Filter Playlist...")
         self.search_input.textChanged.connect(self.filter_playlist)  # Connect to the filtering function
         self.left_layout.addWidget(self.search_input, alignment=Qt.AlignLeft)
         
@@ -685,18 +685,30 @@ class MacAttack(QMainWindow):
                 item for item in tab_info.get("playlist_data", [])
                 if search_term in str(item).lower()  # Adjust matching logic if needed
             ]
-                       
+
             filtered_channels = [
-                
                 item for item in tab_info.get("current_channels", [])
                 if search_term in str(item).lower()  # Adjust matching logic if needed
             ]
             
+            # Clear the playlist model before adding items
             playlist_model.clear()
-            
             go_back_item = QStandardItem("Go Back")
-            self.playlist_model.appendRow(go_back_item)
-        
+            playlist_model.appendRow(go_back_item)
+
+            # Add filtered channels
+            for item in filtered_channels:
+                item_data = item
+                item_type = item['item_type']
+                name = item['name']
+                logging.debug(f"Item Type: {item_type}, Name: {name}")                
+                list_item = QStandardItem(name)
+                list_item.setData(item, Qt.UserRole)
+                list_item.setData(item_type, Qt.UserRole + 1)
+                playlist_model.appendRow(list_item)
+            info_item = QStandardItem("-----Categories-----")
+            playlist_model.appendRow(info_item)
+            # Add filtered playlist items
             for item in filtered_playlist:
                 name = item.get("name", "Unnamed") if isinstance(item, dict) else str(item)
                 playlist_item = QStandardItem(name)
@@ -707,15 +719,7 @@ class MacAttack(QMainWindow):
                 playlist_item.setData(item_type, Qt.UserRole + 1)
                 playlist_model.appendRow(playlist_item)
             
-            for item in filtered_channels:
-                item_data = item
-                item_type = item['item_type']
-                name = item['name']
-                logging.debug(f"Item Type: {item_type}, Name: {name}")                
-                list_item = QStandardItem(name)
-                list_item.setData(item, Qt.UserRole)
-                list_item.setData(item_type, Qt.UserRole + 1)
-                self.playlist_model.appendRow(list_item)
+
             
     def get_playlist(self):
         """
@@ -801,10 +805,13 @@ class MacAttack(QMainWindow):
         tips_text = QLabel("1.) Use a VPN while scanning in order to stop your IP address from getting banned.\n"
                            "2.) Only open 1 video stream at a time per MAC, so you don’t get that MAC banned.\n"
                            "\n"
+                           "Video Controls: Mouseclick/Space Bar - Toggle Pause\n"
+                           "                       Doubleclick/ESC - Toggle Fullscreen"
+                           "\n"
                            "\n"
                            "If you're getting error 456/458 (perhaps others as well), either the MAC, or your ip has been banned."
                            "\n"
-                           "Many IPTV providers can detect mac scanners"
+                           "Many IPTV providers can detect mac scanners"           
                            )
         tips_text.setAlignment(Qt.AlignTop)
         Settings_layout.addWidget(tips_text)
@@ -1209,8 +1216,8 @@ class MacAttack(QMainWindow):
         self.playlist_model.clear()
         tab_info["current_view"] = "categories"
 
-        # Retrieve playlist_view
-        playlist_view = tab_info["playlist_view"]  
+        # Retrieve playlist_view and assign it to self
+        self.playlist_view = tab_info["playlist_view"]  
 
         if tab_info["navigation_stack"]:
             go_back_item = QStandardItem("Go Back")
@@ -1225,9 +1232,7 @@ class MacAttack(QMainWindow):
                 self.playlist_model.appendRow(list_item)
         else:
             self.retrieve_channels(tab_name, tab_info["current_category"])
-        
-        # Scroll to top after updating
-        playlist_view.scrollToTop()
+        self.search_input.clear()
 
     def retrieve_channels(self, tab_name, category):
         category_type = category["category_type"]
@@ -1289,6 +1294,7 @@ class MacAttack(QMainWindow):
             item_type = channel.get("item_type", "channel")
             list_item.setData(item_type, Qt.UserRole + 1)
             self.playlist_model.appendRow(list_item)
+        self.search_input.clear()
 
     def on_playlist_selection_changed(self, index):
         sender = self.sender()
@@ -1325,9 +1331,10 @@ class MacAttack(QMainWindow):
                         self.update_series_view(current_tab)
                 else:
                     logging.debug("Navigation stack is empty. Cannot go back.")
-                    QMessageBox.information(
-                        self, "Info", "No previous view to go back to."
-                    )
+                    #QMessageBox.information(
+                    #    self, "Info", "No previous view to go back to."
+                    #)
+                    self.get_playlist()
             else:
                 item_data = item.data(Qt.UserRole)
                 item_type = item.data(Qt.UserRole + 1)
@@ -1397,7 +1404,8 @@ class MacAttack(QMainWindow):
                 else:
                     self.error_label.setText("Unknown item type")
                     self.error_label.setVisible(True)
-
+    #self.search_input.clear()
+    
     def retrieve_series_info(self, tab_name, context_data, season_number=None):
         tab_info = self.tab_data[tab_name]
         try:
@@ -1663,7 +1671,8 @@ class MacAttack(QMainWindow):
             list_item.setData(item, Qt.UserRole)
             list_item.setData(item_type, Qt.UserRole + 1)
             self.playlist_model.appendRow(list_item)
-
+        self.search_input.clear()
+        
     def launch_videoPlayer(self, stream_url):
         self.error_label.setVisible(False)
         logging.debug(f"Launching media player with URL: {stream_url}")
