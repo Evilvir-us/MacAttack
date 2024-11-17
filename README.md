@@ -6,6 +6,9 @@ Iptv mac address brute forcer for windows.
 ## Requirement
 [VLC Media Player](https://www.videolan.org/vlc/download-windows.html) must be installed!
 &NewLine;
+
+A VPN is recommended, but not necessary. (to avoid getting banned by the provider)\
+&NewLine;
 &NewLine;
 ## Windows
 Download the exe from the [releases page](https://github.com/Evilvir-us/MacAttack/releases) 
@@ -13,7 +16,7 @@ Download the exe from the [releases page](https://github.com/Evilvir-us/MacAttac
 &NewLine;
 ### Instructions for Mac Attack Tab:
 Put the stalker portal url into the first box\
-set the speed 1-10 (default 10, fastest)\
+set the speed 1-15 (default 10)\
 Click Start
 &NewLine;
 &NewLine;
