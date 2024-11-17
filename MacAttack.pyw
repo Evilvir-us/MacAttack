@@ -7,8 +7,8 @@ from datetime import datetime
 import sys
 import vlc
 import base64
-from PyQt5.QtCore import QByteArray, QBuffer, Qt, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer, QSize
-from PyQt5.QtGui import QPixmap, QIcon, QStandardItemModel, QStandardItem
+from PyQt5.QtCore import QEvent,QByteArray, QBuffer, Qt, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer, QSize
+from PyQt5.QtGui import QPixmap, QIcon, QStandardItemModel, QStandardItem, QMouseEvent
 from PyQt5.QtWidgets import QMainWindow, QFrame, QApplication, QVBoxLayout, QLineEdit, QLabel, QPushButton, QWidget, QTabWidget, QMessageBox, QListView, QHBoxLayout, QCheckBox, QAbstractItemView, QProgressBar, QSpinBox, QTextEdit, QSpacerItem, QSizePolicy
 import requests
 import concurrent.futures
@@ -18,7 +18,7 @@ import configparser
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-logging.basicConfig(level=logging.DEBUG)  # Set to DEBUG for detailed logs
+#logging.basicConfig(level=logging.DEBUG)
 
 def get_token(session, url, mac_address):
     try:
@@ -60,7 +60,7 @@ class RequestThread(QThread):
 
             logging.debug("RequestThread started.")
             session = requests.Session()
-            adapter = HTTPAdapter(pool_connections=20, pool_maxsize=20)
+            adapter = HTTPAdapter(pool_connections=10, pool_maxsize=10)
             session.mount('http://', adapter)
             session.mount('https://', adapter)
             token = self.get_token(session, self.base_url, self.mac_address)
@@ -278,10 +278,10 @@ class RequestThread(QThread):
                                 )
                             return channels_data, response.json().get("js", {}).get("total_items", 0)
                         else:
-                            print(f"Error {response.status_code} - Retrying")
+                            logging.debug(f"Error {response.status_code} - Retrying")
                             logging.error(f"Request failed for page {page_number} with status code {response.status_code}")
                     except requests.RequestException as e:
-                        print(f"Request failed due to {e} - Retrying")
+                        logging.debug(f"Request failed due to {e} - Retrying")
                         logging.error(f"Exception occurred during request: {e}")
                 return [], 0
 
@@ -365,25 +365,22 @@ class MacAttack(QMainWindow):
     update_mac_label_signal = pyqtSignal(str)
     update_output_text_signal = pyqtSignal(str)
     update_error_text_signal = pyqtSignal(str)
-    
+
     def __init__(self):
         super().__init__()
-        self.current_request_thread = None  # This ensures the attribute exists
         self.set_window_icon()
         self.setWindowTitle("MacAttack by Evilvirus")
         self.setGeometry(200, 200, 1141, 523)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)  
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
 
         self.running = False
         self.threads = []
         self.output_file = None
-        
         self.video_worker = None  # Initialize to None
-        
+        self.current_request_thread = None  # Initialize here
 
         QApplication.setStyle("Fusion")
 
-        # Set the style for the whole application
         theme = """
         QWidget {
             background-color: #2e2e2e;
@@ -396,7 +393,7 @@ class MacAttack(QMainWindow):
             color: white;
             border: 0px solid #666666;
             padding: 5px;
-            border-radius: 3px;  /* Rounded corners for a modern look */
+            border-radius: 3px;
         }
 
         QLineEdit:focus, QPushButton:pressed {
@@ -406,14 +403,14 @@ class MacAttack(QMainWindow):
         QTabBar::tab {
             background-color: #444444;
             color: white;
-            padding-top: 5px;  /* Adds 5px top padding */
-            padding-right: 5px;  /* Adds 5px right padding */
-            padding-bottom: 5px; /* Adds 5px bottom padding */
-            padding-left: 5px;   /* Adds 5px left padding */
-            border-top-left-radius: 10px;  /* Rounded top-left corner */
-            border-top-right-radius: 10px; /* Rounded top-right corner */
-            border-bottom-left-radius: 0px;  /* No rounding on bottom-left */
-            border-bottom-right-radius: 0px; /* No rounding on bottom-right */
+            padding-top: 5px;
+            padding-right: 5px;
+            padding-bottom: 5px;
+            padding-left: 5px;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+            border-bottom-left-radius: 0px;
+            border-bottom-right-radius: 0px;
         }
 
         QTabBar::tab:selected {
@@ -427,16 +424,8 @@ class MacAttack(QMainWindow):
         }
 
         QProgressBar::chunk {
-            background-color: #1e90ff;  /* Blue chunk */
+            background-color: #1e90ff;
         }
-        
-        QCheckBox::indicator {
-            background-color: red;
-            border: 1px solid #b0b0b0;
-        }
-        QCheckBox::indicator:checked {
-            background-color: green;
-        }                
         """
         self.setStyleSheet(theme)
 
@@ -452,9 +441,6 @@ class MacAttack(QMainWindow):
         self.topbar_layout.setContentsMargins(30, 5, 0, 0)
         self.topbar_layout.setSpacing(0)
 
-        # Top bar content (left label and tabs)
-        #self.topbar_left_label = QLabel("test:")
-        #self.topbar_layout.addWidget(self.topbar_left_label)
 
         # Create the tabs (Top-level tabs)
         self.tabs = QTabWidget(self)  # This is for the "Mac Attack" and "Mac VideoPlayer" tabs
@@ -486,7 +472,6 @@ class MacAttack(QMainWindow):
         self.build_mac_videoPlayer_gui(self.mac_videoPlayer_frame)
         self.tabs.addTab(self.mac_videoPlayer_frame, "Mac VideoPlayer")
 
-        # Add Settings Tab
         self.Settings_frame = QWidget()
         self.build_Settings_gui(self.Settings_frame)
         self.tabs.addTab(self.Settings_frame, "Settings")
@@ -498,8 +483,7 @@ class MacAttack(QMainWindow):
 
         # Add bottom bar layout to the main layout
         self.main_layout.addLayout(self.bottombar_layout)
-        
-        
+
         self.load_settings()
 
         # Connect the signals to their respective update methods
@@ -507,17 +491,283 @@ class MacAttack(QMainWindow):
         self.update_output_text_signal.connect(self.update_output_text)
         self.update_error_text_signal.connect(self.update_error_text)
         self.tabs.currentChanged.connect(self.on_tab_change)
-        
+
+
         # Make the window resizable by adding a mouse event handler
         self.setMouseTracking(True)
         self.setAttribute(Qt.WA_OpaquePaintEvent)
         self.resizing = False
         self.moving = False
         self.resize_start_pos = None
-        self.move_start_pos = None
+        self.move_start_pos = None 
+
 
         if self.tabs.currentIndex() == 1:  # Ensure we're on the Mac VideoPlayer tab
-           self.videoPlayer.play()  # Play the video
+            self.videoPlayer.play()  # Play the video
+
+    def build_mac_videoPlayer_gui(self, parent):
+        # Central widget for the "Mac VideoPlayer" tab
+        central_widget = QWidget(self)
+        parent.setLayout(QVBoxLayout())  # Set layout for the parent widget
+        parent.layout().setContentsMargins(0, 0, 0, 0)
+        parent.layout().setSpacing(0)
+        parent.layout().addWidget(central_widget)
+
+        # Initialize VLC instance
+        self.instance = vlc.Instance('--no-xlib', '--vout=directx', '--no-plugins-cache', '--log-verbose=1')  # Windows
+        self.videoPlayer = self.instance.media_player_new()
+
+        # Main layout with two sections: left (controls) and right (video + buttons)
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(10) 
+
+        # LEFT SECTION: Controls and other widgets
+        self.left_layout = QVBoxLayout()
+        self.left_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_layout.setSpacing(10)
+        self.left_layout.addSpacing(15)  # Adds space
+        # Hostname label and input horizontally aligned
+        self.hostname_layout = QHBoxLayout()  # Create a horizontal layout
+        self.hostname_layout.setContentsMargins(0, 0, 0, 0)
+        self.hostname_layout.setSpacing(0)
+        
+        self.hostname_label = QLabel("Host:")
+        self.hostname_layout.addWidget(self.hostname_label)
+        self.hostname_input = QLineEdit()
+        self.hostname_layout.addWidget(self.hostname_input)
+        self.left_layout.addLayout(self.hostname_layout)
+
+        self.mac_layout = QHBoxLayout()
+        self.mac_layout.setContentsMargins(0, 0, 0, 0)
+        self.mac_layout.setSpacing(0)
+        self.mac_label = QLabel("MAC:")
+        self.mac_layout.addWidget(self.mac_label)
+        self.mac_input = QLineEdit()
+        self.mac_layout.addWidget(self.mac_input)
+        self.left_layout.addLayout(self.mac_layout)
+
+        self.playlist_layout = QHBoxLayout()
+        self.playlist_layout.setContentsMargins(0, 0, 0, 0)
+        self.playlist_layout.setSpacing(0)
+        self.spacer = QSpacerItem(30, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)       
+        self.playlist_layout.addItem(self.spacer) 
+        
+        self.get_playlist_button = QPushButton("Get Playlist")
+        self.playlist_layout.addWidget(self.get_playlist_button)
+        self.get_playlist_button.clicked.connect(self.get_playlist)
+        
+        self.left_layout.addLayout(self.playlist_layout)
+        
+        
+        # Add the search input field above the tabs
+        self.search_input = QLineEdit(self)
+        self.search_input.setPlaceholderText("Search Playlist... (will fix later)")
+        self.search_input.textChanged.connect(self.filter_playlist)  # Connect to the filtering function
+        self.left_layout.addWidget(self.search_input, alignment=Qt.AlignLeft)
+        
+        
+        
+        
+        # Create a QTabWidget (for "Live", "Movies", "Series")
+        self.tab_widget = QTabWidget()
+        self.left_layout.addWidget(self.tab_widget)
+
+
+
+
+
+
+        # Dictionary to hold tab data
+        self.tab_data = {}
+
+        # Add left margin to self.left_layout
+        self.left_layout.setContentsMargins(10, 0, 0, 0)
+
+        # Add a left margin to self.tab_widget
+        self.tab_widget.setContentsMargins(10, 0, 0, 0)
+        
+        for tab_name in ["Live", "Movies", "Series"]:
+            tab = QWidget()
+            tab_layout = QVBoxLayout(tab)
+            tab_layout.setContentsMargins(0, 0, 0, 0)
+            tab_layout.setSpacing(0)
+            playlist_view = QListView()
+            playlist_view.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            tab_layout.addWidget(playlist_view)
+
+            self.playlist_model = QStandardItemModel(playlist_view)
+            playlist_view.setModel(self.playlist_model)
+
+            playlist_view.scrollToTop()  # Scroll the view to the top
+
+            playlist_view.doubleClicked.connect(self.on_playlist_selection_changed)
+            self.tab_widget.addTab(tab, tab_name)
+
+            self.tab_data[tab_name] = {
+                "tab_widget": tab,
+                "playlist_view": playlist_view,
+                "self.playlist_model": self.playlist_model,
+                "current_category": None,
+                "navigation_stack": [],
+                "playlist_data": [],
+                "current_channels": [],
+                "current_series_info": [],
+                "current_view": "categories",
+            }
+
+        # Progress bar at the bottom
+        self.progress_layout = QHBoxLayout()
+        self.progress_layout.setContentsMargins(0, 0, 0, 0)
+        self.progress_layout.setSpacing(0)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setValue(0)
+        self.progress_layout.addWidget(self.progress_bar)
+        self.left_layout.addLayout(self.progress_layout)
+
+        # Create "ERROR" label and hide it initially
+        self.error_label = QLabel("ERROR: Error message label")
+        self.error_label.setStyleSheet("color: red; font-size: 10pt; margin-bottom: 15px;")
+        self.left_layout.addWidget(self.error_label, alignment=Qt.AlignRight)
+        self.error_label.setVisible(False)  # Initially hide the label
+
+        self.left_widget = QWidget()
+        self.left_widget.setLayout(self.left_layout)
+        self.left_widget.setFixedWidth(240)
+
+        main_layout.addWidget(self.left_widget)
+
+        # RIGHT SECTION: Video area and controls
+        right_layout = QVBoxLayout()
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(0)
+
+        # Video frame
+        self.video_frame = QWidget(self)
+        self.video_frame.setStyleSheet("background-color: black;")
+        right_layout.addWidget(self.video_frame)
+
+        # Add right layout to main layout
+        main_layout.addLayout(right_layout)
+
+        # Configure the video player for the video frame
+        if sys.platform.startswith('linux'):
+            self.videoPlayer.set_xwindow(self.video_frame.winId())
+        elif sys.platform == "win32":
+            self.videoPlayer.set_hwnd(self.video_frame.winId())
+        elif sys.platform == "darwin":
+            self.videoPlayer.set_nsobject(int(self.video_frame.winId()))
+
+        # Load intro video
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.abspath(".")
+        video_path = os.path.join(base_path, 'include', 'intro.mp4')
+        self.videoPlayer.set_media(self.instance.media_new(video_path))
+
+        # Disable mouse and key input for video
+        self.videoPlayer.video_set_mouse_input(False)
+        self.videoPlayer.video_set_key_input(False)
+
+        # progress animation 
+        self.progress_animation = QPropertyAnimation(self.progress_bar, b"value")
+        self.progress_animation.setDuration(1000)
+        self.progress_animation.setEasingCurve(QEasingCurve.Linear)
+
+
+
+    def filter_playlist(self):
+        search_term = self.search_input.text().lower()
+
+        for tab_name, tab_info in self.tab_data.items():
+            # Check for 'playlist_model' key
+            playlist_model = tab_info.get("self.playlist_model")
+            if not playlist_model:
+                logging.debug(f"Warning: No 'playlist_model' found for tab '{tab_name}'. Skipping.")
+                continue
+
+            # Perform filtering            
+            filtered_playlist = [
+                item for item in tab_info.get("playlist_data", [])
+                if search_term in str(item).lower()  # Adjust matching logic if needed
+            ]
+                       
+            filtered_channels = [
+                
+                item for item in tab_info.get("current_channels", [])
+                if search_term in str(item).lower()  # Adjust matching logic if needed
+            ]
+            
+            playlist_model.clear()
+            
+            go_back_item = QStandardItem("Go Back")
+            self.playlist_model.appendRow(go_back_item)
+        
+            for item in filtered_playlist:
+                name = item.get("name", "Unnamed") if isinstance(item, dict) else str(item)
+                playlist_item = QStandardItem(name)
+                item_data = item  # The data associated with this item (e.g., category, series, etc.)
+                item_type = item.get("category_type", "category") if isinstance(item, dict) else str(item)
+                item_type = item.get("type", "category")  # Type of the item (e.g., category, series, etc.)
+                playlist_item.setData(item_data, Qt.UserRole)
+                playlist_item.setData(item_type, Qt.UserRole + 1)
+                playlist_model.appendRow(playlist_item)
+            
+            for item in filtered_channels:
+                item_data = item
+                item_type = item['item_type']
+                name = item['name']
+                logging.debug(f"Item Type: {item_type}, Name: {name}")                
+                list_item = QStandardItem(name)
+                list_item.setData(item, Qt.UserRole)
+                list_item.setData(item_type, Qt.UserRole + 1)
+                self.playlist_model.appendRow(list_item)
+            
+    def get_playlist(self):
+        """
+        Function to fetch and populate the playlist based on the hostname and MAC address input.
+        Uses a separate thread to handle the request to avoid blocking the UI.
+        """
+        self.error_label.setVisible(False)  # Hide the error label initially
+        self.playlist_model.clear()  # Clear the current playlist
+
+        # Get inputs from the user
+        hostname_input = self.hostname_input.text().strip()
+        mac_address = self.mac_input.text().strip()
+
+        # Check if both hostname and MAC address are provided
+        if not hostname_input or not mac_address:
+            self.error_label.setText("ERROR: Missing input")
+            self.error_label.setVisible(True)  # Show the error label if inputs are missing
+            return
+
+        # Parse the hostname URL
+        parsed_url = urlparse(hostname_input)
+        # If the URL does not have a scheme or netloc, try to add "http://"
+        if not parsed_url.scheme and not parsed_url.netloc:
+            parsed_url = urlparse(f"http://{hostname_input}")
+        elif not parsed_url.scheme:
+            parsed_url = parsed_url._replace(scheme="http")
+
+        # Set the base URL and MAC address
+        self.base_url = urlunparse((parsed_url.scheme, parsed_url.netloc, "", "", "", ""))
+        self.mac_address = mac_address
+
+        # Stop the current request thread if one is already running
+        if self.current_request_thread is not None and self.current_request_thread.isRunning():
+            logging.info("Stopping current RequestThread to start a new one.")
+            self.current_request_thread.wait()  # Wait for the thread to finish before starting a new one
+
+        # Initialize a new RequestThread for fetching the playlist
+        self.request_thread = RequestThread(self.base_url, mac_address)
+        # Connect signals for when the request completes and for progress updates
+        self.request_thread.request_complete.connect(self.on_initial_playlist_received)
+        self.request_thread.update_progress.connect(self.set_progress)
+        self.request_thread.start()  # Start the request thread
+        self.current_request_thread = self.request_thread  # Set the current request thread
+        logging.info("Started new RequestThread for playlist.")
+
 
 
     def build_Settings_gui(self, Settings_frame):
@@ -564,7 +814,9 @@ class MacAttack(QMainWindow):
                            "2.) Only open 1 video stream at a time per MAC, so you don’t get that MAC banned.\n"
                            "\n"
                            "\n"
-                           "If you're getting error 456/458, either the MAC, or your ip has been banned."
+                           "If you're getting error 456/458 (perhaps others as well), either the MAC, or your ip has been banned."
+                           "\n"
+                           "Many IPTV providers can detect mac scanners"
                            )
         tips_text.setAlignment(Qt.AlignTop)
         Settings_layout.addWidget(tips_text)
@@ -684,175 +936,7 @@ class MacAttack(QMainWindow):
         layout.addWidget(self.error_text)
         layout.addSpacing(15)  # Adds space
 
-    def build_mac_videoPlayer_gui(self, parent):
-        # Central widget for the "Mac VideoPlayer" tab
-        central_widget = QWidget(self)
-        parent.setLayout(QVBoxLayout())  # Set layout for the parent widget
-        parent.layout().setContentsMargins(0, 0, 0, 0)
-        parent.layout().setSpacing(0)
-        parent.layout().addWidget(central_widget)
-
-        # Initialize VLC instance
-        self.instance = vlc.Instance('--no-xlib', '--vout=directx')  # Windows
-        self.videoPlayer = self.instance.media_player_new()
-
-        # Main layout with two sections: left (controls) and right (video + buttons)
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(10) 
-
-        # LEFT SECTION: Controls and other widgets
-        self.left_layout = QVBoxLayout()
-        self.left_layout.setContentsMargins(0, 0, 0, 0)
-        self.left_layout.setSpacing(10)
-        self.left_layout.addSpacing(15)  # Adds space
-        # Hostname label and input horizontally aligned
-        self.hostname_layout = QHBoxLayout()  # Create a horizontal layout
-        self.hostname_layout.setContentsMargins(0, 0, 0, 0)
-        self.hostname_layout.setSpacing(0)
         
-        
-        
-        
-        self.hostname_label = QLabel("Host:")
-        self.hostname_layout.addWidget(self.hostname_label)
-        self.hostname_input = QLineEdit()
-        self.hostname_layout.addWidget(self.hostname_input)
-        self.left_layout.addLayout(self.hostname_layout)
-
-        self.mac_layout = QHBoxLayout()
-        self.mac_layout.setContentsMargins(0, 0, 0, 0)
-        self.mac_layout.setSpacing(0)
-        #self.mac_layout.addItem(self.spacer)   
-        self.mac_label = QLabel("MAC:")
-        self.mac_layout.addWidget(self.mac_label)
-        self.mac_input = QLineEdit()
-        self.mac_layout.addWidget(self.mac_input)
-        self.left_layout.addLayout(self.mac_layout)
-
-        self.playlist_layout = QHBoxLayout()
-        self.playlist_layout.setContentsMargins(0, 0, 0, 0)
-        self.playlist_layout.setSpacing(0)
-        #self.playlist_layout.addItem(self.spacer)
-        # Create a spacer item with fixed width
-        self.spacer = QSpacerItem(30, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)       
-        self.playlist_layout.addItem(self.spacer) 
-        
-        self.get_playlist_button = QPushButton("Get Playlist")
-        self.playlist_layout.addWidget(self.get_playlist_button)
-        self.get_playlist_button.clicked.connect(self.get_playlist)
-        
-        self.left_layout.addLayout(self.playlist_layout)
-        # Create a QTabWidget (for "Live", "Movies", "Series")
-        self.tab_widget = QTabWidget()
-        self.left_layout.addWidget(self.tab_widget)
-
-        # Dictionary to hold tab data
-        self.tab_data = {}
-
-        
-        # Add left margin to self.left_layout
-        self.left_layout.setContentsMargins(10, 0, 0, 0)
-
-        # Add a left margin to self.tab_widget
-        self.tab_widget.setContentsMargins(10, 0, 0, 0)
-        
-        
-        for tab_name in ["Live", "Movies", "Series"]:
-            tab = QWidget()
-            tab_layout = QVBoxLayout(tab)
-            tab_layout.setContentsMargins(0, 0, 0, 0)
-            tab_layout.setSpacing(0)
-            playlist_view = QListView()
-            playlist_view.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            tab_layout.addWidget(playlist_view)
-
-            self.playlist_model = QStandardItemModel(playlist_view)
-            playlist_view.setModel(self.playlist_model)
-
-            playlist_view.scrollToTop()  # Scroll the view to the top
-
-            playlist_view.doubleClicked.connect(self.on_playlist_selection_changed)
-            self.tab_widget.addTab(tab, tab_name)
-
-            self.tab_data[tab_name] = {
-                "tab_widget": tab,
-                "playlist_view": playlist_view,
-                "self.playlist_model": self.playlist_model,
-                "current_category": None,
-                "navigation_stack": [],
-                "playlist_data": [],
-                "current_channels": [],
-                "current_series_info": [],
-                "current_view": "categories",
-            }
-
-        # Progress bar at the bottom
-        self.progress_layout = QHBoxLayout()
-        self.progress_layout.setContentsMargins(0, 0, 0, 0)
-        self.progress_layout.setSpacing(0)
-        #self.progress_layout.addItem(self.spacer)   
- 
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setValue(0)
-        self.progress_layout.addWidget(self.progress_bar)
-        self.left_layout.addLayout(self.progress_layout)
-        # Create "ERROR" label and hide it initially
-        self.error_label = QLabel("ERROR: Error message label")
-        self.error_label.setStyleSheet("color: red; font-size: 10pt; margin-bottom: 15px;")
-        self.left_layout.addWidget(self.error_label, alignment=Qt.AlignRight)
-        self.error_label.setVisible(False)  # Initially hide the label
-
-        
-        # Add left layout to main layout
-        # Create a QWidget to hold left_layout to set fixed size
-        self.left_widget = QWidget()
-        self.left_widget.setLayout(self.left_layout)
-        self.left_widget.setFixedWidth(240)
-
-        main_layout.addWidget(self.left_widget)
-
-
-        # RIGHT SECTION: Video area and controls
-        right_layout = QVBoxLayout()
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(0)
-
-        # Video frame
-        self.video_frame = QWidget(self)
-        self.video_frame.setStyleSheet("background-color: black;")
-        #self.video_frame.setMinimumWidth(640)  # Set a minimum size for visibility
-        right_layout.addWidget(self.video_frame)
-
-        # Add right layout to main layout
-        main_layout.addLayout(right_layout)
-
-        # Configure the video player for the video frame
-        if sys.platform.startswith('linux'):
-            self.videoPlayer.set_xwindow(self.video_frame.winId())
-        elif sys.platform == "win32":
-            self.videoPlayer.set_hwnd(self.video_frame.winId())
-        elif sys.platform == "darwin":
-            self.videoPlayer.set_nsobject(int(self.video_frame.winId()))
-
-        # Load intro video
-        if getattr(sys, 'frozen', False):
-            # Running in a bundle
-            base_path = sys._MEIPASS  # _MEIPASS is the temporary folder where PyInstaller stores bundled files
-        else:
-            # Running in a normal Python environment
-            base_path = os.path.abspath(".")
-        video_path = os.path.join(base_path, 'include', 'intro.mp4')
-        self.videoPlayer.set_media(self.instance.media_new(video_path))
-
-        # Disable mouse and key input for video
-        self.videoPlayer.video_set_mouse_input(False)
-        self.videoPlayer.video_set_key_input(False)
-
-        # progress animation 
-        self.progress_animation = QPropertyAnimation(self.progress_bar, b"value")
-        self.progress_animation.setDuration(1000)
-        self.progress_animation.setEasingCurve(QEasingCurve.Linear)
 
         
     def SaveTheDay(self):
@@ -1095,40 +1179,6 @@ class MacAttack(QMainWindow):
         if self.current_request_thread is not None:
             self.current_request_thread.requestInterruption()
             logging.debug("RequestThread interruption requested.")
-
-    def get_playlist(self):
-        self.error_label.setVisible(False)  # Hide the error label
-        self.playlist_model.clear()
-        hostname_input = self.hostname_input.text()
-        mac_address = self.mac_input.text()
-
-        if not hostname_input or not mac_address:
-            self.error_label.setText("ERROR: Missing input")
-            self.error_label.setVisible(True)
-            return
-
-        parsed_url = urlparse(hostname_input)
-        if not parsed_url.scheme and not parsed_url.netloc:
-            parsed_url = urlparse(f"http://{hostname_input}")
-        elif not parsed_url.scheme:
-            parsed_url = parsed_url._replace(scheme="http")
-
-        self.base_url = urlunparse((parsed_url.scheme, parsed_url.netloc, "", "", "", ""))
-        self.mac_address = mac_address
-
-        # Stop the current request thread if one is already running
-        
-        if self.current_request_thread is not None and self.current_request_thread.isRunning():
-            logging.info("Stopping current RequestThread to start a new one.")
-            self.current_request_thread.wait()  # Wait for the thread to finish
-
-        # Initialize a new RequestThread for fetching playlist
-        self.request_thread = RequestThread(self.base_url, mac_address)
-        self.request_thread.request_complete.connect(self.on_initial_playlist_received)
-        self.request_thread.update_progress.connect(self.set_progress)
-        self.request_thread.start()
-        self.current_request_thread = self.request_thread
-        logging.info("Started new RequestThread for playlist.")
         
     def set_progress(self, value):
         # Animate the progress bar to the new value
@@ -1638,9 +1688,9 @@ class MacAttack(QMainWindow):
         if self.video_worker is not None and self.video_worker.isRunning():
             self.video_worker.quit()  # Safely stop the worker
             if not self.video_worker.wait(3000):  # 3s timeout
-                print("Warning: Worker thread did not stop in time.")
+                logging.debug("Warning: Worker thread did not stop in time.")
                 if self.video_worker is not None and self.video_worker.isRunning():
-                    print("Forcefully stopping the worker thread.")
+                    logging.debug("Forcefully stopping the worker thread.")
                     self.video_worker.quit()
                     self.video_worker.terminate()  # Forcefully terminate
                     self.video_worker.wait()  # Wait for termination
@@ -1737,6 +1787,22 @@ class MacAttack(QMainWindow):
         self.resizing = False
         self.moving = False
 
+    def keyPressEvent(self, event):
+        """Handle key events for Escape (toggle fullscreen) and Spacebar (toggle pause/play)."""
+        if event.key() == Qt.Key_Escape:
+            # Create a fake mouse event to simulate a double-click
+            fake_mouse_event = QMouseEvent(QEvent.MouseButtonDblClick, self.rect().center(), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+            self.mouseDoubleClickEvent(fake_mouse_event)
+            event.accept()  # Stop further handling of Escape key
+        elif event.key() == Qt.Key_Space:
+            # Toggle play/pause
+            if self.videoPlayer.is_playing():  # Assuming isPlaying() checks if the video is currently playing
+                self.videoPlayer.pause()
+            else:
+                self.videoPlayer.play()
+            event.accept()  # Stop further handling of Space key
+        else:
+            super().keyPressEvent(event)  # Call base class method to handle other keys   
 
     def mouseDoubleClickEvent(self, event): #Fullscreen video
         
@@ -1791,7 +1857,9 @@ class MacAttack(QMainWindow):
                     for widget in self.topbar_layout.children():
                         widget.setVisible(False)
                     self.topbar_minimize_button.setVisible(False)
+                    self.topbar_minimize_button.setEnabled(False)
                     self.topbar_close_button.setVisible(False)
+                    self.topbar_close_button.setEnabled(False)
                 else:
                     # Restore window state to normal
                     self.showNormal()  # Restore to normal window state
@@ -1829,7 +1897,9 @@ class MacAttack(QMainWindow):
                     # Add a left margin to self.tab_widget
                     self.tab_widget.setContentsMargins(10, 0, 0, 0) 
                     self.topbar_minimize_button.setVisible(True)
+                    self.topbar_minimize_button.setEnabled(True)
                     self.topbar_close_button.setVisible(True)
+                    self.topbar_close_button.setEnabled(True)
                     self.topbar_layout.setContentsMargins(30, 5, 0, 0)
                     self.bottombar_layout.setContentsMargins(0, 30, 0, 0)
 
