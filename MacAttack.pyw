@@ -7,7 +7,7 @@ from datetime import datetime
 import sys
 import vlc
 import base64
-from PyQt5.QtCore import QEvent,QByteArray, QBuffer, Qt, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer, QSize
+from PyQt5.QtCore import QEvent,QByteArray, QBuffer, Qt, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt5.QtGui import QPixmap, QIcon, QStandardItemModel, QStandardItem, QMouseEvent
 from PyQt5.QtWidgets import QMainWindow, QFrame, QApplication, QVBoxLayout, QLineEdit, QLabel, QPushButton, QWidget, QTabWidget, QMessageBox, QListView, QHBoxLayout, QCheckBox, QAbstractItemView, QProgressBar, QSpinBox, QTextEdit, QSpacerItem, QSizePolicy
 import requests
@@ -424,7 +424,15 @@ class MacAttack(QMainWindow):
 
         QProgressBar::chunk {
             background-color: #1e90ff;
+        }        
+        QCheckBox {
+            background-color: #666666;
+            padding: 5px;
+            border: 2px solid black;
         }
+        QCheckBox:checked {
+            background-color: green;
+        }                
         """
         self.setStyleSheet(theme)
 
