@@ -3,7 +3,7 @@ MacAttack is a gui for bruteforce attacking iptv stalker portals.\
 You can find these portals in many iptv sharing groups in [Telegram](https://www.google.com/search?q=inurl:%22t.me%22%20telegram+iptv+mac+portal), [Reddit](https://www.reddit.com/r/iptvglory/), and [many other places](https://www.google.com/search?q=%2200%3A1A%3A79%22+%22%2Fc%2F%22).\
 The portal links usually end in /c/.\
 The mac addresses in the groups are usually banned already, but this tool can find unshared mac addresses.\
-Open the link in your browser, if the page title says stalker portal, it should work with this program.
+Open the link in your browser, if the page title says stalker_portal, it should work with this program.
 &NewLine;
 &NewLine;
 ## Requirement
