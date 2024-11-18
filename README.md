@@ -7,7 +7,7 @@ Iptv mac address brute forcer for windows.
 [VLC Media Player](https://www.videolan.org/vlc/download-windows.html) must be installed!
 &NewLine;
 
-A VPN is recommended, but not necessary. (to avoid getting banned by the provider)\
+A VPN is recommended while scanning, but not necessary. (to avoid getting banned by the provider)\
 &NewLine;
 &NewLine;
 ## Windows
