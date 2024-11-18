@@ -1,6 +1,9 @@
 # MacAttack
-Gui for brute forcing and testing IPTV stalker streams.\
-Iptv mac address brute forcer for windows.
+MacAttack is a gui for bruteforce attacking iptv stalker portals.\
+You can find these portals in many iptv sharing groups in [Telegram](https://www.google.com/search?q=inurl:%22t.me%22%20telegram+iptv+mac+portal), [Reddit](https://www.reddit.com/r/iptvglory/), and [many other places](https://www.google.com/search?q=%2200%3A1A%3A79%22+%22%2Fc%2F%22).\
+The portal links usually end in /c/.\
+The mac addresses in the groups are usually banned already, but this tool can find unshared mac addresses.\
+Open the link in your browser, if the page title says stalker portal, it should work with this program.
 &NewLine;
 &NewLine;
 ## Requirement
@@ -16,8 +19,8 @@ Download the exe from the [releases page](https://github.com/Evilvir-us/MacAttac
 &NewLine;
 ### Instructions for Mac Attack Tab:
 Put the stalker portal url into the first box\
-set the speed 1-15 (default 10)\
-Click Start
+set the speed 1-15(default 10). Speed 1 will be the least likely to get your ip banned.\
+Click Start\
 &NewLine;
 &NewLine;
 ### Instructions for Mac VideoPlayer Tab:
