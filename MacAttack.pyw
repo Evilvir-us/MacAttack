@@ -674,50 +674,51 @@ class MacAttack(QMainWindow):
         search_term = self.search_input.text().lower()
 
         for tab_name, tab_info in self.tab_data.items():
-            # Check for 'playlist_model' key
+            # Retrieve the playlist model
             playlist_model = tab_info.get("self.playlist_model")
             if not playlist_model:
                 logging.debug(f"Warning: No 'playlist_model' found for tab '{tab_name}'. Skipping.")
                 continue
 
-            # Perform filtering            
-            filtered_playlist = [
-                item for item in tab_info.get("playlist_data", [])
-                if search_term in str(item).lower()  # Adjust matching logic if needed
-            ]
+            # Perform filtering on playlists and channels
+            filtered_playlist = self._filter_items(tab_info.get("playlist_data", []), search_term)
+            filtered_channels = self._filter_items(tab_info.get("current_channels", []), search_term)
 
-            filtered_channels = [
-                item for item in tab_info.get("current_channels", [])
-                if search_term in str(item).lower()  # Adjust matching logic if needed
-            ]
-            
-            # Clear the playlist model before adding items
-            playlist_model.clear()
-            go_back_item = QStandardItem("Go Back")
-            playlist_model.appendRow(go_back_item)
+            # Clear and rebuild the playlist model
+            self._populate_playlist_model(playlist_model, filtered_channels, filtered_playlist)
 
-            # Add filtered channels
-            for item in filtered_channels:
-                item_data = item
-                item_type = item['item_type']
-                name = item['name']
-                logging.debug(f"Item Type: {item_type}, Name: {name}")                
-                list_item = QStandardItem(name)
-                list_item.setData(item, Qt.UserRole)
-                list_item.setData(item_type, Qt.UserRole + 1)
-                playlist_model.appendRow(list_item)
-            info_item = QStandardItem("-----Categories-----")
-            playlist_model.appendRow(info_item)
-            # Add filtered playlist items
-            for item in filtered_playlist:
-                name = item.get("name", "Unnamed") if isinstance(item, dict) else str(item)
-                playlist_item = QStandardItem(name)
-                item_data = item  # The data associated with this item (e.g., category, series, etc.)
-                item_type = item.get("category_type", "category") if isinstance(item, dict) else str(item)
-                item_type = item.get("type", "category")  # Type of the item (e.g., category, series, etc.)
-                playlist_item.setData(item_data, Qt.UserRole)
-                playlist_item.setData(item_type, Qt.UserRole + 1)
-                playlist_model.appendRow(playlist_item)
+    def _filter_items(self, items, search_term):
+        """Helper function to filter items based on the search term."""
+        return [
+            item for item in items
+            if search_term in str(item).lower()
+        ]
+
+    def _populate_playlist_model(self, playlist_model, channels, playlists):
+        """Helper function to clear and populate the playlist model."""
+        playlist_model.clear()
+        playlist_model.appendRow(QStandardItem("Go Back"))
+
+        # Add filtered channels
+        for item in channels:
+            list_item = self._create_list_item(item, item['name'], item['item_type'])
+            playlist_model.appendRow(list_item)
+
+        playlist_model.appendRow(QStandardItem("-----Categories-----"))
+
+        # Add filtered playlists
+        for item in playlists:
+            name = item.get("name", "Unnamed") if isinstance(item, dict) else str(item)
+            item_type = item.get("type", "category") if isinstance(item, dict) else str(item)
+            playlist_item = self._create_list_item(item, name, item_type)
+            playlist_model.appendRow(playlist_item)
+
+    def _create_list_item(self, data, name, item_type):
+        """Helper function to create a list item with attached data."""
+        list_item = QStandardItem(name)
+        list_item.setData(data, Qt.UserRole)
+        list_item.setData(item_type, Qt.UserRole + 1)
+        return list_item
             
 
             
@@ -802,17 +803,15 @@ class MacAttack(QMainWindow):
         Settings_layout.addWidget(line2)
 
         # Add the list of tips
-        tips_text = QLabel("1.) Use a VPN while scanning in order to stop your IP address from getting banned.\n"
-                           "2.) Only open 1 video stream at a time per MAC, so you don’t get that MAC banned.\n"
-                           "\n"
-                           "Video Controls: Mouseclick/Space Bar - Toggle Pause\n"
-                           "                       Doubleclick/ESC - Toggle Fullscreen"
-                           "\n"
-                           "\n"
-                           "If you're getting error 456/458 (perhaps others as well), either the MAC, or your ip has been banned."
-                           "\n"
-                           "Many IPTV providers can detect mac scanners"           
-                           )
+        tips_text = QLabel(
+            "1.) Use a VPN while scanning in order to stop your IP address from getting banned.<br>"
+            "2.) Only open 1 video stream at a time per MAC, so you don’t get that MAC banned.<br><br>"
+            "<b>Video Controls:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Mouseclick/Space Bar - Toggle Pause<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Doubleclick/ESC - Toggle Fullscreen<br><br>"
+            "If you're getting error 456/458 (perhaps others as well), either the MAC, or your IP has been banned.<br>"
+            "Many IPTV providers can detect MAC scanners."
+        )
         tips_text.setAlignment(Qt.AlignTop)
         Settings_layout.addWidget(tips_text)
 
@@ -1215,8 +1214,7 @@ class MacAttack(QMainWindow):
         self.playlist_model = tab_info["self.playlist_model"]
         self.playlist_model.clear()
         tab_info["current_view"] = "categories"
-
-        # Retrieve playlist_view and assign it to self
+        
         self.playlist_view = tab_info["playlist_view"]  
 
         if tab_info["navigation_stack"]:
