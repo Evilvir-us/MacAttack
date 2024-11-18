@@ -18,10 +18,10 @@ from urllib.parse import quote, urlparse, urlunparse
 import configparser
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
-import pygame
+#os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+#import pygame
 
-pygame.mixer.init()
+#pygame.mixer.init()
 #logging.basicConfig(level=logging.DEBUG)
 
 def get_token(session, url, mac_address):
@@ -1192,7 +1192,7 @@ class MacAttack(QMainWindow):
 
                                 if self.successsound_checkbox.isChecked():
                                     sound_thread = threading.Thread(target=self.play_success_sound)
-                                    sound_thread.start()  # Start the background thread                     
+                                    sound_thread.start()  # Start the background thread               
                                 
                                 
                                 
@@ -1218,6 +1218,7 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
                     self.error_count += 1  # Increment the error count
                      
+
     def play_success_sound(self):
         # Determine the base path for the sound file
         if getattr(sys, 'frozen', False):  # Check if the app is frozen (i.e., packaged with PyInstaller)
@@ -1229,12 +1230,17 @@ class MacAttack(QMainWindow):
         sound_path = os.path.join(base_path, 'include', 'success.mp3')
 
         try:
-            # Load and play the sound
-            pygame.mixer.music.load(sound_path)
-            pygame.mixer.music.play()
+            # Create VLC media player instance and play the sound
+            soundplayer = vlc.MediaPlayer(sound_path)
+            soundplayer.play()
 
-        except pygame.error as e:
-            logging.debug(f"Error playing sound: {e}")
+            # Optional: Wait for the sound to finish (based on media length)
+            import time
+            duration = soundplayer.get_length() / 1000  # Convert milliseconds to seconds
+            if duration > 0:  # Only wait if duration is properly determined
+                time.sleep(duration)
+        except Exception as e:
+            logging.debug(f"Error playing sound with VLC: {e}")
 
     def OutputMastermind(self):
         # Fancy file-naming because why not complicate things?
