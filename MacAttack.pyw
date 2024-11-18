@@ -27,7 +27,17 @@ from requests.packages.urllib3.util.retry import Retry
 def get_token(session, url, mac_address):
     try:
         handshake_url = f"{url}/portal.php?type=stb&action=handshake&JsHttpRequest=1-xml"
-        cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "America/Los_Angeles"}
+        cookies = {           
+             "adid": "2bdb5336edffec452536be317345eb2748e18f87",
+             "debug": "1",
+             "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
+             "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
+             "hw_version": "1.7-BD-00",
+             "mac": mac_address,
+             "sn": "1F2E73918FED8",
+             "stb_lang": "en",
+             "timezone": "America/Los_Angeles",
+        }
         headers = {"User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)"}
         response = session.get(handshake_url, cookies=cookies, headers=headers, timeout=10)
         response.raise_for_status()
@@ -138,7 +148,18 @@ class RequestThread(QThread):
     def get_token(self, session, url, mac_address):
         try:
             handshake_url = f"{url}/portal.php?type=stb&action=handshake&JsHttpRequest=1-xml"
-            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "America/Los_Angeles"}
+            cookies = {
+                
+                 "adid": "2bdb5336edffec452536be317345eb2748e18f87",
+                 "debug": "1",
+                 "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
+                 "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
+                 "hw_version": "1.7-BD-00",
+                 "mac": mac_address,
+                 "sn": "1F2E73918FED8",
+                 "stb_lang": "en",
+                 "timezone": "America/Los_Angeles",
+            }
             headers = {"User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)"}
             response = session.get(handshake_url, cookies=cookies, headers=headers, timeout=10)
             response.raise_for_status()
@@ -156,10 +177,21 @@ class RequestThread(QThread):
     def get_genres(self, session, url, mac_address, token):
         try:
             genres_url = f"{url}/portal.php?type=itv&action=get_genres&JsHttpRequest=1-xml"
-            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "America/Los_Angeles"}
+            cookies = { 
+                 "adid": "2bdb5336edffec452536be317345eb2748e18f87",
+                 "debug": "1",
+                 "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
+                 "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
+                 "hw_version": "1.7-BD-00",
+                 "mac": mac_address,
+                 "sn": "1F2E73918FED8",
+                 "stb_lang": "en",
+                 "timezone": "America/Los_Angeles",
+            }
             headers = {
-                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
-                "Authorization": "Bearer " + token,
+                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                "Authorization": f"Bearer {token}",
+                "X-User-Agent": "Model: MAG250; Link: WiFi",
             }
             response = session.get(genres_url, cookies=cookies, headers=headers, timeout=10)
             response.raise_for_status()
@@ -186,10 +218,22 @@ class RequestThread(QThread):
     def get_vod_categories(self, session, url, mac_address, token):
         try:
             vod_url = f"{url}/portal.php?type=vod&action=get_categories&JsHttpRequest=1-xml"
-            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "America/Los_Angeles"}
+            cookies = {
+                
+                 "adid": "2bdb5336edffec452536be317345eb2748e18f87",
+                 "debug": "1",
+                 "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
+                 "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
+                 "hw_version": "1.7-BD-00",
+                 "mac": mac_address,
+                 "sn": "1F2E73918FED8",
+                 "stb_lang": "en",
+                 "timezone": "America/Los_Angeles",
+            }
             headers = {
-                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
-                "Authorization": "Bearer " + token,
+                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                "Authorization": f"Bearer {token}",
+                "X-User-Agent": "Model: MAG250; Link: WiFi",
             }
             response = session.get(vod_url, cookies=cookies, headers=headers, timeout=10)
             response.raise_for_status()
@@ -215,10 +259,22 @@ class RequestThread(QThread):
     def get_series_categories(self, session, url, mac_address, token):
         try:
             series_url = f"{url}/portal.php?type=series&action=get_categories&JsHttpRequest=1-xml"
-            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "America/Los_Angeles"}
+            cookies = {
+                
+                 "adid": "2bdb5336edffec452536be317345eb2748e18f87",
+                 "debug": "1",
+                 "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
+                 "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
+                 "hw_version": "1.7-BD-00",
+                 "mac": mac_address,
+                 "sn": "1F2E73918FED8",
+                 "stb_lang": "en",
+                 "timezone": "America/Los_Angeles",
+            }
             headers = {
-                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
-                "Authorization": "Bearer " + token,
+                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                "Authorization": f"Bearer {token}",
+                "X-User-Agent": "Model: MAG250; Link: WiFi",
             }
             response = session.get(series_url, cookies=cookies, headers=headers, timeout=10)
             response.raise_for_status()
@@ -246,10 +302,22 @@ class RequestThread(QThread):
     def get_channels(self, session, url, mac_address, token, category_type, category_id):
         try:
             channels = []
-            cookies = {"mac": mac_address, "stb_lang": "en", "timezone": "America/Los_Angeles"}
+            cookies = {
+                
+                 "adid": "2bdb5336edffec452536be317345eb2748e18f87",
+                 "debug": "1",
+                 "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
+                 "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
+                 "hw_version": "1.7-BD-00",
+                 "mac": mac_address,
+                 "sn": "1F2E73918FED8",
+                 "stb_lang": "en",
+                 "timezone": "America/Los_Angeles",
+            }
             headers = {
-                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
+                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                 "Authorization": f"Bearer {token}",
+                "X-User-Agent": "Model: MAG250; Link: WiFi",
             }
 
             def fetch_page(page_number):
@@ -372,7 +440,7 @@ class MacAttack(QMainWindow):
         super().__init__()
         self.set_window_icon()
         self.setWindowTitle("MacAttack by Evilvirus")
-        self.setGeometry(200, 200, 1141, 523)
+        self.setGeometry(200, 200, 1138, 522)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
 
         self.running = False
@@ -783,10 +851,6 @@ class MacAttack(QMainWindow):
         line1.setFrameShape(QFrame.HLine)
         line1.setFrameShadow(QFrame.Sunken)
         Settings_layout.addWidget(line1)
-
-        # autoload macs checkbox
-        self.autoloadmac_checkbox = QCheckBox("Load MAC into the player tab instantly when discovered")
-        Settings_layout.addWidget(self.autoloadmac_checkbox)
         
         # autostop checkbox
         self.autostop_checkbox = QCheckBox("Stop the attack whenever a MAC is found")
@@ -795,9 +859,20 @@ class MacAttack(QMainWindow):
         # successsound checkbox
         self.successsound_checkbox = QCheckBox("Play a sound whenever a MAC is found")
         Settings_layout.addWidget(self.successsound_checkbox)
+        Settings_layout.addSpacing(15)  # Adds space
+        
+        # autoload macs checkbox
+        self.autoloadmac_checkbox = QCheckBox("Load MAC into the player tab instantly when discovered")
+        Settings_layout.addWidget(self.autoloadmac_checkbox)
+
+        # autopause checkbox
+        self.autopause_checkbox = QCheckBox("Pause the video when switching tabs")
+        Settings_layout.addWidget(self.autopause_checkbox)
         
         
-        Settings_layout.addSpacing(150)  # Adds space
+
+        
+        Settings_layout.addSpacing(70)  # Adds space
 
         # Add the "Tips" label
         tips_label = QLabel("Tips")
@@ -954,7 +1029,8 @@ class MacAttack(QMainWindow):
             'mac': self.mac_input.text(),
             'autoloadmac': str(self.autoloadmac_checkbox.isChecked()),  # Save autoloadmac checkbox state
             'autostop': str(self.autostop_checkbox.isChecked()),  # Save autostop checkbox state
-            'successsound': str(self.successsound_checkbox.isChecked()),  # Save autostop checkbox state
+            'successsound': str(self.successsound_checkbox.isChecked()),  # Save successsound checkbox state
+            'autopause': str(self.autopause_checkbox.isChecked()),  # Save autopause checkbox state
             'active_tab': str(self.tabs.currentIndex())  # Save the index of the active tab
         }
         
@@ -998,6 +1074,10 @@ class MacAttack(QMainWindow):
             # Load successsound_checkbox state
             autostop_state = config.get('Settings', 'successsound', fallback="False")
             self.successsound_checkbox.setChecked(autostop_state == "True")  # Set checkbox based on saved state
+
+            # Load autopause_checkbox state
+            autostop_state = config.get('Settings', 'autopause', fallback="True")
+            self.autopause_checkbox.setChecked(autostop_state == "True")  # Set checkbox based on saved state
             
             # Load active tab
             active_tab = config.getint('Settings', 'active_tab', fallback=0)  # Default to first tab if not found
@@ -1077,7 +1157,16 @@ class MacAttack(QMainWindow):
                     tok = data.get('js', {}).get('token')  # Safely access token to prevent KeyError
 
                     url2 = f"{self.base_url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
-                    headers = {"Authorization": f"Bearer {tok}"}
+                    #headers = {"Authorization": f"Bearer {tok}"}
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                        "Authorization": f"Bearer {tok}",
+                        "X-User-Agent": "Model: MAG250; Link: WiFi",
+                    }                    
+                    
+                    
+                    
+                    
                     res2 = s.get(url2, headers=headers, timeout=10, allow_redirects=False)
 
                     if res2.text:
@@ -1532,15 +1621,21 @@ class MacAttack(QMainWindow):
                     self.error_label.setText(f"Series ID missing in context data: {context_data}")
                     self.error_label.setVisible(True)
                     return
-
-                cookies = {
-                    "mac": mac_address,
-                    "stb_lang": "en",
-                    "timezone": "America/Los_Angeles",
+                cookies = {                   
+                     "adid": "2bdb5336edffec452536be317345eb2748e18f87",
+                     "debug": "1",
+                     "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
+                     "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
+                     "hw_version": "1.7-BD-00",
+                     "mac": mac_address,
+                     "sn": "1F2E73918FED8",
+                     "stb_lang": "en",
+                     "timezone": "America/Los_Angeles",
                 }
                 headers = {
-                    "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
+                    "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                     "Authorization": f"Bearer {token}",
+                    "X-User-Agent": "Model: MAG250; Link: WiFi",
                 }
 
                 if season_number is None:
@@ -1660,14 +1755,21 @@ class MacAttack(QMainWindow):
                     token = get_token(session, url, mac_address)
                     if token:
                         cmd_encoded = quote(cmd)
-                        cookies = {
-                            "mac": mac_address,
-                            "stb_lang": "en",
-                            "timezone": "America/Los_Angeles",
+                        cookies = { 
+                             "adid": "2bdb5336edffec452536be317345eb2748e18f87",
+                             "debug": "1",
+                             "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
+                             "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
+                             "hw_version": "1.7-BD-00",
+                             "mac": mac_address,
+                             "sn": "1F2E73918FED8",
+                             "stb_lang": "en",
+                             "timezone": "America/Los_Angeles",
                         }
                         headers = {
-                            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
+                            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                             "Authorization": f"Bearer {token}",
+                            "X-User-Agent": "Model: MAG250; Link: WiFi",
                         }
                         create_link_url = f"{url}/portal.php?type=itv&action=create_link&cmd={cmd_encoded}&JsHttpRequest=1-xml"
                         logging.info(f"Create link URL: {create_link_url}")
@@ -1706,13 +1808,20 @@ class MacAttack(QMainWindow):
                 if token:
                     cmd_encoded = quote(cmd)
                     cookies = {
-                        "mac": mac_address,
-                        "stb_lang": "en",
-                        "timezone": "America/Los_Angeles",
+                         "adid": "2bdb5336edffec452536be317345eb2748e18f87",
+                         "debug": "1",
+                         "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
+                         "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
+                         "hw_version": "1.7-BD-00",
+                         "mac": mac_address,
+                         "sn": "1F2E73918FED8",
+                         "stb_lang": "en",
+                         "timezone": "America/Los_Angeles",
                     }
                     headers = {
-                        "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)",
+                        "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                         "Authorization": f"Bearer {token}",
+                        "X-User-Agent": "Model: MAG250; Link: WiFi",
                     }
                     if item_type == "episode":
                         episode_number = channel.get("episode_number")
@@ -1981,12 +2090,14 @@ class MacAttack(QMainWindow):
                     self.bottombar_layout.setContentsMargins(0, 30, 0, 0)
 
     def on_tab_change(self, index):
-        """Method to handle video playback when the Mac VideoPlayer tab is selected"""
-        if self.tabs.tabText(index) == "Mac VideoPlayer":
-            self.videoPlayer.play()  # Play the video when Mac VideoPlayer tab is selected
-        else:
-            self.videoPlayer.pause()  # Pause the video when the tab is not selected    
-
+        if self.autopause_checkbox.isChecked():
+            if index == 1:  # When Tab 1 is selected
+                if not self.videoPlayer.is_playing():  # Check if the video is not already playing
+                    self.videoPlayer.play()  # Play the video
+            else:  # When any tab other than Tab 1 is selected
+                if self.videoPlayer.is_playing():  # Check if the video is currently playing
+                    self.videoPlayer.pause()  # Pause the video
+                
     def closeEvent(self, event):
         # Save settings when the window is about to close
         self.SaveTheDay()
