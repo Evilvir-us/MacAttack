@@ -4,12 +4,13 @@ MacAttack is a GUI tool for brute-force attacking IPTV stalker portals. These po
 
 While many MAC addresses shared in groups are often banned, this tool is designed to find unshared MAC addresses. If the page title says `stalker_portal` when you open the link in your browser, it should work with MacAttack.
 
+However, many providers will also attach a device serial number to the mac address, making brute forcing impossible.
+
 ---
 
 ## Requirements
 
 - [VLC Media Player](https://www.videolan.org/vlc/download-windows.html) must be installed.
-- A VPN is recommended for scanning to reduce the chance of being banned by the provider (though it is not mandatory).
 
 ---
 
