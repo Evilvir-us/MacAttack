@@ -9,7 +9,6 @@ While many MAC addresses shared in groups are often banned, this tool is designe
 ## Requirements
 
 - [VLC Media Player](https://www.videolan.org/vlc/download-windows.html) must be installed.
-- A VPN is recommended for scanning to reduce the chance of being banned by the provider (though it is not mandatory).
 
 ---
 
