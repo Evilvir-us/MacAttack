@@ -1340,7 +1340,7 @@ class MacAttack(QMainWindow):
         # Speed input (SpinBox)
         self.speed_label = QLabel("Speed:")
         self.concurrent_tests = QSpinBox()
-        self.concurrent_tests.setRange(1, 50)
+        self.concurrent_tests.setRange(1, 999)
         self.concurrent_tests.setValue(10)
         combined_layout.addWidget(self.speed_label)
         combined_layout.addWidget(self.concurrent_tests)
@@ -1549,9 +1549,9 @@ class MacAttack(QMainWindow):
         self.base_url = f"http://{self.host}:{self.port}"
 
         num_tests = self.concurrent_tests.value()
-        # Limit a maximum concurrent tests, 'cause we’re not running a circus here.
-        if num_tests > 50:
-            num_tests = 50
+#        # Limit a maximum concurrent tests, 'cause we’re not running a circus here. actually with proxies, we are
+#        if num_tests > 300:
+#            num_tests = 300
 
         # Start threads to test MACs
         for _ in range(num_tests):
