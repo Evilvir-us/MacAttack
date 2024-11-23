@@ -10,7 +10,7 @@ import vlc
 import base64
 from PyQt5.QtCore import QEvent,QByteArray, QBuffer, Qt, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt5.QtGui import QFont, QPixmap, QIcon, QStandardItemModel, QStandardItem, QMouseEvent
-from PyQt5.QtWidgets import QMainWindow, QFrame, QApplication, QVBoxLayout, QLineEdit, QLabel, QPushButton, QWidget, QTabWidget, QMessageBox, QListView, QHBoxLayout, QCheckBox, QAbstractItemView, QProgressBar, QSpinBox, QTextEdit, QSpacerItem, QSizePolicy
+from PyQt5.QtWidgets import QSlider, QMainWindow, QFrame, QApplication, QVBoxLayout, QLineEdit, QLabel, QPushButton, QWidget, QTabWidget, QMessageBox, QListView, QHBoxLayout, QCheckBox, QAbstractItemView, QProgressBar, QSpinBox, QTextEdit, QSpacerItem, QSizePolicy
 import requests
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -54,48 +54,39 @@ def get_token(session, url, mac_address):
         return None
 
 class ProxyFetcher(QThread):
-    """
-    A QThread that fetches and tests proxies in the background.
-    It emits signals to update the UI with the results.
-    """
     # Signal to update the proxy output in the UI
     update_proxy_output_signal = pyqtSignal(str)
     update_proxy_textbox_signal = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
+        self.proxy_fetching_speed = 10  # Default value
 
     def run(self):
-        """
-        Runs the proxy fetching and testing process in a background thread.
-        """
         self.fetch_and_test_proxies()
 
     def fetch_and_test_proxies(self):
         """
         Fetches and tests proxies, emitting signals to update the UI.
         """
-        # Step 1: Fetch proxies
+        # Fetch proxies
         all_proxies = self.fetch_proxies()
 
-        # If no proxies are fetched, emit an error and return
         if not all_proxies:
-            self.update_proxy_output_signal.emit("No proxies found, check internet connection, or remove non working proxy in Mac VideoPlayer tab.")
+            self.update_proxy_output_signal.emit("No proxies found, check internet connection.")
             return
 
         original_count = len(all_proxies)
-        
-        # Remove duplicates
-        all_proxies = list(set(all_proxies))
+        all_proxies = list(set(all_proxies))  # Remove duplicates
         duplicates_removed = original_count - len(all_proxies)
         self.update_proxy_output_signal.emit(f"Total proxies fetched: {original_count}\n")
         self.update_proxy_output_signal.emit(f"Duplicates removed: {duplicates_removed}\n")
 
-        # Step 2: Test proxies
+        # Test proxies
         working_proxies = []
         self.update_proxy_output_signal.emit("Testing proxies...")
-        
-        with ThreadPoolExecutor(max_workers=100) as executor:
+
+        with ThreadPoolExecutor(max_workers=self.proxy_fetching_speed) as executor:
             future_to_proxy = {executor.submit(self.test_proxy, proxy): proxy for proxy in all_proxies}
             for future in as_completed(future_to_proxy):
                 proxy = future_to_proxy[future]
@@ -107,15 +98,15 @@ class ProxyFetcher(QThread):
                     else:
                         self.update_proxy_output_signal.emit(f"Proxy {proxy} failed.")
                 except Exception as e:
-                    #self.update_proxy_output_signal.emit(f"Error testing proxy {proxy}: {str(e)}")
                     logging.debug(f"Error testing proxy {proxy}: {str(e)}")
 
-        # Step 3: Update the proxy_textbox with working proxies
         if working_proxies:
             self.update_proxy_textbox_signal.emit("\n".join(working_proxies))
+            self.update_proxy_output_signal.emit("Done!")
         else:
             self.update_proxy_output_signal.emit("No working proxies found.")
-            
+
+           
     def fetch_proxies(self):
         """
         Fetch proxies from different sources and return them as a list of strings.
@@ -596,9 +587,21 @@ class MacAttack(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        
-        # Initial VLC instance setup (without proxy)
-        self.instance = vlc.Instance('--no-xlib', '--vout=directx', '--no-plugins-cache', '--log-verbose=1')  # Windows
+        # Initial VLC instance        
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.abspath(".")        
+        self.instance = vlc.Instance(
+            [
+                f'--config={base_path}\\include\\vlcrc', #config file holding the proxy info
+                '--repeat',                     # keep connected if kicked off
+                '--no-xlib',                     # Keep it quiet in X11 environments.
+                '--vout=directx',                # DirectX for the win (Windows specific).
+                '--no-plugins-cache',            # Cache is for the weak.
+                '--log-verbose=1'                # We like it chatty in the logs.
+            ]
+        )
         self.videoPlayer = self.instance.media_player_new()
         
         self.set_window_icon()
@@ -937,18 +940,29 @@ class MacAttack(QMainWindow):
         self.restart_vlc_instance()
 
     def restart_vlc_instance(self):
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.abspath(".")
+            
         proxy_address = self.proxy_input.text()
+        self.modify_vlc_proxy(proxy_address)
         """Restart VLC with the new proxy settings."""
         self.videoPlayer.release()  # Release the old player
         self.instance.release()     # Release the old instance
 
         # Reinitialize VLC instance with updated proxy environment variables
+        logging.debug(f'--config={base_path}\\include\\vlcrc')
         self.instance = vlc.Instance(
-            f'--http-proxy={proxy_address}',  # Proxy shenanigans!
-            '--no-xlib',                     # Keep it quiet in X11 environments.
-            '--vout=directx',                # DirectX for the win (Windows specific).
-            '--no-plugins-cache',            # Cache is for the weak.
-            '--log-verbose=1'                # We like it chatty in the logs.
+            [
+                f'--config={base_path}\\include\\vlcrc', #config file holding the proxy info
+                f'--http-proxy={proxy_address}',  # setting proxy by commandline
+                '--repeat',                     # keep connected if kicked off
+                '--no-xlib',                     # Keep it quiet in X11 environments.
+                '--vout=directx',                # DirectX for Windows
+                '--no-plugins-cache',            # Cache is for the weak.
+                '--log-verbose=1'                # We like it chatty in the logs.
+            ]
         )
         self.videoPlayer = self.instance.media_player_new()
 
@@ -960,12 +974,11 @@ class MacAttack(QMainWindow):
         elif sys.platform == "darwin":
             self.videoPlayer.set_nsobject(int(self.video_frame.winId()))
          # Load intro video
-        if getattr(sys, 'frozen', False):
-            base_path = sys._MEIPASS
-        else:
-            base_path = os.path.abspath(".")
+
         video_path = os.path.join(base_path, 'include', 'intro.mp4')
-        self.videoPlayer.set_media(self.instance.media_new(video_path))       
+        #self.videoPlayer.set_media(self.instance.media_new(video_path))       
+        video_path = os.path.join(base_path, 'include', 'intro.mp4')  
+        self.videoPlayer.play()
         
         
     def filter_playlist(self):
@@ -984,6 +997,34 @@ class MacAttack(QMainWindow):
 
             # Clear and rebuild the playlist model
             self._populate_playlist_model(playlist_model, filtered_channels, filtered_playlist)
+
+    def modify_vlc_proxy(self, proxy_address):
+        # Determine base_path based on whether the script is frozen or running as a script
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS  # For frozen executables
+        else:
+            base_path = os.path.abspath(".")  # For scripts run directly
+        
+        # Construct the full file path using base_path
+        file_path = os.path.join(base_path, "include", "vlcrc")  # Use os.path.join for proper path construction
+        
+        # Read the file
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+        
+        # Modify the http-proxy line
+        for i, line in enumerate(lines):
+            if "http-proxy=" in line:  # Check if the line contains 'http-proxy='
+                if proxy_address:
+                    # If the proxy_address is provided, update the line
+                    lines[i] = f"http-proxy={proxy_address}\n"
+                else:
+                    # If no proxy_address is provided, reset it to the commented line
+                    lines[i] = "#http-proxy=\n"
+        
+        # Write the modified content back to the file
+        with open(file_path, 'w') as file:
+            file.writelines(lines)
 
     def _filter_items(self, items, search_term):
         """Helper function to filter items based on the search term."""
@@ -1147,21 +1188,27 @@ class MacAttack(QMainWindow):
         self.generate_button.clicked.connect(self.get_proxies)
         self.generate_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)  # Set the size policy
 
-        # Speed input (SpinBox)
+        # Speed input (Slider)
         self.proxy_speed_label = QLabel("Speed:")
-        self.proxy_concurrent_tests = QSpinBox()
-        self.proxy_concurrent_tests.setRange(1, 100)
-        self.proxy_concurrent_tests.setValue(100)
+        self.proxy_concurrent_tests = QSlider(Qt.Horizontal)  # Changed from QSpinBox to QSlider
+        self.proxy_concurrent_tests.setRange(1, 500)  # Range from 1 to 2000
+        self.proxy_concurrent_tests.setValue(100)  # Default value of 100
+        self.proxy_concurrent_tests.setTickPosition(QSlider.TicksBelow)  # Show ticks below the slider
+        self.proxy_concurrent_tests.setTickInterval(50)  # Interval between tick marks for better granularity
 
-        # Set the spinbox alignment explicitly
-        self.proxy_concurrent_tests.setAlignment(Qt.AlignLeft)
+        # Dynamic label to show current value of the slider
+        self.proxy_speed_value_label = QLabel(str(self.proxy_concurrent_tests.value()))
 
-        # Add the button and speed input to the horizontal layout
+        # Connect the slider's valueChanged signal to a function that updates the label
+        self.proxy_concurrent_tests.valueChanged.connect(self.update_proxy_fetching_speed)
+
+        # Add the button and speed input (slider with label) to the layout
         generate_proxy_layout.addWidget(self.generate_button)
-        generate_proxy_layout.addSpacing(15)  # Add 15px spacing between the button and the spinbox
+        generate_proxy_layout.addSpacing(15)  # Add 15px spacing between the button and the slider
 
         generate_proxy_layout.addWidget(self.proxy_speed_label)
         generate_proxy_layout.addWidget(self.proxy_concurrent_tests)
+        generate_proxy_layout.addWidget(self.proxy_speed_value_label)  # Add the label showing the slider's value
 
         # Spacer to push the proxy count label to the right
         generate_proxy_layout.addStretch(1)  # This will push everything else to the left
@@ -1204,6 +1251,7 @@ class MacAttack(QMainWindow):
 
         # Connect the textChanged signal to update the proxy count
         self.proxy_textbox.textChanged.connect(self.update_proxy_count)
+
     
     def update_proxy_count(self):
         # Get the number of lines in the proxy_textbox
@@ -1213,7 +1261,10 @@ class MacAttack(QMainWindow):
         # Update the label with the current number of proxies
         self.proxy_count_label.setText(f"Proxies: {proxy_count}")    
     
-
+    def update_proxy_fetching_speed(self, value):
+        self.proxy_fetcher.proxy_fetching_speed = value
+        self.proxy_output.append(f"Proxy fetching speed set at: {value}")
+        self.proxy_speed_value_label.setText(str(self.proxy_concurrent_tests.value()))
     
     def get_proxies(self):
         """
@@ -1238,7 +1289,7 @@ class MacAttack(QMainWindow):
         Show error message in a dialog or status bar.
         """
         # You can show the error in a dialog or status bar
-        print(f"Error: {error_message}")
+        logging.debug(f"Error: {error_message}")
         # Or use QMessageBox to show a pop-up error
         # QMessageBox.critical(self, "Error", error_message)
 
@@ -1275,11 +1326,16 @@ class MacAttack(QMainWindow):
         # autopause checkbox
         self.autopause_checkbox = QCheckBox("Pause the video when switching tabs")
         Settings_layout.addWidget(self.autopause_checkbox)
-        
-        
+        Settings_layout.addSpacing(15)  # Adds space
 
+        # Ludicrous speed checkbox
+        self.ludicrous_speed_checkbox = QCheckBox("Enable Ludicrous speed! \n(This may crash your app, get results faster, or get you rate limited faster)")
+#        Settings_layout.addWidget(self.ludicrous_speed_checkbox)
         
-        Settings_layout.addSpacing(70)  # Adds space
+        # Connect the checkbox to the function that will change the slider ranges
+        self.ludicrous_speed_checkbox.stateChanged.connect(self.enable_ludicrous_speed)        
+        
+        Settings_layout.addSpacing(55)  # Adds space
 
         # Add the "Tips" label
         tips_label = QLabel("Tips")
@@ -1304,6 +1360,15 @@ class MacAttack(QMainWindow):
         Settings_layout.addWidget(tips_text)
 
         Settings_frame.setLayout(Settings_layout)
+
+    def enable_ludicrous_speed(self):
+        if self.ludicrous_speed_checkbox.isChecked():
+            self.concurrent_tests.setRange(1, 1000)  
+            self.proxy_concurrent_tests.setRange(1, 1000)
+        else:
+            self.concurrent_tests.setRange(1, 20)  # Default range
+            self.proxy_concurrent_tests.setRange(1, 200)
+
    
     def update_mac_label(self, text):
         """Update the MAC address label in the main thread."""
@@ -1331,25 +1396,36 @@ class MacAttack(QMainWindow):
         left_spacer = QSpacerItem(10, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
         combined_layout.addItem(left_spacer)
         layout.addSpacing(15)  # Adds space
+
         # IPTV link input
         self.iptv_link_label = QLabel("IPTV link:")
         self.iptv_link_entry = QLineEdit("http://evilvir.us.streamtv.to:8080/c/")
         combined_layout.addWidget(self.iptv_link_label)
         combined_layout.addWidget(self.iptv_link_entry)
 
-        # Speed input (SpinBox)
+        # Speed input (Slider)
         self.speed_label = QLabel("Speed:")
-        self.concurrent_tests = QSpinBox()
-        self.concurrent_tests.setRange(1, 999)
-        self.concurrent_tests.setValue(10)
+        self.concurrent_tests = QSlider(Qt.Horizontal)
+        self.concurrent_tests.setRange(1, 20)
+        self.concurrent_tests.setValue(5)
+        self.concurrent_tests.setTickPosition(QSlider.TicksBelow)
+        self.concurrent_tests.setTickInterval(1)
         combined_layout.addWidget(self.speed_label)
         combined_layout.addWidget(self.concurrent_tests)
+
+        # Dynamic label to show current speed value
+        self.speed_value_label = QLabel(str(self.concurrent_tests.value()))
+        combined_layout.addWidget(self.speed_value_label)
+
+        # Connect slider value change to update the dynamic label
+        self.concurrent_tests.valueChanged.connect(
+            lambda value: self.speed_value_label.setText(str(value))
+        )
 
         # Start/Stop buttons
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(self.TestDrive)
         self.stop_button = QPushButton("Stop")
-        #self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self.GiveUp)
         combined_layout.addWidget(self.start_button)
         combined_layout.addWidget(self.stop_button)
@@ -1357,7 +1433,7 @@ class MacAttack(QMainWindow):
         self.start_button.setDisabled(False)
         self.stop_button.setDisabled(True)
 
-        # button colors
+        # Button styles
         self.stop_button.setStyleSheet("""
             QPushButton:disabled {
                 background-color: grey;
@@ -1372,7 +1448,6 @@ class MacAttack(QMainWindow):
             }
             QPushButton:enabled {
                 background-color: green;
-            
             }
         """)
 
@@ -1383,10 +1458,10 @@ class MacAttack(QMainWindow):
         # Add the combined layout to the main layout
         layout.addLayout(combined_layout)
         layout.addSpacing(15)  # Adds space
-        
+
         # MAC address label
         self.brute_mac_label = QLabel("Testing MAC address will appear here.")
-        layout.addWidget(self.brute_mac_label, alignment=Qt.AlignCenter)  # Center the label
+        layout.addWidget(self.brute_mac_label, alignment=Qt.AlignCenter)
         layout.addSpacing(15)  # Adds space
 
         # Output Text Area
@@ -1398,7 +1473,7 @@ class MacAttack(QMainWindow):
         """)
         self.output_text.setPlainText("Output LOG:\nResults will appear here.\n")
         self.output_text.setReadOnly(True)
-        monospace_font = QFont("Lucida Console", 10)  # You can use "Courier New" or other monospaced fonts like "Consolas"
+        monospace_font = QFont("Lucida Console", 10)
         self.output_text.setFont(monospace_font)                        
         layout.addWidget(self.output_text)
 
@@ -1412,7 +1487,10 @@ class MacAttack(QMainWindow):
             border-right: 12px solid #2E2E2E;
             border-bottom: 0px;
         """)
-        self.error_text.setHtml("Error LOG:<br>It's normal for errors to appear down here.<br>If <b>503 Service Temporarily Unavailable</b> errors are getting spammed, lower the speed.")
+        self.error_text.setHtml("")
+        self.error_text.setHtml("""
+        Error LOG:<br>It's normal for errors to appear down here.<br>If <b>503 Service Temporarily Unavailable</b> errors are showing up often, <br>you are getting rate limited, lower the speed.
+        """)
         self.error_text.setReadOnly(True)
         self.error_text.setFont(monospace_font)
         layout.addWidget(self.error_text)
@@ -1433,15 +1511,16 @@ class MacAttack(QMainWindow):
             'concurrent_tests': self.concurrent_tests.value(),
             'hostname': self.hostname_input.text(),
             'mac': self.mac_input.text(),
-            'autoloadmac': str(self.autoloadmac_checkbox.isChecked()),  # Save autoloadmac checkbox state
-            'autostop': str(self.autostop_checkbox.isChecked()),  # Save autostop checkbox state
-            'successsound': str(self.successsound_checkbox.isChecked()),  # Save successsound checkbox state
-            'autopause': str(self.autopause_checkbox.isChecked()),  # Save autopause checkbox state
-            'active_tab': str(self.tabs.currentIndex()),  # Save the index of the active tab
-            'proxy_enabled': str(self.proxy_enabled_checkbox.isChecked()),  # Save proxy checkbox state
-            'proxy_list': self.proxy_textbox.toPlainText(),  # Save proxy list
-            'proxy_concurrent_tests': str(self.proxy_concurrent_tests.value()),  # Save proxy concurrent tests value
-            'proxy_remove_errorcount': str(self.proxy_remove_errorcount.value())  # Save proxy_remove_errorcount value
+            'autoloadmac': str(self.autoloadmac_checkbox.isChecked()),
+            'autostop': str(self.autostop_checkbox.isChecked()),
+            'successsound': str(self.successsound_checkbox.isChecked()),
+            'autopause': str(self.autopause_checkbox.isChecked()),
+            'active_tab': str(self.tabs.currentIndex()),
+            'proxy_enabled': str(self.proxy_enabled_checkbox.isChecked()),
+            'proxy_list': self.proxy_textbox.toPlainText(),
+            'proxy_concurrent_tests': str(self.proxy_concurrent_tests.value()),
+            'proxy_remove_errorcount': str(self.proxy_remove_errorcount.value()),
+            'ludicrous_speed': str(self.ludicrous_speed_checkbox.isChecked())  # Save Ludicrous speed state
         }
         
         config['Window'] = {
@@ -1454,7 +1533,7 @@ class MacAttack(QMainWindow):
         with open(file_path, 'w') as configfile:
             config.write(configfile)
         logging.debug("Settings saved.")
-    
+
     def load_settings(self):
         """Load user settings from the configuration file and apply them to the UI elements, including the active tab."""
         import os
@@ -1473,43 +1552,26 @@ class MacAttack(QMainWindow):
             self.hostname_input.setText(config.get('Settings', 'hostname', fallback=""))
             self.mac_input.setText(config.get('Settings', 'mac', fallback=""))
             
-            # Load autoloadmac_checkbox state
-            autoloadmac_state = config.get('Settings', 'autoloadmac', fallback="False")
-            self.autoloadmac_checkbox.setChecked(autoloadmac_state == "True")  # Set checkbox based on saved state
+            # Load checkbox states
+            self.autoloadmac_checkbox.setChecked(config.get('Settings', 'autoloadmac', fallback="False") == "True")
+            self.autostop_checkbox.setChecked(config.get('Settings', 'autostop', fallback="False") == "True")
+            self.successsound_checkbox.setChecked(config.get('Settings', 'successsound', fallback="False") == "True")
+            self.autopause_checkbox.setChecked(config.get('Settings', 'autopause', fallback="True") == "True")
+            self.proxy_enabled_checkbox.setChecked(config.get('Settings', 'proxy_enabled', fallback="False") == "True")
             
-            # Load autostop_checkbox state
-            autostop_state = config.get('Settings', 'autostop', fallback="False")
-            self.autostop_checkbox.setChecked(autostop_state == "True")  # Set checkbox based on saved state
-
-            # Load successsound_checkbox state
-            successsound_state = config.get('Settings', 'successsound', fallback="False")
-            self.successsound_checkbox.setChecked(successsound_state == "True")  # Set checkbox based on saved state
-
-            # Load autopause_checkbox state
-            autopause_state = config.get('Settings', 'autopause', fallback="True")
-            self.autopause_checkbox.setChecked(autopause_state == "True")  # Set checkbox based on saved state
+            # Load Ludicrous speed checkbox state
+            ludicrous_speed_state = config.get('Settings', 'ludicrous_speed', fallback="False")
+            self.ludicrous_speed_checkbox.setChecked(ludicrous_speed_state == "True")
             
-            # Load proxy settings
-            proxy_enabled_state = config.get('Settings', 'proxy_enabled', fallback="False")
-            self.proxy_enabled_checkbox.setChecked(proxy_enabled_state == "True")
+            # Load other proxy settings
+            self.proxy_textbox.setPlainText(config.get('Settings', 'proxy_list', fallback=""))
+            self.proxy_concurrent_tests.setValue(config.getint('Settings', 'proxy_concurrent_tests', fallback=100))
+            self.proxy_remove_errorcount.setValue(config.getint('Settings', 'proxy_remove_errorcount', fallback=1))
             
-            # Load proxy list
-            proxy_list = config.get('Settings', 'proxy_list', fallback="")
-            self.proxy_textbox.setPlainText(proxy_list)
-            
-            # Load proxy concurrent tests value
-            proxy_concurrent_tests_value = config.getint('Settings', 'proxy_concurrent_tests', fallback=100)
-            self.proxy_concurrent_tests.setValue(proxy_concurrent_tests_value)
-
-            # Load the proxy remove error count value
-            proxy_remove_errorcount_value = config.getint('Settings', 'proxy_remove_errorcount', fallback=1)  # Default to 1
-            self.proxy_remove_errorcount.setValue(proxy_remove_errorcount_value)
-
             # Load active tab
-            active_tab = config.getint('Settings', 'active_tab', fallback=0)  # Default to first tab if not found
-            self.tabs.setCurrentIndex(active_tab)  # Set the active tab
+            self.tabs.setCurrentIndex(config.getint('Settings', 'active_tab', fallback=0))
             
-            # Load window geometry settings
+            # Load window geometry
             if config.has_section('Window'):
                 self.resize(config.getint('Window', 'width', fallback=800), 
                             config.getint('Window', 'height', fallback=600))
@@ -1537,21 +1599,31 @@ class MacAttack(QMainWindow):
         self.setWindowIcon(QIcon(pixmap))    
 
     def TestDrive(self):
-        # The "Let's hit the gas and see what happens" function
+        # Update button states immediately
         self.running = True
         self.start_button.setDisabled(True)
         self.stop_button.setDisabled(False)
 
+        # Pause for 1 second before starting threads
+        QTimer.singleShot(1000, self.start_threads)
+
+    def start_threads(self):
+        # Get and parse the IPTV link
         self.iptv_link = self.iptv_link_entry.text()
         self.parsed_url = urlparse(self.iptv_link)
         self.host = self.parsed_url.hostname
         self.port = self.parsed_url.port or 80
         self.base_url = f"http://{self.host}:{self.port}"
 
+        # Circus setup
         num_tests = self.concurrent_tests.value()
-#        # Limit a maximum concurrent tests, 'cause we’re not running a circus here. actually with proxies, we are
-#        if num_tests > 300:
-#            num_tests = 300
+
+        if self.proxy_enabled_checkbox.isChecked() and num_tests > 1:
+            max_value = 10 * len(self.proxy_textbox.toPlainText().splitlines()) 
+            if max_value < 20:                                                # Ensure minimum value of 20
+                max_value = 20            
+            num_tests = 1 + (num_tests - 1) * (max_value - 1) / (20 - 1)        # Scale dynamically
+            num_tests = int(num_tests)   
 
         # Start threads to test MACs
         for _ in range(num_tests):
@@ -1559,6 +1631,7 @@ class MacAttack(QMainWindow):
             thread.daemon = True
             thread.start()
             self.threads.append(thread)
+
         self.SaveTheDay()
             
     def RandomMacGenerator(self, prefix="00:1A:79:"):
@@ -1589,10 +1662,11 @@ class MacAttack(QMainWindow):
 
                 # Choose a random proxy from the list
                 selected_proxy = random.choice(proxies)
-                print(f"Using proxy: {selected_proxy}")
+                logging.debug(f"Using proxy: {selected_proxy}")
                 # Ensure the proxy is set correctly as a dictionary
                 proxies = {"http": selected_proxy, "https": selected_proxy}
-
+            else:
+                selected_proxy = "Your Connection"
             mac = self.RandomMacGenerator()  # Generate a random MAC
             if not proxies:
                 self.update_mac_label_signal.emit(f"Testing MAC: {mac}")
@@ -1601,7 +1675,23 @@ class MacAttack(QMainWindow):
 
             try:
                 s = requests.Session()  # Create a session
-                s.cookies.update({'mac': mac})
+                #s.cookies.update({'mac': mac})
+                
+                s.cookies.update({
+                    "adid": "2bdb5336edffec452536be317345eb2748e18f87",
+                    "debug": "1",
+                    "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
+                    "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
+                    "hw_version": "1.7-BD-00",
+                    "mac": mac,
+                    "sn": "1F2E73918FED8",
+                    "stb_lang": "en",
+                    "timezone": "America/Los_Angeles",
+                })
+                
+                
+                
+                
                 url = f"{self.base_url}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
 
                 # If proxy is enabled, add the proxy to the session
@@ -1716,11 +1806,11 @@ class MacAttack(QMainWindow):
                                 self.update_error_text_signal.emit(result_message)
                         else:
                             #self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
-                            print(f"No JSON response for MAC {mac}")
+                            logging.debug(f"No JSON response for MAC {mac}")
             except (json.decoder.JSONDecodeError, requests.exceptions.RequestException, TypeError) as e:
                 # Now catch the error when res2 fails
                 if "Expecting value" in str(e):
-                    print("Raw Response Content:", res.text)  # Print raw response for debugging
+                    logging.debug("Raw Response Content:", res.text)  # Print raw response for debugging
                     if "ERR_ACCESS_DENIED" in res.text:
                         self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Access Denied</b> Proxy refused access.")
                         # Track error count for the proxy
@@ -1941,8 +2031,8 @@ class MacAttack(QMainWindow):
                             )
                     elif "connections reached" in res.text:
                         self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Proxy Overloaded</b> Maximum number of open connections reached.")
-                    elif "502 Bad Gateway" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>502 Bad Gateway</b> DNS Issue with proxy")
+                    elif "DNS resolution error" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>DNS resolution error</b> DNS Issue with proxy")
                         # Track error count for the proxy
                         if selected_proxy not in proxy_error_counts:
                             proxy_error_counts[selected_proxy] = 1
@@ -1972,14 +2062,78 @@ class MacAttack(QMainWindow):
                             self.update_error_text_signal.emit(
                                 f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
                             )
+                    elif "504 DNS look up failed" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>504 DNS look up failed</b> DNS Issue with proxy")
+                        # Track error count for the proxy
+                        if selected_proxy not in proxy_error_counts:
+                            proxy_error_counts[selected_proxy] = 1
+                        else:
+                            proxy_error_counts[selected_proxy] += 1
+
+                        # Remove the proxy if it exceeds the allowed error count
+                        error_limit = self.proxy_remove_errorcount.value()
+                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
+                            # Ensure proxies is a list and remove the proxy from the list
+                            if isinstance(proxies, list):
+                                if selected_proxy in proxies:
+                                    proxies.remove(selected_proxy)
+
+                            # Remove the proxy from the error count dictionary
+                            del proxy_error_counts[selected_proxy]
+
+                            # Update the QTextEdit to remove the proxy
+                            current_text = self.proxy_textbox.toPlainText()
+                            # Remove the selected proxy from the text area
+                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
+
+                            # Set the updated text back to the QTextEdit
+                            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+                            # Emit a signal to notify the user
+                            self.update_error_text_signal.emit(
+                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
+                            )
+                    elif "502 Bad Gateway" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>502 Bad Gateway</b> Proxy communication issue")
+                        # Track error count for the proxy
+                        if selected_proxy not in proxy_error_counts:
+                            proxy_error_counts[selected_proxy] = 1
+                        else:
+                            proxy_error_counts[selected_proxy] += 1
+
+                        # Remove the proxy if it exceeds the allowed error count
+                        error_limit = self.proxy_remove_errorcount.value()
+                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
+                            # Ensure proxies is a list and remove the proxy from the list
+                            if isinstance(proxies, list):
+                                if selected_proxy in proxies:
+                                    proxies.remove(selected_proxy)
+
+                            # Remove the proxy from the error count dictionary
+                            del proxy_error_counts[selected_proxy]
+
+                            # Update the QTextEdit to remove the proxy
+                            current_text = self.proxy_textbox.toPlainText()
+                            # Remove the selected proxy from the text area
+                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
+
+                            # Set the updated text back to the QTextEdit
+                            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+                            # Emit a signal to notify the user
+                            self.update_error_text_signal.emit(
+                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
+                            )
+                    elif "Cloudflare" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Portal: {selected_proxy} : <b>Cloudflare Blocked</b> proxy blocked by Cloudflare")
                     elif "no such host" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Portal: {selected_proxy} : <b>Portal not found</b> invalid IPTV link")
+                        self.update_error_text_signal.emit(f"Error for Proxy or Portal: {selected_proxy} : <b>no such host</b> ")
                     elif "ERROR: Not Found" in res.text:
                         self.update_error_text_signal.emit(f"Error for Portal: {selected_proxy} : <b>Portal not found</b> invalid IPTV link")
                     elif "503 Service Temporarily Unavailable" in res.text:
-                        if self.error_count >= 15:
-                            self.update_error_text_signal.emit(f"Error for Portal: <b>503 Service Temporarily Unavailable</b>")
-                    #if self.error_count >= 6:
+                        if self.error_count >= 20: #only show 20th one
+                            self.update_error_text_signal.emit(f"Error for Portal: <b>503 Service Temporarily Unavailable</b> at {datetime.now().strftime('%H:%M:%S')}<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{selected_proxy} is likely rate limited")
+                            #self.error_count = 0
                         #self.update_error_text_signal.emit(f"Error for MAC: {mac} : <b>{str(e).replace('Expecting value: line 1 column 1 (char 0)', 'Empty response')}</b>")
                     
 
@@ -2047,9 +2201,9 @@ class MacAttack(QMainWindow):
                                 f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
                             )
                     else:
-                        if self.error_count >= 6:
+                        
                             #self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
-                            print (f"{str(e)}")
+                        logging.debug(f"{str(e)}")
                     self.error_count += 1
                      
 
@@ -2075,6 +2229,7 @@ class MacAttack(QMainWindow):
                 time.sleep(duration)
         except Exception as e:
             logging.debug(f"Error playing sound with VLC: {e}")
+
 
     def OutputMastermind(self):
         # Fancy file-naming because why not complicate things?
@@ -2683,7 +2838,7 @@ class MacAttack(QMainWindow):
                 self.moving = True
                 self.move_start_pos = event.globalPos()  # Global position for moving
             # Check if near the borders (left, right, bottom) for resizing
-            elif pos.x() < 20 or pos.x() > self.width() - 20 or pos.y() < 20 or pos.y() > self.height() - 20:
+            elif pos.x() < 40 or pos.x() > self.width() - 40 or pos.y() < 40 or pos.y() > self.height() - 40:
                 self.resizing = True
                 self.resize_start_pos = event.pos()        
         
@@ -2846,7 +3001,7 @@ class MacAttack(QMainWindow):
     def closeEvent(self, event):
         # Save settings when the window is about to close
         self.SaveTheDay()
-
+        self.GiveUp()
         # Accept the close event
         event.accept()
             
