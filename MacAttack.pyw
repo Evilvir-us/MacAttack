@@ -19,11 +19,8 @@ from urllib.parse import quote, urlparse, urlunparse
 import configparser
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-#os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
-#import pygame
 
-#pygame.mixer.init()
-#logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 
 def get_token(session, url, mac_address):
     try:
@@ -193,7 +190,6 @@ class ProxyFetcher(QThread):
             logging.debug(f"Error testing proxy {proxy}: {str(e)}")
             #self.update_proxy_output_signal.emit(f"Error testing proxy {proxy}: {str(e)}")
         return proxy, False
-
 
 class RequestThread(QThread):
     request_complete = pyqtSignal(dict)  # Signal emitted when the request is complete
@@ -621,6 +617,7 @@ class MacAttack(QMainWindow):
         self.output_file = None
         self.video_worker = None  # Initialize to None
         self.current_request_thread = None  # Initialize here
+        
 
         # Initialize ProxyFetcher thread
         self.proxy_fetcher = ProxyFetcher()
@@ -922,7 +919,8 @@ class MacAttack(QMainWindow):
         video_path = os.path.join(base_path, 'include', 'intro.mp4')
         self.videoPlayer.set_media(self.instance.media_new(video_path))
         logging.info(video_path)
-        self.videoPlayer.play()
+        self.startplay = 1 #play the video when switched to the video tab
+        #self.videoPlayer.play()
         # Disable mouse and key input for video
         self.videoPlayer.video_set_mouse_input(False)
         self.videoPlayer.video_set_key_input(False)
@@ -1497,7 +1495,9 @@ class MacAttack(QMainWindow):
         """)
         self.error_text.setHtml("")
         self.error_text.setHtml("""
-        Error LOG:<br>It's normal for errors to appear down here.<br>If <b>503 Rate Limited</b> errors are getting spammed by multiple proxies, <br>you are getting rate limited, stop the attack, lower the speed, then restart it.<br>some hosts have harsh limits. start at speed 1, and work your way up, stopping and starting.<br> some hosts dont ratelimit, crank them up to 100.
+        Error LOG:<br>It's normal for errors to appear down here.
+        <br>If <b>503 Rate Limited</b> errors are getting spammed by multiple proxies, 
+        <br>Lower the speed, then restart the attack.
         """)
         self.error_text.setReadOnly(True)
         self.error_text.setFont(monospace_font)
@@ -1506,9 +1506,7 @@ class MacAttack(QMainWindow):
     
     def SaveTheDay(self):
         """Save user settings, including window geometry, active tab, and other preferences to the configuration file."""
-        import os
-        import configparser
-        
+        print ("save")
         user_dir = os.path.expanduser('~')
         os.makedirs(os.path.join(user_dir, 'evilvir.us'), exist_ok=True)
         file_path = os.path.join(user_dir, 'evilvir.us', 'MacAttack.ini')
@@ -1628,7 +1626,7 @@ class MacAttack(QMainWindow):
 
         if self.proxy_enabled_checkbox.isChecked() and num_tests > 1:
             # Checkbox checked? Great! Time to get fancy with proxy-based scaling.
-            max_value = 25 * len(self.proxy_textbox.toPlainText().splitlines())
+            max_value = 15 * len(self.proxy_textbox.toPlainText().splitlines())
             if max_value < 15:                                               
                 max_value = 15            
             num_tests = 1 + (num_tests - 1) * (max_value - 1) / (100 - 1)        
@@ -2125,7 +2123,7 @@ class MacAttack(QMainWindow):
 
         if hasattr(self, 'output_file') and self.output_file:
             self.output_file.close()
-    
+
     def ErrorAnnouncer(self, message):
         self.error_text.append(message)
                 
@@ -2742,10 +2740,8 @@ class MacAttack(QMainWindow):
             delta = event.pos() - self.resize_start_pos
             new_width = self.width() + delta.x()
             new_height = self.height() + delta.y()
-
             # Update window size while ensuring minimum size
             self.resize(max(new_width, 200), max(new_height, 200))
-
             # Update starting position for resizing
             self.resize_start_pos = event.pos()
             
@@ -2754,7 +2750,6 @@ class MacAttack(QMainWindow):
         self.moving = False
 
     def keyPressEvent(self, event):
-        """Handle key events for Escape (toggle fullscreen) and Spacebar (toggle pause/play)."""
         if event.key() == Qt.Key_Escape:
             # Create a fake mouse event to simulate a double-click
             fake_mouse_event = QMouseEvent(QEvent.MouseButtonDblClick, self.rect().center(), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
@@ -2771,7 +2766,6 @@ class MacAttack(QMainWindow):
             super().keyPressEvent(event)  # Call base class method to handle other keys   
 
     def mouseDoubleClickEvent(self, event): #Fullscreen video
-        
         if self.tabs.currentIndex() == 1:  # Ensure we're on the Mac VideoPlayer tab
             if event.button() == Qt.LeftButton:
                 if self.windowState() == Qt.WindowNoState:
@@ -2780,96 +2774,39 @@ class MacAttack(QMainWindow):
                         widget = self.left_layout.itemAt(i).widget()
                         if widget:
                             widget.hide()
-                    # Hide hostname_layout
-                    for i in range(self.hostname_layout.count()):
-                        widget = self.hostname_layout.itemAt(i).widget()
-                        if widget:
-                            widget.hide()
-                    # Hide mac_layout
-                    for i in range(self.mac_layout.count()):
-                        widget = self.mac_layout.itemAt(i).widget()
-                        if widget:
-                            widget.hide()
-                    for i in range(self.playlist_layout.count()):
-                        widget = self.playlist_layout.itemAt(i).widget()
-                        if widget:
-                            widget.hide()
-                    for i in range(self.progress_layout.count()):
-                        widget = self.progress_layout.itemAt(i).widget()
-                        if widget:
-                            widget.hide()
                     self.left_widget.hide()
-                    self.spacer.changeSize(0, 0)  # Make it disappear
-
                     self.showFullScreen()
-                    # Move video_frame to top-left corner on double click
-                    self.video_frame.move(0, 0)  # Move the video frame to (0, 0) top-left corner
-
-                    # Ensure no layout padding or spacing
-                    #self.left_layout.setContentsMargins(0, 0, 0, 0)  # Remove padding around the left layout
-                    #self.tabs.setContentsMargins(0, 0, 0, 0)  # Remove padding around the left layout
-                    #self.left_layout.setSpacing(0)  # No space between widgets
-                    self.videoPlayer.play()  # Play the video
-                    self.tabs.tabBar().setVisible(False)
-                    # Hide each widget in the topbar layout
-                    for widget in self.topbar_layout.children():
-                        widget.setVisible(False)
-
-                    # Hide each widget in the bottombar layout
-                    for widget in self.bottombar_layout.children():
-                        widget.setVisible(False)
+                    self.videoPlayer.play()  # Play the video because it paused on the click
+                    self.tabs.tabBar().setVisible(False) # Hide the tabs
                     self.topbar_layout.setContentsMargins(0, 0, 0, 0)
                     self.bottombar_layout.setContentsMargins(0, 0, 0, 0)
-                    for widget in self.topbar_layout.children():
-                        widget.setVisible(False)
                     self.topbar_minimize_button.setVisible(False)
                     self.topbar_minimize_button.setEnabled(False)
                     self.topbar_close_button.setVisible(False)
                     self.topbar_close_button.setEnabled(False)
                 else:
-                    # Restore window state to normal
-                    self.showNormal()  # Restore to normal window state
-
-                    # Restore the layout and widgets visibility
+                    # Show left_layout
                     for i in range(self.left_layout.count()):
                         widget = self.left_layout.itemAt(i).widget()
                         if widget:
                             widget.show()
-                    for i in range(self.hostname_layout.count()):
-                        widget = self.hostname_layout.itemAt(i).widget()
-                        if widget:
-                            widget.show()
-                    for i in range(self.mac_layout.count()):
-                        widget = self.mac_layout.itemAt(i).widget()
-                        if widget:
-                            widget.show()
-                    for i in range(self.playlist_layout.count()):
-                        widget = self.playlist_layout.itemAt(i).widget()
-                        if widget:
-                            widget.show()
-                    for i in range(self.progress_layout.count()):
-                        widget = self.progress_layout.itemAt(i).widget()
-                        if widget:
-                            widget.show()
-                    self.spacer.changeSize(10, 0)  # Resets to original spacing
                     self.left_widget.show()
-                    self.left_layout.setSpacing(5)  # Adjust spacing if necessary
-                    self.error_label.setVisible(False)   
-                    self.videoPlayer.play()  # Play the video
-                    self.tabs.tabBar().setVisible(True)
-                    # Add left margin to self.left_layout
-                    self.left_layout.setContentsMargins(10, 0, 0, 0)
-
-                    # Add a left margin to self.tab_widget
-                    self.tab_widget.setContentsMargins(10, 0, 0, 0) 
+                    self.showNormal()  # Restore to normal window state
+                    self.videoPlayer.play()  # Play the video because it paused on the click 
+                    self.tabs.tabBar().setVisible(True) # Hide the tabs
+                    self.topbar_layout.setContentsMargins(30, 5, 0, 0)
+                    self.bottombar_layout.setContentsMargins(0, 30, 0, 0)
                     self.topbar_minimize_button.setVisible(True)
                     self.topbar_minimize_button.setEnabled(True)
                     self.topbar_close_button.setVisible(True)
-                    self.topbar_close_button.setEnabled(True)
-                    self.topbar_layout.setContentsMargins(30, 5, 0, 0)
-                    self.bottombar_layout.setContentsMargins(0, 30, 0, 0)
+                    self.topbar_close_button.setEnabled(True)                    
 
     def on_tab_change(self, index):
+        if self.startplay == 1:
+            if index == 1:  # When Tab 1 is selected
+                self.videoPlayer.play()  # Play the video
+                startplay = 0
+            
         if self.autopause_checkbox.isChecked():
             if index == 1:  # When Tab 1 is selected
                 if not self.videoPlayer.is_playing():  # Check if the video is not already playing
@@ -2877,14 +2814,12 @@ class MacAttack(QMainWindow):
             else:  # When any tab other than Tab 1 is selected
                 if self.videoPlayer.is_playing():  # Check if the video is currently playing
                     self.videoPlayer.pause()  # Pause the video
-                
+
     def closeEvent(self, event):
-        # Save settings when the window is about to close
         self.SaveTheDay()
         self.GiveUp()
-        # Accept the close event
         event.accept()
-            
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MacAttack()
