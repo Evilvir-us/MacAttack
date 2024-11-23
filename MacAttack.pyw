@@ -86,7 +86,7 @@ class ProxyFetcher(QThread):
         working_proxies = []
         self.update_proxy_output_signal.emit("Testing proxies...")
 
-        with ThreadPoolExecutor(max_workers=self.proxy_fetching_speed) as executor:
+        with ThreadPoolExecutor(max_workers=self.proxy_fetching_speed*10) as executor:
             future_to_proxy = {executor.submit(self.test_proxy, proxy): proxy for proxy in all_proxies}
             for future in as_completed(future_to_proxy):
                 proxy = future_to_proxy[future]
@@ -356,6 +356,8 @@ class RequestThread(QThread):
                 return []
         except Exception as e:
             logging.error(f"Error getting genres: {e}")
+            self.error_label.setText("502, Server Error")
+            self.error_label.setVisible(True)
             return []
 
     def get_vod_categories(self, session, url, mac_address, token):
@@ -566,13 +568,13 @@ class VideoPlayerWorker(QThread):
                 self.error_occurred.emit(error_message)
         except requests.Timeout:
             # Handle request timeout
-            self.error_occurred.emit("Request timed out while fetching stream.")
+            self.error_occurred.emit("Request timed out")
         except requests.ConnectionError:
             # Handle connection issues (e.g., no internet connection)
-            self.error_occurred.emit("Connection error while fetching stream.")
+            self.error_occurred.emit("Connection error.")
         except Exception as e:
             # Emit error for any other unexpected issues
-            self.error_occurred.emit(f"An unexpected error occurred: {str(e)}")
+            self.error_occurred.emit(f"Error: {str(e)}")
             
 class MacAttack(QMainWindow):
     update_mac_label_signal = pyqtSignal(str)
@@ -587,7 +589,12 @@ class MacAttack(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        # Initial VLC instance        
+
+        self.proxy_error_counts = {}
+
+
+        # Initial VLC instance 
+        referer_url = "https://evilvir.us" #this gets replaced when a host is entered into the box, just initializing it
         if getattr(sys, 'frozen', False):
             base_path = sys._MEIPASS
         else:
@@ -818,8 +825,10 @@ class MacAttack(QMainWindow):
         
         self.left_layout.addLayout(self.playlist_layout)
 
-        # Connect proxy input change to proxy update
-        self.proxy_input.textChanged.connect(self.update_vlc_proxy)
+        # I got smarter, and put it on video load
+        # Connect host and proxy input change to proxy update
+        #self.proxy_input.textChanged.connect(self.update_vlc_proxy)
+        #self.hostname_input.textChanged.connect(self.update_vlc_proxy)
 
         # Add the search input field above the tabs
         self.search_input = QLineEdit(self)
@@ -912,6 +921,7 @@ class MacAttack(QMainWindow):
             base_path = os.path.abspath(".")
         video_path = os.path.join(base_path, 'include', 'intro.mp4')
         self.videoPlayer.set_media(self.instance.media_new(video_path))
+        logging.info(video_path)
         self.videoPlayer.play()
         # Disable mouse and key input for video
         self.videoPlayer.video_set_mouse_input(False)
@@ -923,6 +933,7 @@ class MacAttack(QMainWindow):
         self.progress_animation.setEasingCurve(QEasingCurve.Linear)
 
     def update_vlc_proxy(self):
+        
         """Update the proxy settings in VLC based on user input."""
         proxy_address = self.proxy_input.text()
 
@@ -940,6 +951,7 @@ class MacAttack(QMainWindow):
         self.restart_vlc_instance()
 
     def restart_vlc_instance(self):
+        referer_url = self.hostname_input.text()  # Get the referer URL from the QLineEdit
         if getattr(sys, 'frozen', False):
             base_path = sys._MEIPASS
         else:
@@ -957,11 +969,12 @@ class MacAttack(QMainWindow):
             [
                 f'--config={base_path}\\include\\vlcrc', #config file holding the proxy info
                 f'--http-proxy={proxy_address}',  # setting proxy by commandline
+                f'--http-referrer={referer_url}',   # Set the referer URL (from QLineEdit)
                 '--repeat',                     # keep connected if kicked off
-                '--no-xlib',                     # Keep it quiet in X11 environments.
-                '--vout=directx',                # DirectX for Windows
-                '--no-plugins-cache',            # Cache is for the weak.
-                '--log-verbose=1'                # We like it chatty in the logs.
+                '--no-xlib',                    
+                '--vout=directx',               
+                '--no-plugins-cache',
+                '--log-verbose=1'
             ]
         )
         self.videoPlayer = self.instance.media_player_new()
@@ -973,13 +986,10 @@ class MacAttack(QMainWindow):
             self.videoPlayer.set_hwnd(self.video_frame.winId())
         elif sys.platform == "darwin":
             self.videoPlayer.set_nsobject(int(self.video_frame.winId()))
-         # Load intro video
 
-        video_path = os.path.join(base_path, 'include', 'intro.mp4')
-        #self.videoPlayer.set_media(self.instance.media_new(video_path))       
-        video_path = os.path.join(base_path, 'include', 'intro.mp4')  
-        self.videoPlayer.play()
-        
+        # Disable mouse and key input for video
+        self.videoPlayer.video_set_mouse_input(False)
+        self.videoPlayer.video_set_key_input(False)
         
     def filter_playlist(self):
         search_term = self.search_input.text().lower()
@@ -1129,12 +1139,12 @@ class MacAttack(QMainWindow):
         self.proxy_remove_errorcount = QSpinBox()
         self.proxy_remove_errorcount.setRange(0, 9)  # Restrict to 2-digit range
         self.proxy_remove_errorcount.setFixedWidth(30)  # Set width for 2 digits
-        self.proxy_remove_errorcount.setValue(1)  # Default value
+        self.proxy_remove_errorcount.setValue(5)  # Default value
         self.proxy_remove_errorcount.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
         proxy_checkbox_layout.addWidget(self.proxy_remove_errorcount)
 
         # Label for "connection errors"
-        self.connection_errors_label = QLabel("connection errors. (0 to disable)")
+        self.connection_errors_label = QLabel("consecutive errors. (0 to disable)")
         self.connection_errors_label.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
         proxy_checkbox_layout.addWidget(self.connection_errors_label)
 
@@ -1191,7 +1201,7 @@ class MacAttack(QMainWindow):
         # Speed input (Slider)
         self.proxy_speed_label = QLabel("Speed:")
         self.proxy_concurrent_tests = QSlider(Qt.Horizontal)  # Changed from QSpinBox to QSlider
-        self.proxy_concurrent_tests.setRange(1, 500)  # Range from 1 to 2000
+        self.proxy_concurrent_tests.setRange(1, 100)  # Range from 1 to 2000
         self.proxy_concurrent_tests.setValue(100)  # Default value of 100
         self.proxy_concurrent_tests.setTickPosition(QSlider.TicksBelow)  # Show ticks below the slider
         self.proxy_concurrent_tests.setTickInterval(50)  # Interval between tick marks for better granularity
@@ -1352,9 +1362,7 @@ class MacAttack(QMainWindow):
             "<b>Video Controls:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Mouseclick/Space Bar - Toggle Pause<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Doubleclick/ESC - Toggle Fullscreen<br><br>"
-            "If you're getting error 456/458 (perhaps others as well), either the MAC, or your IP has been banned.<br>"
-            "Many IPTV providers can detect MAC scanners."
-            "And they will blacklist a Mac if it looks like its been shared"
+            "<br>"
         )
         tips_text.setAlignment(Qt.AlignTop)
         Settings_layout.addWidget(tips_text)
@@ -1406,7 +1414,7 @@ class MacAttack(QMainWindow):
         # Speed input (Slider)
         self.speed_label = QLabel("Speed:")
         self.concurrent_tests = QSlider(Qt.Horizontal)
-        self.concurrent_tests.setRange(1, 20)
+        self.concurrent_tests.setRange(1, 100)
         self.concurrent_tests.setValue(5)
         self.concurrent_tests.setTickPosition(QSlider.TicksBelow)
         self.concurrent_tests.setTickInterval(1)
@@ -1489,7 +1497,7 @@ class MacAttack(QMainWindow):
         """)
         self.error_text.setHtml("")
         self.error_text.setHtml("""
-        Error LOG:<br>It's normal for errors to appear down here.<br>If <b>503 Service Temporarily Unavailable</b> errors are showing up often, <br>you are getting rate limited, lower the speed.
+        Error LOG:<br>It's normal for errors to appear down here.<br>If <b>503 Rate Limited</b> errors are getting spammed by multiple proxies, <br>you are getting rate limited, stop the attack, lower the speed, then restart it.<br>some hosts have harsh limits. start at speed 1, and work your way up, stopping and starting.<br> some hosts dont ratelimit, crank them up to 100.
         """)
         self.error_text.setReadOnly(True)
         self.error_text.setFont(monospace_font)
@@ -1603,7 +1611,7 @@ class MacAttack(QMainWindow):
         self.running = True
         self.start_button.setDisabled(True)
         self.stop_button.setDisabled(False)
-
+        self.brute_mac_label.setText("Please Wait...")
         # Pause for 1 second before starting threads
         QTimer.singleShot(1000, self.start_threads)
 
@@ -1619,11 +1627,19 @@ class MacAttack(QMainWindow):
         num_tests = self.concurrent_tests.value()
 
         if self.proxy_enabled_checkbox.isChecked() and num_tests > 1:
-            max_value = 10 * len(self.proxy_textbox.toPlainText().splitlines()) 
-            if max_value < 20:                                                # Ensure minimum value of 20
-                max_value = 20            
-            num_tests = 1 + (num_tests - 1) * (max_value - 1) / (20 - 1)        # Scale dynamically
-            num_tests = int(num_tests)   
+            # Checkbox checked? Great! Time to get fancy with proxy-based scaling.
+            max_value = 25 * len(self.proxy_textbox.toPlainText().splitlines())
+            if max_value < 15:                                               
+                max_value = 15            
+            num_tests = 1 + (num_tests - 1) * (max_value - 1) / (100 - 1)        
+            num_tests = int(num_tests)  # Drop the decimals; no floaty tests allowed!
+        else:
+            # Checkbox not checked? Keep it simple, scaling from 1 to 20.
+            max_value = 15  # Top limit set to 20—no fancy proxies here.
+            num_tests = 1 + (num_tests - 1) * (max_value - 1) / (100 - 1)
+            num_tests = int(num_tests)  # Back to integers because we're civilized. 
+            
+
 
         # Start threads to test MACs
         for _ in range(num_tests):
@@ -1645,7 +1661,7 @@ class MacAttack(QMainWindow):
     def BigMacAttack(self):
         
         proxies = []  # Default to empty list in case no proxies are provided
-        proxy_error_counts = {}  # Dictionary to track error counts for each proxy
+        
         self.error_count = 0
         # BigMacAttack: Two all-beef patties, special sauce, lettuce, cheese, pickles, onions, on a sesame seed bun.
         while self.running:  # Loop will continue as long as self.running is True
@@ -1689,9 +1705,13 @@ class MacAttack(QMainWindow):
                     "timezone": "America/Los_Angeles",
                 })
                 
-                
-                
-                
+                s.headers.update({
+                    "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "X-User-Agent": "Model: MAG250; Link: WiFi",
+                })
+                     
                 url = f"{self.base_url}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
 
                 # If proxy is enabled, add the proxy to the session
@@ -1729,6 +1749,8 @@ class MacAttack(QMainWindow):
                                 data4 = json.loads(res4.text)
 
                                 cmd_value4 = data4["js"]["cmd"].replace("ffmpeg ", "", 1)
+                                cmd_value4 = cmd_value4.replace("'ffmpeg' ", "")
+                                
                                 logging.debug(cmd_value4)
 
                                 parsed_url = urlparse(cmd_value4)
@@ -1744,6 +1766,7 @@ class MacAttack(QMainWindow):
                                     logging.debug(f"Username: {username}")
                                     logging.debug(f"Password: {password}")
                                     logging.debug(f"M3U: {domain_and_port}/get.php?username={username}&password={password}&type=m3u_plus")
+                                    #m3ufound = 0 #disable it by changing it to 0
                                     m3ufound = 1
                                 else:
                                     logging.debug("Less than 2 subdirectories found in the path.")
@@ -1807,406 +1830,257 @@ class MacAttack(QMainWindow):
                         else:
                             #self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
                             logging.debug(f"No JSON response for MAC {mac}")
+            except StopIteration:
+                # StopIteration is raised in remove_proxy to exit the loop
+                logging.info("Exiting the loop after proxy removal.")
+                break  # Exit the while loop        
+                
             except (json.decoder.JSONDecodeError, requests.exceptions.RequestException, TypeError) as e:
                 # Now catch the error when res2 fails
                 if "Expecting value" in str(e):
-                    logging.debug("Raw Response Content:", res.text)  # Print raw response for debugging
+                    logging.error("Raw Response Content:", res.text)  # Print raw response for debugging
                     if "ERR_ACCESS_DENIED" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Access Denied</b> Proxy refused access.")
                         # Track error count for the proxy
-                        if selected_proxy not in proxy_error_counts:
-                            proxy_error_counts[selected_proxy] = 1
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
                         else:
-                            proxy_error_counts[selected_proxy] += 1
-
-                        # Remove the proxy if it exceeds the allowed error count
-                        error_limit = self.proxy_remove_errorcount.value()
-                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
-                            # Ensure proxies is a list and remove the proxy from the list
-                            if isinstance(proxies, list):
-                                if selected_proxy in proxies:
-                                    proxies.remove(selected_proxy)
-
-                            # Remove the proxy from the error count dictionary
-                            del proxy_error_counts[selected_proxy]
-
-                            # Update the QTextEdit to remove the proxy
-                            current_text = self.proxy_textbox.toPlainText()
-                            # Remove the selected proxy from the text area
-                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
-
-                            # Set the updated text back to the QTextEdit
-                            self.macattack_update_proxy_textbox_signal.emit(new_text)
-
-                            # Emit a signal to notify the user
-                            self.update_error_text_signal.emit(
-                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
-                            )
+                            self.proxy_error_counts[selected_proxy] += 1 
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Access Denied</b> Proxy refused access.")
+                      
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
                     elif "Could not connect" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Could not connect</b> proxy Could not connect")
                         # Track error count for the proxy
-                        if selected_proxy not in proxy_error_counts:
-                            proxy_error_counts[selected_proxy] = 1
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
                         else:
-                            proxy_error_counts[selected_proxy] += 1
-
-                        # Remove the proxy if it exceeds the allowed error count
-                        error_limit = self.proxy_remove_errorcount.value()
-                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
-                            # Ensure proxies is a list and remove the proxy from the list
-                            if isinstance(proxies, list):
-                                if selected_proxy in proxies:
-                                    proxies.remove(selected_proxy)
-
-                            # Remove the proxy from the error count dictionary
-                            del proxy_error_counts[selected_proxy]
-
-                            # Update the QTextEdit to remove the proxy
-                            current_text = self.proxy_textbox.toPlainText()
-                            # Remove the selected proxy from the text area
-                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
-
-                            # Set the updated text back to the QTextEdit
-                            self.macattack_update_proxy_textbox_signal.emit(new_text)
-
-                            # Emit a signal to notify the user
-                            self.update_error_text_signal.emit(
-                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
-                            )                    
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Could not connect</b> proxy Could not connect.")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
                     elif "Blocked" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Access Denied</b> proxy blocked access")
                         # Track error count for the proxy
-                        if selected_proxy not in proxy_error_counts:
-                            proxy_error_counts[selected_proxy] = 1
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
                         else:
-                            proxy_error_counts[selected_proxy] += 1
-
-                        # Remove the proxy if it exceeds the allowed error count
-                        error_limit = self.proxy_remove_errorcount.value()
-                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
-                            # Ensure proxies is a list and remove the proxy from the list
-                            if isinstance(proxies, list):
-                                if selected_proxy in proxies:
-                                    proxies.remove(selected_proxy)
-
-                            # Remove the proxy from the error count dictionary
-                            del proxy_error_counts[selected_proxy]
-
-                            # Update the QTextEdit to remove the proxy
-                            current_text = self.proxy_textbox.toPlainText()
-                            # Remove the selected proxy from the text area
-                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
-
-                            # Set the updated text back to the QTextEdit
-                            self.macattack_update_proxy_textbox_signal.emit(new_text)
-
-                            # Emit a signal to notify the user
-                            self.update_error_text_signal.emit(
-                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
-                            )
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Access Denied</b> blocked access")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
                     elif "Access Denied" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Access Denied</b> proxy blocked access")
                         # Track error count for the proxy
-                        if selected_proxy not in proxy_error_counts:
-                            proxy_error_counts[selected_proxy] = 1
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
                         else:
-                            proxy_error_counts[selected_proxy] += 1
-
-                        # Remove the proxy if it exceeds the allowed error count
-                        error_limit = self.proxy_remove_errorcount.value()
-                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
-                            # Ensure proxies is a list and remove the proxy from the list
-                            if isinstance(proxies, list):
-                                if selected_proxy in proxies:
-                                    proxies.remove(selected_proxy)
-
-                            # Remove the proxy from the error count dictionary
-                            del proxy_error_counts[selected_proxy]
-
-                            # Update the QTextEdit to remove the proxy
-                            current_text = self.proxy_textbox.toPlainText()
-                            # Remove the selected proxy from the text area
-                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
-
-                            # Set the updated text back to the QTextEdit
-                            self.macattack_update_proxy_textbox_signal.emit(new_text)
-
-                            # Emit a signal to notify the user
-                            self.update_error_text_signal.emit(
-                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
-                            )
-
-                    elif "403 Forbidden" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>403 Forbidden</b> proxy blocked access")
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Access Denied</b> blocked access")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
+                    elif "502 Proxy Error " in res.text:
                         # Track error count for the proxy
-                        if selected_proxy not in proxy_error_counts:
-                            proxy_error_counts[selected_proxy] = 1
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
                         else:
-                            proxy_error_counts[selected_proxy] += 1
-
-                        # Remove the proxy if it exceeds the allowed error count
-                        error_limit = self.proxy_remove_errorcount.value()
-                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
-                            # Ensure proxies is a list and remove the proxy from the list
-                            if isinstance(proxies, list):
-                                if selected_proxy in proxies:
-                                    proxies.remove(selected_proxy)
-
-                            # Remove the proxy from the error count dictionary
-                            del proxy_error_counts[selected_proxy]
-
-                            # Update the QTextEdit to remove the proxy
-                            current_text = self.proxy_textbox.toPlainText()
-                            # Remove the selected proxy from the text area
-                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
-
-                            # Set the updated text back to the QTextEdit
-                            self.macattack_update_proxy_textbox_signal.emit(new_text)
-
-                            # Emit a signal to notify the user
-                            self.update_error_text_signal.emit(
-                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
-                            )
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>502 Proxy Error</b> proxy server issue")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
                     elif "500 Internal Server Error" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>500 Internal Server Error</b> proxy server issue")
                         # Track error count for the proxy
-                        if selected_proxy not in proxy_error_counts:
-                            proxy_error_counts[selected_proxy] = 1
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
                         else:
-                            proxy_error_counts[selected_proxy] += 1
-
-                        # Remove the proxy if it exceeds the allowed error count
-                        error_limit = self.proxy_remove_errorcount.value()
-                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
-                            # Ensure proxies is a list and remove the proxy from the list
-                            if isinstance(proxies, list):
-                                if selected_proxy in proxies:
-                                    proxies.remove(selected_proxy)
-
-                            # Remove the proxy from the error count dictionary
-                            del proxy_error_counts[selected_proxy]
-
-                            # Update the QTextEdit to remove the proxy
-                            current_text = self.proxy_textbox.toPlainText()
-                            # Remove the selected proxy from the text area
-                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
-
-                            # Set the updated text back to the QTextEdit
-                            self.macattack_update_proxy_textbox_signal.emit(new_text)
-
-                            # Emit a signal to notify the user
-                            self.update_error_text_signal.emit(
-                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
-                            )
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>500 Internal Server Error</b> proxy server issue")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
+                    elif "generateText('internal_error');" in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>500 Internal Server Error</b> proxy server issue")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
                     elif "Host header port mismatch" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Host header port mismatch</b> proxy port does not match")
                         # Track error count for the proxy
-                        if selected_proxy not in proxy_error_counts:
-                            proxy_error_counts[selected_proxy] = 1
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
                         else:
-                            proxy_error_counts[selected_proxy] += 1
-
-                        # Remove the proxy if it exceeds the allowed error count
-                        error_limit = self.proxy_remove_errorcount.value()
-                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
-                            # Ensure proxies is a list and remove the proxy from the list
-                            if isinstance(proxies, list):
-                                if selected_proxy in proxies:
-                                    proxies.remove(selected_proxy)
-
-                            # Remove the proxy from the error count dictionary
-                            del proxy_error_counts[selected_proxy]
-
-                            # Update the QTextEdit to remove the proxy
-                            current_text = self.proxy_textbox.toPlainText()
-                            # Remove the selected proxy from the text area
-                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
-
-                            # Set the updated text back to the QTextEdit
-                            self.macattack_update_proxy_textbox_signal.emit(new_text)
-
-                            # Emit a signal to notify the user
-                            self.update_error_text_signal.emit(
-                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
-                            )
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Host header port mismatch</b> proxy port does not match")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
                     elif "connections reached" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Proxy Overloaded</b> Maximum number of open connections reached.")
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Proxy Overloaded</b> Maximum number of open connections reached.")
                     elif "DNS resolution error" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>DNS resolution error</b> DNS Issue with proxy")
                         # Track error count for the proxy
-                        if selected_proxy not in proxy_error_counts:
-                            proxy_error_counts[selected_proxy] = 1
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
                         else:
-                            proxy_error_counts[selected_proxy] += 1
-
-                        # Remove the proxy if it exceeds the allowed error count
-                        error_limit = self.proxy_remove_errorcount.value()
-                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
-                            # Ensure proxies is a list and remove the proxy from the list
-                            if isinstance(proxies, list):
-                                if selected_proxy in proxies:
-                                    proxies.remove(selected_proxy)
-
-                            # Remove the proxy from the error count dictionary
-                            del proxy_error_counts[selected_proxy]
-
-                            # Update the QTextEdit to remove the proxy
-                            current_text = self.proxy_textbox.toPlainText()
-                            # Remove the selected proxy from the text area
-                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
-
-                            # Set the updated text back to the QTextEdit
-                            self.macattack_update_proxy_textbox_signal.emit(new_text)
-
-                            # Emit a signal to notify the user
-                            self.update_error_text_signal.emit(
-                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
-                            )
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>DNS resolution error</b> DNS Issue with proxy")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
+                    elif "ERR_DNS_FAIL" in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>DNS resolution error</b> DNS Issue with proxy")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
                     elif "504 DNS look up failed" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>504 DNS look up failed</b> DNS Issue with proxy")
                         # Track error count for the proxy
-                        if selected_proxy not in proxy_error_counts:
-                            proxy_error_counts[selected_proxy] = 1
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
                         else:
-                            proxy_error_counts[selected_proxy] += 1
-
-                        # Remove the proxy if it exceeds the allowed error count
-                        error_limit = self.proxy_remove_errorcount.value()
-                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
-                            # Ensure proxies is a list and remove the proxy from the list
-                            if isinstance(proxies, list):
-                                if selected_proxy in proxies:
-                                    proxies.remove(selected_proxy)
-
-                            # Remove the proxy from the error count dictionary
-                            del proxy_error_counts[selected_proxy]
-
-                            # Update the QTextEdit to remove the proxy
-                            current_text = self.proxy_textbox.toPlainText()
-                            # Remove the selected proxy from the text area
-                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
-
-                            # Set the updated text back to the QTextEdit
-                            self.macattack_update_proxy_textbox_signal.emit(new_text)
-
-                            # Emit a signal to notify the user
-                            self.update_error_text_signal.emit(
-                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
-                            )
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>504 DNS look up failed</b> DNS Issue with proxy")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
                     elif "502 Bad Gateway" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>502 Bad Gateway</b> Proxy communication issue")
                         # Track error count for the proxy
-                        if selected_proxy not in proxy_error_counts:
-                            proxy_error_counts[selected_proxy] = 1
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
                         else:
-                            proxy_error_counts[selected_proxy] += 1
-
-                        # Remove the proxy if it exceeds the allowed error count
-                        error_limit = self.proxy_remove_errorcount.value()
-                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
-                            # Ensure proxies is a list and remove the proxy from the list
-                            if isinstance(proxies, list):
-                                if selected_proxy in proxies:
-                                    proxies.remove(selected_proxy)
-
-                            # Remove the proxy from the error count dictionary
-                            del proxy_error_counts[selected_proxy]
-
-                            # Update the QTextEdit to remove the proxy
-                            current_text = self.proxy_textbox.toPlainText()
-                            # Remove the selected proxy from the text area
-                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
-
-                            # Set the updated text back to the QTextEdit
-                            self.macattack_update_proxy_textbox_signal.emit(new_text)
-
-                            # Emit a signal to notify the user
-                            self.update_error_text_signal.emit(
-                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
-                            )
-                    elif "Cloudflare" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Portal: {selected_proxy} : <b>Cloudflare Blocked</b> proxy blocked by Cloudflare")
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>502 Bad Gateway</b> Proxy communication issue")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
+                    elif "miner.start" in res.text:
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Fake Proxy</b> part of a bitcoin botnet")
+                        # remove immediately
+                        if isinstance(proxies, list):
+                            if selected_proxy in proxies:
+                                proxies.remove(selected_proxy)
+                        # Update the QTextEdit to remove the proxy
+                        current_text = self.proxy_textbox.toPlainText()
+                        new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
+                        self.macattack_update_proxy_textbox_signal.emit(new_text)
+                        self.update_error_text_signal.emit(
+                            f"Proxy {selected_proxy} Fake proxy removed."
+                        )
+                    # even with cloudflare, a proxy can still get json results, removed this because every proxy spams
+                    #elif "Cloudflare" in res.text:
+                    #    self.update_error_text_signal.emit(f"Error for Portal: {selected_proxy} : <b>Cloudflare Blocked</b> blocked by Cloudflare")
                     elif "no such host" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Proxy or Portal: {selected_proxy} : <b>no such host</b> ")
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>no such host</b> not connecting to portal")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
+                    elif "Royalty - Staffing" in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Royalty - Staffing</b> WTF even is this?")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
                     elif "ERROR: Not Found" in res.text:
                         self.update_error_text_signal.emit(f"Error for Portal: {selected_proxy} : <b>Portal not found</b> invalid IPTV link")
-                    elif "503 Service Temporarily Unavailable" in res.text:
-                        if self.error_count >= 20: #only show 20th one
-                            self.update_error_text_signal.emit(f"Error for Portal: <b>503 Service Temporarily Unavailable</b> at {datetime.now().strftime('%H:%M:%S')}<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{selected_proxy} is likely rate limited")
+                    elif "403 Forbidden" in res.text: #i dont think this is an error
+                        self.proxy_error_counts[selected_proxy] = 0
+                    elif "503 Service" in res.text or "The page is temporarily unavailable" in res.text:
+                        self.update_error_text_signal.emit(f"Error for Portal: <b>503 Rate Limited</b> {selected_proxy}")
+                        self.temp_remove_proxy(selected_proxy)
+                        break
+                    #elif "Backend not available" in res.text:
+                    #    self.update_error_text_signal.emit(f"Error for Portal: {mac} :<b>Backend not available</b>")
                             #self.error_count = 0
-                        #self.update_error_text_signal.emit(f"Error for MAC: {mac} : <b>{str(e).replace('Expecting value: line 1 column 1 (char 0)', 'Empty response')}</b>")
+                    elif "Connection to server failed" in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Not connecting</b> Proxy not connecting to server, failures: {self.proxy_error_counts[selected_proxy]}")
+                        # Attempt to remove the proxy if it exceeds the allowed error count
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts)
+                    elif "Max retries exceeded" in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Not connecting</b> Proxy offline")
+                        # Attempt to remove the proxy if it exceeds the allowed error count
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts)
+                    elif "Read timed out" in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Timed out</b>")
+                        # Attempt to remove the proxy if it exceeds the allowed error count
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts)
+
                     
-
-                    elif "Max retries exceeded" in str(e):
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Not connecting</b> Proxy offline")
-
-                        # Track error count for the proxy
-                        if selected_proxy not in proxy_error_counts:
-                            proxy_error_counts[selected_proxy] = 1
-                        else:
-                            proxy_error_counts[selected_proxy] += 1
-
-                        # Remove the proxy if it exceeds the allowed error count
-                        error_limit = self.proxy_remove_errorcount.value()
-                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
-                            # Ensure proxies is a list and remove the proxy from the list
-                            if isinstance(proxies, list):
-                                if selected_proxy in proxies:
-                                    proxies.remove(selected_proxy)
-
-                            # Remove the proxy from the error count dictionary
-                            del proxy_error_counts[selected_proxy]
-
-                            # Update the QTextEdit to remove the proxy
-                            current_text = self.proxy_textbox.toPlainText()
-                            # Remove the selected proxy from the text area
-                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
-
-                            # Set the updated text back to the QTextEdit
-                            self.macattack_update_proxy_textbox_signal.emit(new_text)
-
-                            # Emit a signal to notify the user
-                            self.update_error_text_signal.emit(
-                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
-                            )
-                    elif "Read timed out" in str(e):
-                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Timed out</b>")
-                        # Track error count for the proxy
-                        if selected_proxy not in proxy_error_counts:
-                            proxy_error_counts[selected_proxy] = 1
-                        else:
-                            proxy_error_counts[selected_proxy] += 1
-
-                        # Remove the proxy if it exceeds the allowed error count
-                        error_limit = self.proxy_remove_errorcount.value()
-                        if error_limit > 0 and proxy_error_counts[selected_proxy] >= error_limit:
-                            # Ensure proxies is a list and remove the proxy from the list
-                            if isinstance(proxies, list):
-                                if selected_proxy in proxies:
-                                    proxies.remove(selected_proxy)
-
-                            # Remove the proxy from the error count dictionary
-                            del proxy_error_counts[selected_proxy]
-
-                            # Update the QTextEdit to remove the proxy
-                            current_text = self.proxy_textbox.toPlainText()
-                            # Remove the selected proxy from the text area
-                            new_text = "\n".join([line for line in current_text.splitlines() if line.strip() != selected_proxy])
-
-                            # Set the updated text back to the QTextEdit
-                            self.macattack_update_proxy_textbox_signal.emit(new_text)
-
-                            # Emit a signal to notify the user
-                            self.update_error_text_signal.emit(
-                                f"Proxy {selected_proxy} removed after exceeding {error_limit} connection errors."
-                            )
+                    elif "REQUEST_METHOD = GET" in res.text:
+                        #good result, reset errors
+                        self.proxy_error_counts[selected_proxy] = 0
+                    
+                    
+                    
+                    
+                    
                     else:
                         
                             #self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
                         logging.debug(f"{str(e)}")
                     self.error_count += 1
-                     
 
+
+
+        
+    def remove_proxy(self, proxy, proxy_error_counts):
+        """Remove a proxy after exceeding error count and update UI."""
+        error_limit = self.proxy_remove_errorcount.value()
+        if error_limit > 0 and self.proxy_error_counts.get(proxy, 0) >= error_limit:
+            # Remove proxy from the list
+            current_text = self.proxy_textbox.toPlainText()
+            new_text = "\n".join(line for line in current_text.splitlines() if line.strip() != proxy)
+            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+            # Remove proxy from dictionary
+            self.proxy_error_counts.pop(proxy, None)
+
+            # Notify user
+            self.update_error_text_signal.emit(f"Proxy {proxy} removed after exceeding {error_limit} consecutive errors.")
+            #raise StopIteration  # This will stop the loop in BigMacAttack
+
+    def temp_remove_proxy(self, proxy):
+        ratelimit_timeout = 60
+        """Temporarily remove a proxy for ratelimit_timeout seconds, then re-add it."""
+        # Get the current text in the proxy_textbox
+        current_text = self.proxy_textbox.toPlainText()
+
+        # Check if the proxy exists before attempting to remove it
+        if proxy in current_text.splitlines():
+            # Remove proxy from the list temporarily
+            new_text = "\n".join(line for line in current_text.splitlines() if line.strip() != proxy)
+            self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+            # Notify user of temporary removal
+            self.update_error_text_signal.emit(f"Proxy {proxy} temporarily removed.")
+
+            # Define a function to re-add the proxy after 10 seconds
+            def re_add_proxy():
+                # Get the updated state of proxy_textbox
+                updated_text = self.proxy_textbox.toPlainText()
+
+                # Check if the proxy already exists in the updated text
+                if proxy not in updated_text.splitlines():
+                    # Append the proxy to the end
+                    new_text = f"{updated_text}\n{proxy}".strip()
+                    self.macattack_update_proxy_textbox_signal.emit(new_text)
+
+                    # Notify user of re-addition
+                    self.update_error_text_signal.emit(f"Proxy {proxy} re-added after {ratelimit_timeout} seconds.")
+                #else:
+                    # Notify user that the proxy already exists
+                #    self.update_error_text_signal.emit(f"Proxy {proxy} already exists, not re-added.")
+
+            # Start a thread to handle the delayed re-addition
+            threading.Timer(ratelimit_timeout, re_add_proxy).start()
+        #else:
+            # Notify user that the proxy does not exist
+            #self.update_error_text_signal.emit(f"Proxy {proxy} not found, no removal performed.")
+        
     def play_success_sound(self):
         # Determine the base path for the sound file
         if getattr(sys, 'frozen', False):  # Check if the app is frozen (i.e., packaged with PyInstaller)
@@ -2786,6 +2660,12 @@ class MacAttack(QMainWindow):
         self.search_input.clear()
         
     def launch_videoPlayer(self, stream_url):
+        
+        stream_url = stream_url.replace("'ffmpeg' ", "")
+        stream_url = stream_url.replace("ffmpeg ", "")
+        self.update_vlc_proxy() #reset the vlc window with the proxy and referer
+        
+        
         self.error_label.setVisible(False)
         logging.debug(f"Launching media player with URL: {stream_url}")
 
