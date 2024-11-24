@@ -2881,7 +2881,8 @@ class MacAttack(QMainWindow):
                     self.topbar_minimize_button.setVisible(True)
                     self.topbar_minimize_button.setEnabled(True)
                     self.topbar_close_button.setVisible(True)
-                    self.topbar_close_button.setEnabled(True)                    
+                    self.topbar_close_button.setEnabled(True)
+                    self.error_label.setVisible(False)
 
     def on_tab_change(self, index):
         if self.startplay == 1:
