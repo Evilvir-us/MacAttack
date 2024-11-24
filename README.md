@@ -21,7 +21,7 @@ Download the executable from the [Releases page](https://github.com/Evilvir-us/M
 ---
 
 ## Usage Instructions
-
+Some portals can take hours to produce a result, some can take minutes\
 [![MacAttack: A GUI Tool for Brute-Force Attacks on IPTV Stalker Portals](https://img.youtube.com/vi/90joS8qgbrQ/0.jpg)](https://www.youtube.com/watch?v=90joS8qgbrQ)
 
 Watch this video for an example on how to use MacAttack
