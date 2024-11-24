@@ -4356,7 +4356,7 @@ sout-x264-tune=film
 #http-key=
 
 # HTTP proxy (string)
-#http-proxy=
+http-proxy=52.73.224.54:3128
 
 # HTTP proxy password (string)
 #http-proxy-pwd=

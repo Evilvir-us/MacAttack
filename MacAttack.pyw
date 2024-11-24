@@ -66,6 +66,7 @@ class ProxyFetcher(QThread):
         """
         Fetches and tests proxies, emitting signals to update the UI.
         """
+        
         # Fetch proxies
         all_proxies = self.fetch_proxies()
 
@@ -824,8 +825,8 @@ class MacAttack(QMainWindow):
 
         # I got smarter, and put it on video load
         # Connect host and proxy input change to proxy update
-        #self.proxy_input.textChanged.connect(self.update_vlc_proxy)
-        #self.hostname_input.textChanged.connect(self.update_vlc_proxy)
+        self.proxy_input.textChanged.connect(self.update_proxy)
+        #self.hostname_input.textChanged.connect(self.update_proxy)
 
         # Add the search input field above the tabs
         self.search_input = QLineEdit(self)
@@ -930,7 +931,7 @@ class MacAttack(QMainWindow):
         self.progress_animation.setDuration(1000)
         self.progress_animation.setEasingCurve(QEasingCurve.Linear)
 
-    def update_vlc_proxy(self):
+    def update_proxy(self):
         
         """Update the proxy settings in VLC based on user input."""
         proxy_address = self.proxy_input.text()
@@ -944,9 +945,6 @@ class MacAttack(QMainWindow):
                 del os.environ["http_proxy"]
             if "https_proxy" in os.environ:
                 del os.environ["https_proxy"]
-
-        # Restart the entire VLC instance and media player
-        self.restart_vlc_instance()
 
     def restart_vlc_instance(self):
         referer_url = self.hostname_input.text()  # Get the referer URL from the QLineEdit
@@ -1275,9 +1273,21 @@ class MacAttack(QMainWindow):
         self.proxy_speed_value_label.setText(str(self.proxy_concurrent_tests.value()))
     
     def get_proxies(self):
-        """
-        Starts the ProxyFetcher thread to fetch and test proxies.
-        """
+
+        proxy_address = self.proxy_input.text()
+
+        # remove any app proxy in use
+        if proxy_address:
+            if "http_proxy" in os.environ:
+                del os.environ["http_proxy"]
+            if "https_proxy" in os.environ:
+                del os.environ["https_proxy"]
+
+
+
+
+
+
         self.proxy_fetcher.start()  # Start the background thread
 
     def update_proxy_output(self, text):
@@ -1287,19 +1297,21 @@ class MacAttack(QMainWindow):
         self.proxy_output.append(text)
 
     def update_proxy_textbox(self, proxies):
-        """
-        Updates the proxy_textbox with the working proxies.
-        """
-        self.proxy_textbox.setText(proxies)
-
-    def show_error(self, error_message):
-        """
-        Show error message in a dialog or status bar.
-        """
-        # You can show the error in a dialog or status bar
-        logging.debug(f"Error: {error_message}")
-        # Or use QMessageBox to show a pop-up error
-        # QMessageBox.critical(self, "Error", error_message)
+        # Get the current text from the textbox and split it into a list
+        current_proxies = self.proxy_textbox.toPlainText().splitlines()
+        
+        # Ensure proxies is a list; if it's a string, convert it to a single-item list
+        if isinstance(proxies, str):
+            proxies = [proxies]
+        
+        # Combine the current proxies with the new ones and remove duplicates
+        combined_proxies = list(set(current_proxies + proxies))
+        
+        # Remove any empty strings and sort the list for consistency
+        combined_proxies = sorted(filter(None, combined_proxies))
+        
+        # Set the updated proxies back to the textbox
+        self.proxy_textbox.setText("\n".join(combined_proxies))
 
     def build_Settings_gui(self, Settings_frame):
         # Create the layout for the settings frame
@@ -1337,11 +1349,29 @@ class MacAttack(QMainWindow):
         Settings_layout.addSpacing(15)  # Adds space
 
         # Ludicrous speed checkbox
-        self.ludicrous_speed_checkbox = QCheckBox("Enable Ludicrous speed! \n(This may crash your app, get results faster, or get you rate limited faster)")
-#        Settings_layout.addWidget(self.ludicrous_speed_checkbox)
+        self.ludicrous_speed_checkbox = QCheckBox("Enable Ludicrous speed! \n(This will likely crash your app, and probably even your computer)")
+        Settings_layout.addWidget(self.ludicrous_speed_checkbox)
         
         # Connect the checkbox to the function that will change the slider ranges
         self.ludicrous_speed_checkbox.stateChanged.connect(self.enable_ludicrous_speed)        
+        self.ludicrous_speed_checkbox.setStyleSheet("""
+            QCheckBox:checked {
+                background-color: Black;
+                color: red;
+            }
+            QCheckBox {
+                background-color: #666666;
+                padding: 5px;
+                border: 2px solid black;
+            }
+        """)      
+
+
+
+
+
+
+
         
         Settings_layout.addSpacing(55)  # Adds space
 
@@ -1369,11 +1399,11 @@ class MacAttack(QMainWindow):
 
     def enable_ludicrous_speed(self):
         if self.ludicrous_speed_checkbox.isChecked():
-            self.concurrent_tests.setRange(1, 1000)  
-            self.proxy_concurrent_tests.setRange(1, 1000)
+            self.concurrent_tests.setRange(1, 5000)  
+            self.proxy_concurrent_tests.setRange(1, 5000)
         else:
-            self.concurrent_tests.setRange(1, 20)  # Default range
-            self.proxy_concurrent_tests.setRange(1, 200)
+            self.concurrent_tests.setRange(1, 100)  # Default range
+            self.proxy_concurrent_tests.setRange(1, 100)
 
    
     def update_mac_label(self, text):
@@ -1609,7 +1639,7 @@ class MacAttack(QMainWindow):
         self.running = True
         self.start_button.setDisabled(True)
         self.stop_button.setDisabled(False)
-        self.brute_mac_label.setText("Please Wait...")
+        self.brute_mac_label.setText("Please Wait...\nDon\'t click anything or windows will think the app has crashed.\nIf your app does crash, then use a lower speed.")
         # Pause for 1 second before starting threads
         QTimer.singleShot(1000, self.start_threads)
 
@@ -1626,11 +1656,18 @@ class MacAttack(QMainWindow):
 
         if self.proxy_enabled_checkbox.isChecked() and num_tests > 1:
             # Checkbox checked? Great! Time to get fancy with proxy-based scaling.
-            max_value = 15 * len(self.proxy_textbox.toPlainText().splitlines())
+            max_value = 500
             if max_value < 15:                                               
                 max_value = 15            
             num_tests = 1 + (num_tests - 1) * (max_value - 1) / (100 - 1)        
             num_tests = int(num_tests)  # Drop the decimals; no floaty tests allowed!
+            if self.ludicrous_speed_checkbox.isChecked() and num_tests > 1:
+                max_value = 5000
+                if max_value < 15:                                               
+                    max_value = 15            
+                num_tests = 1 + (num_tests - 1) * (max_value - 1) / (1800 - 1)        
+                num_tests = int(num_tests)  # Drop the decimals; no floaty tests allowed!                
+                
         else:
             # Checkbox not checked? Keep it simple, scaling from 1 to 20.
             max_value = 15  # Top limit set to 20—no fancy proxies here.
@@ -2111,7 +2148,6 @@ class MacAttack(QMainWindow):
         return filename
     
     def GiveUp(self):
-        
         # GiveUp: Like throwing in the towel, but with less dignity. But hey, we tried, right?
         logging.debug("GiveUp method has been called. We tried, but it's over.")
         self.running = False
@@ -2661,7 +2697,7 @@ class MacAttack(QMainWindow):
         
         stream_url = stream_url.replace("'ffmpeg' ", "")
         stream_url = stream_url.replace("ffmpeg ", "")
-        self.update_vlc_proxy() #reset the vlc window with the proxy and referer
+        self.update_proxy() #reset the vlc window with the proxy and referer
         
         
         self.error_label.setVisible(False)
