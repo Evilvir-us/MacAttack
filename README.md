@@ -27,9 +27,11 @@ Download the executable from the [Releases page](https://github.com/Evilvir-us/M
 Watch this video for an example on how to use MacAttack
 ### Mac Attack Tab
 
-1. Enter the stalker portal URL into the first box.
-2. Set the speed (1-15). The default is 10, but speed 1 is the least likely to result in an IP ban.
-3. Click **Start**.
+
+1. Go to the Proxies tab, enable proxies and fill the box with proxies.
+2. go to the MacAttack tab and Enter the stalker portal URL into the first box.
+3. Set the speed (1-100)
+4. Click **Start**.
 
 ---
 
