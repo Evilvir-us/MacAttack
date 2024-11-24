@@ -1956,8 +1956,13 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Host header port mismatch</b> proxy port does not match")
                         self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
                     elif "connections reached" in res.text:
-
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1 
                         self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Proxy Overloaded</b> Maximum number of open connections reached.")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the 
                     elif "DNS resolution error" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
