@@ -4,6 +4,7 @@ import re
 import json
 import random
 import threading
+from threading import Lock
 from datetime import datetime
 import sys
 import vlc
@@ -588,6 +589,8 @@ class MacAttack(QMainWindow):
         super().__init__()
 
         self.proxy_error_counts = {}
+        self.lock = Lock()  # For synchronizing file writes
+        self.threads = []   # To track background threads
 
 
         # Initial VLC instance 
@@ -1639,11 +1642,21 @@ class MacAttack(QMainWindow):
         self.running = True
         self.start_button.setDisabled(True)
         self.stop_button.setDisabled(False)
-        self.brute_mac_label.setText("Please Wait...\nDon\'t click anything or windows will think the app has crashed.\nIf your app does crash, then use a lower speed.")
+        if self.proxy_enabled_checkbox.isChecked():
+            self.brute_mac_label.setText("Please Wait...\nLoading the worker proxies into the background and assigning tasks.")
+        else:
+            self.brute_mac_label.setText("Please Wait...")
+        
         # Pause for 1 second before starting threads
         QTimer.singleShot(1000, self.start_threads)
 
     def start_threads(self):
+        # Offload thread creation to a worker thread
+        creation_thread = threading.Thread(target=self._create_threads)
+        creation_thread.daemon = True
+        creation_thread.start()
+
+    def _create_threads(self):
         # Get and parse the IPTV link
         self.iptv_link = self.iptv_link_entry.text()
         self.parsed_url = urlparse(self.iptv_link)
@@ -1651,38 +1664,37 @@ class MacAttack(QMainWindow):
         self.port = self.parsed_url.port or 80
         self.base_url = f"http://{self.host}:{self.port}"
 
-        # Circus setup
+        # Calculate the number of threads to start
         num_tests = self.concurrent_tests.value()
 
         if self.proxy_enabled_checkbox.isChecked() and num_tests > 1:
-            # Checkbox checked? Great! Time to get fancy with proxy-based scaling.
             max_value = 500
-            if max_value < 15:                                               
-                max_value = 15            
-            num_tests = 1 + (num_tests - 1) * (max_value - 1) / (100 - 1)        
-            num_tests = int(num_tests)  # Drop the decimals; no floaty tests allowed!
+            if max_value < 15:
+                max_value = 15
+            num_tests = 1 + (num_tests - 1) * (max_value - 1) / (100 - 1)
+            num_tests = int(num_tests)
+
             if self.ludicrous_speed_checkbox.isChecked() and num_tests > 1:
                 max_value = 5000
-                if max_value < 15:                                               
-                    max_value = 15            
-                num_tests = 1 + (num_tests - 1) * (max_value - 1) / (1800 - 1)        
-                num_tests = int(num_tests)  # Drop the decimals; no floaty tests allowed!                
-                
+                if max_value < 15:
+                    max_value = 15
+                num_tests = 1 + (num_tests - 1) * (max_value - 1) / (1800 - 1)
+                num_tests = int(num_tests)
         else:
-            # Checkbox not checked? Keep it simple, scaling from 1 to 20.
-            max_value = 15  # Top limit set to 20—no fancy proxies here.
+            max_value = 15
             num_tests = 1 + (num_tests - 1) * (max_value - 1) / (100 - 1)
-            num_tests = int(num_tests)  # Back to integers because we're civilized. 
-            
-
+            num_tests = int(num_tests)
 
         # Start threads to test MACs
         for _ in range(num_tests):
             thread = threading.Thread(target=self.BigMacAttack)
             thread.daemon = True
             thread.start()
+
+            # Track threads
             self.threads.append(thread)
 
+        # Optional: Save state or perform setup actions
         self.SaveTheDay()
             
     def RandomMacGenerator(self, prefix="00:1A:79:"):
@@ -2148,17 +2160,51 @@ class MacAttack(QMainWindow):
         return filename
     
     def GiveUp(self):
-        # GiveUp: Like throwing in the towel, but with less dignity. But hey, we tried, right?
-        logging.debug("GiveUp method has been called. We tried, but it's over.")
+        # Disable further user input immediately
+        logging.debug("GiveUp initiated: Preparing to stop threads.")
         self.running = False
-        if self.output_file:
-            self.output_file.close()
-            self.output_file = None  # Reset the file reference
-        self.start_button.setDisabled(False)
+
+        # Disable buttons while stopping threads
         self.stop_button.setDisabled(True)
 
+        # Set a delay for updating the brute_mac_label
+        QTimer.singleShot(3000, lambda: self.brute_mac_label.setText(
+            "Please Wait...\nThere are proxies in the background finishing their tasks."
+        ))
+
+        # Start a thread to handle thread cleanup
+        cleanup_thread = threading.Thread(target=self._wait_for_threads)
+        cleanup_thread.start()
+        
+    def _wait_for_threads(self):
+        logging.debug("Waiting for threads to finish...")
+        
+        # Wait for all threads to complete
+        if hasattr(self, 'threads'):
+            for thread in self.threads:
+                if thread.is_alive():
+                    thread.join()  # Wait for the thread to complete
+
+        # Once all threads are done, reset the GUI on the main thread
+        QTimer.singleShot(0, self._reset_gui_after_cleanup)
+
+    def _reset_gui_after_cleanup(self):
+        # Safely reset GUI elements on the main thread
+        logging.debug("All threads stopped. Resetting GUI.")
+        self.threads = []  # Clear the thread list
+        self.start_button.setDisabled(False)
+        self.stop_button.setDisabled(True)
+        self.brute_mac_label.setText("")
+
+        # Close the output file if it was open
         if hasattr(self, 'output_file') and self.output_file:
-            self.output_file.close()
+            try:
+                self.output_file.close()
+                logging.debug("Output file closed successfully.")
+            except Exception as e:
+                logging.error(f"Error closing output file: {str(e)}")
+            finally:
+                self.output_file = None
 
     def ErrorAnnouncer(self, message):
         self.error_text.append(message)
