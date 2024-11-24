@@ -21,7 +21,7 @@ import configparser
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 
 def get_token(session, url, mac_address):
     try:
@@ -1539,7 +1539,6 @@ class MacAttack(QMainWindow):
     
     def SaveTheDay(self):
         """Save user settings, including window geometry, active tab, and other preferences to the configuration file."""
-        print ("save")
         user_dir = os.path.expanduser('~')
         os.makedirs(os.path.join(user_dir, 'evilvir.us'), exist_ok=True)
         file_path = os.path.join(user_dir, 'evilvir.us', 'MacAttack.ini')
@@ -1832,7 +1831,7 @@ class MacAttack(QMainWindow):
                                     count = 0
 
                             if count > 0:
-                                logging.debug("Mac found")
+                                logging.info("Mac found")
                                 if self.autoloadmac_checkbox.isChecked():
                                     self.hostname_input.setText(self.base_url)
                                     self.mac_input.setText(mac)
@@ -1877,15 +1876,12 @@ class MacAttack(QMainWindow):
                         else:
                             #self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
                             logging.debug(f"No JSON response for MAC {mac}")
-            except StopIteration:
-                # StopIteration is raised in remove_proxy to exit the loop
-                logging.info("Exiting the loop after proxy removal.")
-                break  # Exit the while loop        
+   
                 
             except (json.decoder.JSONDecodeError, requests.exceptions.RequestException, TypeError) as e:
                 # Now catch the error when res2 fails
                 if "Expecting value" in str(e):
-                    logging.error("Raw Response Content:", res.text)  # Print raw response for debugging
+                    logging.debug("Raw Response Content:\n%s", res.text)
                     if "ERR_ACCESS_DENIED" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -1894,6 +1890,14 @@ class MacAttack(QMainWindow):
                             self.proxy_error_counts[selected_proxy] += 1 
                         self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Access Denied</b> Proxy refused access.")
                       
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
+                    elif "READ_ERROR" in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>ERR_READ_ERROR</b> proxy Could not connect.")
                         self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
                     elif "Could not connect" in res.text:
                         # Track error count for the proxy
@@ -1952,7 +1956,7 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Host header port mismatch</b> proxy port does not match")
                         self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
                     elif "connections reached" in res.text:
-                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Proxy Overloaded</b> Maximum number of open connections reached.")
+                        self.update_error_text_signal.emit(f"Error for Proxy: {selected_proxy} : <b>Proxy Overloaded</b> Maximum number of open connections reached.")
                     elif "DNS resolution error" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
