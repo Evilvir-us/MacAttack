@@ -29,7 +29,7 @@ Watch this video for an example on how to use MacAttack
 
 
 1. Go to the Proxies tab, enable proxies and fill the box with proxies.
-2. go to the MacAttack tab and Enter the stalker portal URL into the first box.
+2. go to the MacAttack tab and Enter the stalker portal URL into the box.
 3. Set the speed (1-100)
 4. Click **Start**.
 
