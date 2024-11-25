@@ -1860,11 +1860,11 @@ class MacAttack(QMainWindow):
                                 if m3ufound:
                                     result_message = (
                                         f"{'Host:':<10} {self.iptv_link}\n"
-                                        f"{'Real URL:':<10} {domain_and_port}\n"
+                                        f"{'Backend:':<10} {domain_and_port}\n"
                                         f"{'MAC:':<10} {mac}\n"
                                         f"{'Expiry:':<10} {expiry}\n"
                                         f"{'Channels:':<10} {count}\n"
-                                        f"{'M3U:':<10} {domain_and_port}/get.php?username={username}&password={password}&type=m3u_plus\n"
+                                        f"{'M3U:':<10} {domain_and_port}/get.php?username={username}&password={password}&type=m3u_plus\n\n"
                                     )
 
                                     self.update_output_text_signal.emit(result_message)
@@ -1874,7 +1874,7 @@ class MacAttack(QMainWindow):
                                         f"{'Portal:':<10} {self.iptv_link}\n"
                                         f"{'MAC:':<10} {mac}\n"
                                         f"{'Expiry:':<10} {expiry}\n"
-                                        f"{'Channels:':<10} {count}\n"
+                                        f"{'Channels:':<10} {count}\n\n"
                                     )
                                     self.update_output_text_signal.emit(result_message)
 
