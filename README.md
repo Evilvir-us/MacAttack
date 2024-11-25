@@ -1,50 +1,75 @@
 # MacAttack
 
-MacAttack is a GUI tool for brute-force attacking IPTV stalker portals. These portals can be found in many IPTV sharing groups across platforms like [Telegram](https://www.google.com/search?q=inurl:%22t.me%22%20telegram+iptv+mac+portal), [Reddit](https://www.reddit.com/r/iptvglory/), and [other places](https://www.google.com/search?q=%2200%3A1A%3A79%22+%22%2Fc%2F%22). The portal links typically end in `/c/`. 
+MacAttack is a GUI tool designed for **testing your own IPTV stalker portals**. This tool is **not for hacking purposes**. It helps you understand how hackers could exploit vulnerabilities in your portals and provides a way to secure them. 
 
-While many MAC addresses shared in groups are often banned, this tool is designed to find unshared MAC addresses. If the page title says `stalker_portal` when you open the link in your browser, it should work with MacAttack.
+> **Note:** Only use MacAttack on portals you own or have explicit permission to test.
 
-However, many providers will also attach a device serial number to the mac address, making brute forcing impossible.
+---
+
+## Overview
+
+IPTV stalker portals are commonly shared in IPTV groups across platforms like [Telegram](https://www.google.com/search?q=inurl:%22t.me%22%20telegram+iptv+mac+portal), [Reddit](https://www.reddit.com/r/iptvglory/), and other forums. These portal links typically end in `/c/`.
+
+MacAttack helps identify unshared and accessible MAC addresses in these portals. If a portal's page title reads `stalker_portal` when opened in your browser, it can likely be tested with this tool. Keep in mind that some providers secure their portals using device serial numbers, which prevents brute-forcing.
 
 ---
 
 ## Requirements
 
-- [VLC Media Player](https://www.videolan.org/vlc/download-windows.html) must be installed.
+- Install [VLC Media Player](https://www.videolan.org/vlc/download-windows.html) before using MacAttack.
 
 ---
 
-## Windows Installation
+## Installation
 
-Download the executable from the [Releases page](https://github.com/Evilvir-us/MacAttack/releases).
+Download the file MacAttack.exe from the [Releases page](https://github.com/Evilvir-us/MacAttack/releases).
 
 ---
 
 ## Usage Instructions
-Some portals can take hours to produce a result, some can take minutes\
-[![MacAttack: A GUI Tool for Brute-Force Attacks on IPTV Stalker Portals](https://img.youtube.com/vi/90joS8qgbrQ/0.jpg)](https://www.youtube.com/watch?v=90joS8qgbrQ)
 
-Watch this video for an example on how to use MacAttack
-### Mac Attack Tab
-
-
-1. Go to the Proxies tab, enable proxies and fill the box with proxies.
-2. go to the MacAttack tab and Enter the stalker portal URL into the box.
-3. Set the speed (1-100)
-4. Click **Start**.
+Testing stalker portals can take varying amounts of time depending on the portal. Here's how to use the tool effectively:
 
 ---
 
-### Mac VideoPlayer Tab
+### **MacAttack Tab**  
+For testing portal security:
 
-1. Enter the stalker portal URL into the first box.
-2. Enter the MAC address into the second box.
-3. Click **Get playlist**.
-4. Double-click through the playlist to view content.
+1. Navigate to the **Proxies** tab.  
+   - Enable proxies.  
+   - Populate the proxy list with valid proxies.  
+
+2. Go to the **MacAttack** tab.  
+   - Enter your portal's URL in the provided box.  
+   - Set the desired speed (1-100).  
+
+3. Click **Start** to begin the test.
 
 ---
 
-### Screenshots
+### **Mac VideoPlayer Tab**  
+For accessing and testing playlists:
 
+1. Enter your portal's URL in the first box.  
+2. Input the MAC address in the second box.  
+3. Click **Get playlist** to retrieve available content.  
+4. Double-click items in the playlist to view them.
+
+---
+
+## Tutorial Video
+
+For a detailed walkthrough, watch this [video tutorial](https://www.youtube.com/watch?v=90joS8qgbrQ).  
+[![MacAttack Tutorial](https://img.youtube.com/vi/90joS8qgbrQ/0.jpg)](https://www.youtube.com/watch?v=90joS8qgbrQ)
+
+---
+
+## Screenshots
+
+### Example Interface:
 ![Screenshot 1](https://evilvir.us/application/files/5817/3190/3286/Macattack1.png)  
-![Screenshot 2](https://evilvir.us/application/files/6717/3190/3290/Macattack2.png) 
+![Screenshot 2](https://evilvir.us/application/files/6717/3190/3290/Macattack2.png)
+
+---
+
+**Disclaimer:** MacAttack is strictly a testing tool. Unauthorized use on others' portals may violate laws or terms of service. Always ensure you have permission to test a portal.
