@@ -1864,7 +1864,7 @@ class MacAttack(QMainWindow):
                                         f"{'MAC:':<10} {mac}\n"
                                         f"{'Expiry:':<10} {expiry}\n"
                                         f"{'Channels:':<10} {count}\n"
-                                        f"{'M3U:':<10} {domain_and_port}/get.php?username={username}&password={password}&type=m3u_plus\n\n"
+                                        f"{'M3U:':<10} {self.base_url}/get.php?username={username}&password={password}&type=m3u_plus\n\n"
                                     )
 
                                     self.update_output_text_signal.emit(result_message)
