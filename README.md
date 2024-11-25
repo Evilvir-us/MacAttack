@@ -1,6 +1,6 @@
 # MacAttack
 
-MacAttack is a GUI tool designed for **testing your own IPTV stalker portals**. This tool is **not for hacking purposes**. It helps you understand how hackers could exploit vulnerabilities in your portals and provides a way to secure them. 
+MacAttack is a GUI tool designed for **testing your own IPTV stalker portals**. This tool is **not for hacking purposes**. It helps you understand how hackers could exploit vulnerabilities in your portals. 
 
 > **Note:** Only use MacAttack on portals you own or have explicit permission to test.
 
