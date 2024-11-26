@@ -15,7 +15,7 @@ MacAttack helps identify unshared and accessible MAC addresses in these portals.
 ---
 
 ## Requirements
-
+- Windows version 8 or higher.
 - Install [VLC Media Player](https://www.videolan.org/vlc/download-windows.html) before using MacAttack.
 
 ---
