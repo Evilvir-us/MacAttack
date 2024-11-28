@@ -22,22 +22,35 @@ import configparser
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 
 def get_token(session, url, mac_address):
     try:
         handshake_url = f"{url}/portal.php?type=stb&action=handshake&JsHttpRequest=1-xml"
+
+        #convert the mac into various hashes, if anything this will add randomness to the requests
+        mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
+        mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
+        mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
+
+        
+        serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
+        device_id = mac_sha256
+        device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
+        device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
+
         cookies = {           
-             "adid": "2bdb5336edffec452536be317345eb2748e18f87",
-             "debug": "1",
-             "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
-             "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
-             "hw_version": "1.7-BD-00",
-             "mac": mac_address,
-             "sn": "1F2E73918FED8",
-             "stb_lang": "en",
-             "timezone": "America/Los_Angeles",
+            "adid": mac_sha1,
+            "debug": "1",
+            "device_id2": device_id2,
+            "device_id": device_id,
+            "hw_version": "1.7-BD-00",
+            "mac": mac_address,
+            "sn": serial[:13], #cut to 13 digits
+            "stb_lang": "en",
+            "timezone": "America/Los_Angeles",             
         }
+        
         headers = {"User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)"}
         response = session.get(handshake_url, cookies=cookies, headers=headers, timeout=20)
         response.raise_for_status()
@@ -290,18 +303,31 @@ class RequestThread(QThread):
     def get_token(self, session, url, mac_address):
         try:
             handshake_url = f"{url}/portal.php?type=stb&action=handshake&JsHttpRequest=1-xml"
-            cookies = {
-                
-                 "adid": "2bdb5336edffec452536be317345eb2748e18f87",
-                 "debug": "1",
-                 "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
-                 "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
-                 "hw_version": "1.7-BD-00",
-                 "mac": mac_address,
-                 "sn": "1F2E73918FED8",
-                 "stb_lang": "en",
-                 "timezone": "America/Los_Angeles",
+
+            #convert the mac into various hashes, if anything this will add randomness to the requests
+            mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
+            mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
+            mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
+
+            
+            serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
+            device_id = mac_sha256
+            device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
+            device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
+
+
+            cookies = {           
+                "adid": mac_sha1,
+                "debug": "1",
+                "device_id2": device_id2,
+                "device_id": device_id,
+                "hw_version": "1.7-BD-00",
+                "mac": mac_address,
+                "sn": serial[:13], #cut to 13 digits
+                "stb_lang": "en",
+                "timezone": "America/Los_Angeles",             
             }
+
             headers = {"User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C)"}
             response = session.get(handshake_url, cookies=cookies, headers=headers, timeout=20)
             response.raise_for_status()
@@ -319,17 +345,30 @@ class RequestThread(QThread):
     def get_genres(self, session, url, mac_address, token):
         try:
             genres_url = f"{url}/portal.php?type=itv&action=get_genres&JsHttpRequest=1-xml"
-            cookies = { 
-                 "adid": "2bdb5336edffec452536be317345eb2748e18f87",
-                 "debug": "1",
-                 "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
-                 "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
-                 "hw_version": "1.7-BD-00",
-                 "mac": mac_address,
-                 "sn": "1F2E73918FED8",
-                 "stb_lang": "en",
-                 "timezone": "America/Los_Angeles",
+
+            #convert the mac into various hashes, if anything this will add randomness to the requests
+            mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
+            mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
+            mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
+
+            
+            serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
+            device_id = mac_sha256
+            device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
+            device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
+
+            cookies = {           
+                "adid": mac_sha1,
+                "debug": "1",
+                "device_id2": device_id2,
+                "device_id": device_id,
+                "hw_version": "1.7-BD-00",
+                "mac": mac_address,
+                "sn": serial[:13], #cut to 13 digits
+                "stb_lang": "en",
+                "timezone": "America/Los_Angeles",             
             }
+
             headers = {
                 "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                 "Authorization": f"Bearer {token}",
@@ -362,18 +401,30 @@ class RequestThread(QThread):
     def get_vod_categories(self, session, url, mac_address, token):
         try:
             vod_url = f"{url}/portal.php?type=vod&action=get_categories&JsHttpRequest=1-xml"
-            cookies = {
-                
-                 "adid": "2bdb5336edffec452536be317345eb2748e18f87",
-                 "debug": "1",
-                 "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
-                 "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
-                 "hw_version": "1.7-BD-00",
-                 "mac": mac_address,
-                 "sn": "1F2E73918FED8",
-                 "stb_lang": "en",
-                 "timezone": "America/Los_Angeles",
+
+            #convert the mac into various hashes, if anything this will add randomness to the requests
+            mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
+            mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
+            mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
+
+            
+            serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
+            device_id = mac_sha256
+            device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
+            device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
+
+            cookies = {           
+                "adid": mac_sha1,
+                "debug": "1",
+                "device_id2": device_id2,
+                "device_id": device_id,
+                "hw_version": "1.7-BD-00",
+                "mac": mac_address,
+                "sn": serial[:13], #cut to 13 digits
+                "stb_lang": "en",
+                "timezone": "America/Los_Angeles",             
             }
+
             headers = {
                 "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                 "Authorization": f"Bearer {token}",
@@ -403,18 +454,30 @@ class RequestThread(QThread):
     def get_series_categories(self, session, url, mac_address, token):
         try:
             series_url = f"{url}/portal.php?type=series&action=get_categories&JsHttpRequest=1-xml"
-            cookies = {
-                
-                 "adid": "2bdb5336edffec452536be317345eb2748e18f87",
-                 "debug": "1",
-                 "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
-                 "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
-                 "hw_version": "1.7-BD-00",
-                 "mac": mac_address,
-                 "sn": "1F2E73918FED8",
-                 "stb_lang": "en",
-                 "timezone": "America/Los_Angeles",
+
+            #convert the mac into various hashes, if anything this will add randomness to the requests
+            mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
+            mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
+            mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
+
+            
+            serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
+            device_id = mac_sha256
+            device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
+            device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
+
+            cookies = {           
+                "adid": mac_sha1,
+                "debug": "1",
+                "device_id2": device_id2,
+                "device_id": device_id,
+                "hw_version": "1.7-BD-00",
+                "mac": mac_address,
+                "sn": serial[:13], #cut to 13 digits
+                "stb_lang": "en",
+                "timezone": "America/Los_Angeles",             
             }
+
             headers = {
                 "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                 "Authorization": f"Bearer {token}",
@@ -446,18 +509,30 @@ class RequestThread(QThread):
     def get_channels(self, session, url, mac_address, token, category_type, category_id):
         try:
             channels = []
-            cookies = {
-                
-                 "adid": "2bdb5336edffec452536be317345eb2748e18f87",
-                 "debug": "1",
-                 "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
-                 "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
-                 "hw_version": "1.7-BD-00",
-                 "mac": mac_address,
-                 "sn": "1F2E73918FED8",
-                 "stb_lang": "en",
-                 "timezone": "America/Los_Angeles",
+
+            #convert the mac into various hashes, if anything this will add randomness to the requests
+            mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
+            mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
+            mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
+
+            
+            serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
+            device_id = mac_sha256
+            device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
+            device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
+
+            cookies = {           
+                "adid": mac_sha1,
+                "debug": "1",
+                "device_id2": device_id2,
+                "device_id": device_id,
+                "hw_version": "1.7-BD-00",
+                "mac": mac_address,
+                "sn": serial[:13], #cut to 13 digits
+                "stb_lang": "en",
+                "timezone": "America/Los_Angeles",             
             }
+
             headers = {
                 "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                 "Authorization": f"Bearer {token}",
@@ -573,7 +648,8 @@ class VideoPlayerWorker(QThread):
             self.error_occurred.emit("Connection error.")
         except Exception as e:
             # Emit error for any other unexpected issues
-            self.error_occurred.emit(f"Error: {str(e)}")
+            if not "IncompleteRead" in str(e):
+                self.error_occurred.emit(f"Error: {str(e)}")
             
 class MacAttack(QMainWindow):
     update_mac_label_signal = pyqtSignal(str)
@@ -934,6 +1010,413 @@ class MacAttack(QMainWindow):
         self.progress_animation = QPropertyAnimation(self.progress_bar, b"value")
         self.progress_animation.setDuration(1000)
         self.progress_animation.setEasingCurve(QEasingCurve.Linear)
+        
+        
+    def on_initial_playlist_received(self, data):
+        if self.current_request_thread != self.sender():
+            logging.info("Received data from an old thread. Ignoring.")
+            return  # Ignore signals from older threads
+
+        if not data:
+            self.stop_request_thread()
+            self.error_label.setText("ERROR: Unable to connect to the host")
+            self.error_label.setVisible(True)
+            logging.info("Playlist data is empty.")
+            self.current_request_thread = None
+            return
+
+        for tab_name, tab_data in data.items():
+            tab_info = self.tab_data.get(tab_name)  # Use the dictionary with tab data
+            if not tab_info:
+                logging.info(f"Unknown tab name: {tab_name}")
+                continue
+
+            tab_info["playlist_data"] = tab_data
+            tab_info["current_category"] = None
+            tab_info["navigation_stack"] = []
+            self.update_playlist_view(tab_name)
+            
+        logging.debug("Playlist data loaded into tabs.")
+        self.current_request_thread = None
+
+    def update_playlist_view(self, tab_name):
+        tab_info = self.tab_data[tab_name]
+        self.playlist_model = tab_info["self.playlist_model"]
+        self.playlist_model.clear()
+        tab_info["current_view"] = "categories"
+        
+        self.playlist_view = tab_info["playlist_view"]  
+
+        if tab_info["navigation_stack"]:
+            go_back_item = QStandardItem("Go Back")
+            self.playlist_model.appendRow(go_back_item)
+
+        if tab_info["current_category"] is None:
+            for item in tab_info["playlist_data"]:
+                name = item["name"]
+                list_item = QStandardItem(name)
+                list_item.setData(item, Qt.UserRole)
+                list_item.setData("category", Qt.UserRole + 1)
+                self.playlist_model.appendRow(list_item)
+        else:
+            self.retrieve_channels(tab_name, tab_info["current_category"])
+        self.search_input.clear()
+
+    def update_channel_view(self, tab_name):
+        tab_info = self.tab_data[tab_name]
+        self.playlist_model = tab_info["self.playlist_model"]
+        self.playlist_model.clear()
+        tab_info["current_view"] = "channels"
+
+        if tab_info["navigation_stack"]:
+            go_back_item = QStandardItem("Go Back")
+            self.playlist_model.appendRow(go_back_item)
+
+        for channel in tab_info["current_channels"]:
+            channel_name = channel["name"]
+            list_item = QStandardItem(channel_name)
+            list_item.setData(channel, Qt.UserRole)
+            item_type = channel.get("item_type", "channel")
+            list_item.setData(item_type, Qt.UserRole + 1)
+            self.playlist_model.appendRow(list_item)
+        self.search_input.clear()
+
+    def retrieve_channels(self, tab_name, category):
+        category_type = category["category_type"]
+        category_id = category.get("category_id") or category.get("genre_id")
+
+        try:
+            self.set_progress(0)
+
+            # If a current thread is running, interrupt it and set up to start a new one
+            if self.current_request_thread is not None and self.current_request_thread.isRunning():
+                logging.info("RequestThread running, stopping it.")
+                self.current_request_thread.requestInterruption()
+                # Connect the finished signal to start a new thread once the old one is done
+                self.current_request_thread.wait()  # Wait for the thread to finish
+                self.current_request_thread.finished.connect(lambda: self.start_new_thread(tab_name, category_type, category_id))
+                return
+
+            # If no thread is running, start a new one directly
+            self.start_new_thread(tab_name, category_type, category_id)
+
+        except Exception as e:
+            logging.error(f"Exception in retrieve_channels: {e}")
+            self.error_label.setText("An error occurred while retrieving channels.")
+            self.error_label.setVisible(True)
+
+    def on_channels_loaded(self, tab_name, channels):
+        if self.current_request_thread != self.sender():
+            logging.debug("Received channels from an old thread. Ignoring.")
+            return  # Ignore signals from older threads
+
+        tab_info = self.tab_data[tab_name]
+        tab_info["current_channels"] = channels
+        self.update_channel_view(tab_name)
+        logging.debug(f"Channels loaded for tab {tab_name}: {len(channels)} items.")
+        self.current_request_thread = None  # Reset the current thread
+                
+    def filter_playlist(self):
+        search_term = self.search_input.text().lower()
+
+        for tab_name, tab_info in self.tab_data.items():
+            # Retrieve the playlist model
+            playlist_model = tab_info.get("self.playlist_model")
+            if not playlist_model:
+                logging.debug(f"Warning: No 'playlist_model' found for tab '{tab_name}'. Skipping.")
+                continue
+
+            # Get the current data from tab_info
+            playlist_data = tab_info.get("playlist_data", [])
+            current_channels = tab_info.get("current_channels", [])
+            current_series_info = tab_info.get("current_series_info", [])
+
+            # Perform filtering on playlists, channels, and series list
+            filtered_playlist = self._filter_items(playlist_data, search_term)
+            filtered_channels = self._filter_items(current_channels, search_term)
+            filtered_series = self._filter_items(current_series_info, search_term)
+
+            # Rebuild the playlist model with the filtered data
+            self._populate_playlist_model(playlist_model, filtered_channels, filtered_playlist, filtered_series)
+
+    def _populate_playlist_model(self, playlist_model, channels, playlists, series):
+        """Helper function to clear and populate the playlist model."""
+        playlist_model.clear()
+
+        # Add the "Go Back" item if we are not in a filtered state
+        if not self.search_input.text() and playlists:  # Only add Go Back if not filtering
+            playlist_model.appendRow(QStandardItem("Go Back"))
+
+        # Add filtered channels
+        for item in channels:
+            list_item = self._create_list_item(item, item['name'], item['item_type'])
+            playlist_model.appendRow(list_item)
+
+        # Add filtered playlists
+        for item in playlists:
+            name = item.get("name", "Unnamed") if isinstance(item, dict) else str(item)
+            item_type = item.get("type", "category") if isinstance(item, dict) else str(item)
+            playlist_item = self._create_list_item(item, name, item_type)
+            playlist_model.appendRow(playlist_item)
+
+        # Add filtered series (seasons/episodes)
+        for item in series:
+            item_type = item.get("item_type")
+            if item_type == "season":
+                name = f"Season {item['season_number']}"
+            elif item_type == "episode":
+                name = f"Episode {item['episode_number']}"
+            else:
+                name = item.get("name") or item.get("title")
+            list_item = QStandardItem(name)
+            list_item.setData(item, Qt.UserRole)
+            list_item.setData(item_type, Qt.UserRole + 1)
+            playlist_model.appendRow(list_item)
+            
+    def _filter_items(self, items, search_term):
+        """Helper function to filter items based on the search term."""
+        return [
+            item for item in items
+            if search_term in str(item).lower()  # Make sure it checks the correct property for filtering
+        ]
+
+
+
+    def _create_list_item(self, data, name, item_type):
+        """Helper function to create a list item with attached data."""
+        list_item = QStandardItem(name)
+        list_item.setData(data, Qt.UserRole)
+        list_item.setData(item_type, Qt.UserRole + 1)
+        return list_item
+
+    def get_playlist(self):
+        """
+        Function to fetch and populate the playlist based on the hostname and MAC address input.
+        Uses a separate thread to handle the request to avoid blocking the UI.
+        """
+        self.error_label.setVisible(False)  # Hide the error label initially
+        self.playlist_model.clear()  # Clear the current playlist
+
+        # Get inputs from the user
+        hostname_input = self.hostname_input.text().strip()
+        mac_address = self.mac_input.text().strip()
+
+        # Check if both hostname and MAC address are provided
+        if not hostname_input or not mac_address:
+            self.error_label.setText("ERROR: Missing input")
+            self.error_label.setVisible(True)  # Show the error label if inputs are missing
+            return
+
+        # Parse the hostname URL
+        parsed_url = urlparse(hostname_input)
+        # If the URL does not have a scheme or netloc, try to add "http://"
+        if not parsed_url.scheme and not parsed_url.netloc:
+            parsed_url = urlparse(f"http://{hostname_input}")
+        elif not parsed_url.scheme:
+            parsed_url = parsed_url._replace(scheme="http")
+
+        # Set the base URL and MAC address
+        self.base_url = urlunparse((parsed_url.scheme, parsed_url.netloc, "", "", "", ""))
+        self.mac_address = mac_address
+
+        # Stop the current request thread if one is already running
+        if self.current_request_thread is not None and self.current_request_thread.isRunning():
+            logging.info("Stopping current RequestThread to start a new one.")
+            self.current_request_thread.wait()  # Wait for the thread to finish before starting a new one
+
+        # Initialize a new RequestThread for fetching the playlist
+        self.request_thread = RequestThread(self.base_url, mac_address)
+        # Connect signals for when the request completes and for progress updates
+        self.request_thread.request_complete.connect(self.on_initial_playlist_received)
+        self.request_thread.update_progress.connect(self.set_progress)
+        self.request_thread.start()  # Start the request thread
+        self.current_request_thread = self.request_thread  # Set the current request thread
+        logging.info("Started new RequestThread for playlist.")
+
+    def retrieve_series_info(self, tab_name, context_data, season_number=None):
+        # Add the current series/seasons to the navigation stack
+        tab_info = self.tab_data[tab_name]
+        if not season_number:
+            tab_info["navigation_stack"].append(context_data)
+        else:
+            tab_info["navigation_stack"].append({"season_number": season_number})
+        try:
+            session = requests.Session()
+            retry_strategy = Retry(
+                total=5,  # Number of retry attempts
+                backoff_factor=1,  # Delay between retries (e.g., 1 second)
+                status_forcelist=[429, 500, 502, 503, 504],  # Retry on these status codes
+                allowed_methods=["HEAD", "GET", "OPTIONS"]  # Methods to retry
+            )
+            adapter = HTTPAdapter(max_retries=retry_strategy)
+            session.mount('http://', adapter)
+            session.mount('https://', adapter)
+            url = self.base_url
+            mac_address = self.mac_address
+            token = get_token(session, url, mac_address)
+
+            if token:
+                series_id = context_data.get("id")
+                if not series_id:
+                    self.error_label.setText(f"Series ID missing in context data: {context_data}")
+                    self.error_label.setVisible(True)
+                    return
+                    
+                #convert the mac into various hashes, if anything this will add randomness to the requests
+                mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
+                mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
+                mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
+
+                
+                serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
+                device_id = mac_sha256
+                device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
+                device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
+
+                cookies = {           
+                    "adid": mac_sha1,
+                    "debug": "1",
+                    "device_id2": device_id2,
+                    "device_id": device_id,
+                    "hw_version": "1.7-BD-00",
+                    "mac": mac_address,
+                    "sn": serial[:13], #cut to 13 digits
+                    "stb_lang": "en",
+                    "timezone": "America/Los_Angeles",             
+                }
+            
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                    "Authorization": f"Bearer {token}",
+                    "X-User-Agent": "Model: MAG250; Link: WiFi",
+                }
+
+                if season_number is None:
+                    # Fetch seasons
+                    all_seasons = []
+                    page_number = 0
+                    seasons_url = f"{url}/portal.php?type=series&action=get_ordered_list&movie_id={series_id}&season_id=0&episode_id=0&JsHttpRequest=1-xml&p={page_number}"
+                    logging.debug(
+                        f"Fetching seasons URL: {seasons_url}, headers: {headers}, cookies: {cookies}"
+                    )
+
+                    while True:
+                        response = session.get(
+                            seasons_url, cookies=cookies, headers=headers, timeout=20
+                        )
+                        logging.debug(f"Seasons response: {response.text}")
+                        if response.status_code == 200:
+                            seasons_data = response.json().get("js", {}).get("data", [])
+                            if not seasons_data:
+                                break
+                            for season in seasons_data:
+                                season_id = season.get("id", "")
+                                season_number_extracted = None
+                                if season_id.startswith("season"):
+                                    match = re.match(r"season(\d+)", season_id)
+                                    if match:
+                                        season_number_extracted = int(match.group(1))
+                                    else:
+                                        self.error_label.setText(f"Unexpected season id format: {season_id}")
+                                        self.error_label.setVisible(True)
+                                else:
+                                    match = re.match(r"\d+:(\d+)", season_id)
+                                    if match:
+                                        season_number_extracted = int(match.group(1))
+                                    else:
+                                        self.error_label.setText(f"Unexpected season id format: {season_id}")
+                                        self.error_label.setVisible(True)
+
+                                season["season_number"] = season_number_extracted
+                                season["item_type"] = "season"
+                            all_seasons.extend(seasons_data)
+                            total_items = response.json().get(
+                                "js", {}
+                            ).get("total_items", len(all_seasons))
+                            logging.debug(
+                                f"Fetched {len(all_seasons)} seasons out of {total_items}."
+                            )
+                            if len(all_seasons) >= total_items:
+                                break
+                            page_number += 1
+                        else:
+                            self.error_label.setText(f"Failed to fetch seasons for page {page_number} with status code {response.status_code}")
+                            self.error_label.setVisible(True)
+
+                            break
+
+                    if all_seasons:
+                        tab_info["current_series_info"] = all_seasons
+                        tab_info["current_view"] = "seasons"
+                        self.update_series_view(tab_name)
+                else:
+                    # Fetch episodes for the given season
+                    series_list = context_data.get("series", [])
+                    if not series_list:
+                        logging.info("No episodes found in this season.")
+                        return
+
+                    logging.debug(f"Series episodes found: {series_list}")
+                    all_episodes = []
+                    for episode_number in series_list:
+                        episode = {
+                            "id": f"{series_id}:{episode_number}",
+                            "series_id": series_id,
+                            "season_number": season_number,
+                            "episode_number": episode_number,
+                            "name": f"Episode {episode_number}",
+                            "item_type": "episode",
+                            "cmd": context_data.get("cmd"),
+                        }
+                        logging.debug(f"Episode details: {episode}")
+                        all_episodes.append(episode)
+
+                    if all_episodes:
+                        tab_info["current_series_info"] = all_episodes
+                        tab_info["current_view"] = "episodes"
+                        self.update_series_view(tab_name)
+                    else:
+                        logging.info("No episodes found.")
+            else:
+                self.error_label.setText("Failed to retrieve token.")
+                self.error_label.setVisible(True)
+        except KeyError as e:
+            logging.error(f"KeyError retrieving series info: {str(e)}")
+        except Exception as e:
+            logging.error(f"Error retrieving series info: {str(e)}")
+        
+    def update_series_view(self, tab_name):
+        tab_info = self.tab_data[tab_name]
+        self.playlist_model = tab_info["self.playlist_model"]
+        self.playlist_model.clear()
+
+        if tab_info["navigation_stack"]:
+            go_back_item = QStandardItem("Go Back")
+            self.playlist_model.appendRow(go_back_item)
+
+        # If we're viewing seasons or episodes, only show those, not the full series list.
+        if tab_info["current_view"] == "seasons":
+            for item in tab_info["current_series_info"]:
+                item_type = item.get("item_type")
+                if item_type == "season":
+                    name = f"Season {item['season_number']}"
+                else:
+                    continue  # Skip if it's not a season
+                list_item = QStandardItem(name)
+                list_item.setData(item, Qt.UserRole)
+                list_item.setData(item_type, Qt.UserRole + 1)
+                self.playlist_model.appendRow(list_item)
+        elif tab_info["current_view"] == "episodes":
+            for item in tab_info["current_series_info"]:
+                item_type = item.get("item_type")
+                if item_type == "episode":
+                    name = f"Episode {item['episode_number']}"
+                    list_item = QStandardItem(name)
+                    list_item.setData(item, Qt.UserRole)
+                    list_item.setData(item_type, Qt.UserRole + 1)
+                    self.playlist_model.appendRow(list_item)
+
+        self.search_input.clear()
 
     def update_proxy(self):
         
@@ -991,128 +1474,6 @@ class MacAttack(QMainWindow):
         self.videoPlayer.video_set_mouse_input(False)
         self.videoPlayer.video_set_key_input(False)
         
-    def filter_playlist(self):
-        search_term = self.search_input.text().lower()
-
-        for tab_name, tab_info in self.tab_data.items():
-            # Retrieve the playlist model
-            playlist_model = tab_info.get("self.playlist_model")
-            if not playlist_model:
-                logging.debug(f"Warning: No 'playlist_model' found for tab '{tab_name}'. Skipping.")
-                continue
-
-            # Perform filtering on playlists and channels
-            filtered_playlist = self._filter_items(tab_info.get("playlist_data", []), search_term)
-            filtered_channels = self._filter_items(tab_info.get("current_channels", []), search_term)
-
-            # Clear and rebuild the playlist model
-            self._populate_playlist_model(playlist_model, filtered_channels, filtered_playlist)
-
-    def modify_vlc_proxy(self, proxy_address):
-        # Determine base_path based on whether the script is frozen or running as a script
-        if getattr(sys, 'frozen', False):
-            base_path = sys._MEIPASS  # For frozen executables
-        else:
-            base_path = os.path.abspath(".")  # For scripts run directly
-        
-        # Construct the full file path using base_path
-        file_path = os.path.join(base_path, "include", "vlcrc")  # Use os.path.join for proper path construction
-        
-        # Read the file
-        with open(file_path, 'r') as file:
-            lines = file.readlines()
-        
-        # Modify the http-proxy line
-        for i, line in enumerate(lines):
-            if "http-proxy=" in line:  # Check if the line contains 'http-proxy='
-                if proxy_address:
-                    # If the proxy_address is provided, update the line
-                    lines[i] = f"http-proxy={proxy_address}\n"
-                else:
-                    # If no proxy_address is provided, reset it to the commented line
-                    lines[i] = "#http-proxy=\n"
-        
-        # Write the modified content back to the file
-        with open(file_path, 'w') as file:
-            file.writelines(lines)
-
-    def _filter_items(self, items, search_term):
-        """Helper function to filter items based on the search term."""
-        return [
-            item for item in items
-            if search_term in str(item).lower()
-        ]
-
-    def _populate_playlist_model(self, playlist_model, channels, playlists):
-        """Helper function to clear and populate the playlist model."""
-        playlist_model.clear()
-        playlist_model.appendRow(QStandardItem("Go Back"))
-
-        # Add filtered channels
-        for item in channels:
-            list_item = self._create_list_item(item, item['name'], item['item_type'])
-            playlist_model.appendRow(list_item)
-
-        playlist_model.appendRow(QStandardItem("-----Categories-----"))
-
-        # Add filtered playlists
-        for item in playlists:
-            name = item.get("name", "Unnamed") if isinstance(item, dict) else str(item)
-            item_type = item.get("type", "category") if isinstance(item, dict) else str(item)
-            playlist_item = self._create_list_item(item, name, item_type)
-            playlist_model.appendRow(playlist_item)
-
-    def _create_list_item(self, data, name, item_type):
-        """Helper function to create a list item with attached data."""
-        list_item = QStandardItem(name)
-        list_item.setData(data, Qt.UserRole)
-        list_item.setData(item_type, Qt.UserRole + 1)
-        return list_item
-                       
-    def get_playlist(self):
-        """
-        Function to fetch and populate the playlist based on the hostname and MAC address input.
-        Uses a separate thread to handle the request to avoid blocking the UI.
-        """
-        self.error_label.setVisible(False)  # Hide the error label initially
-        self.playlist_model.clear()  # Clear the current playlist
-
-        # Get inputs from the user
-        hostname_input = self.hostname_input.text().strip()
-        mac_address = self.mac_input.text().strip()
-
-        # Check if both hostname and MAC address are provided
-        if not hostname_input or not mac_address:
-            self.error_label.setText("ERROR: Missing input")
-            self.error_label.setVisible(True)  # Show the error label if inputs are missing
-            return
-
-        # Parse the hostname URL
-        parsed_url = urlparse(hostname_input)
-        # If the URL does not have a scheme or netloc, try to add "http://"
-        if not parsed_url.scheme and not parsed_url.netloc:
-            parsed_url = urlparse(f"http://{hostname_input}")
-        elif not parsed_url.scheme:
-            parsed_url = parsed_url._replace(scheme="http")
-
-        # Set the base URL and MAC address
-        self.base_url = urlunparse((parsed_url.scheme, parsed_url.netloc, "", "", "", ""))
-        self.mac_address = mac_address
-
-        # Stop the current request thread if one is already running
-        if self.current_request_thread is not None and self.current_request_thread.isRunning():
-            logging.info("Stopping current RequestThread to start a new one.")
-            self.current_request_thread.wait()  # Wait for the thread to finish before starting a new one
-
-        # Initialize a new RequestThread for fetching the playlist
-        self.request_thread = RequestThread(self.base_url, mac_address)
-        # Connect signals for when the request completes and for progress updates
-        self.request_thread.request_complete.connect(self.on_initial_playlist_received)
-        self.request_thread.update_progress.connect(self.set_progress)
-        self.request_thread.start()  # Start the request thread
-        self.current_request_thread = self.request_thread  # Set the current request thread
-        logging.info("Started new RequestThread for playlist.")
-
     def build_Proxy_gui(self, parent):
         proxy_layout = QVBoxLayout(parent)
 
@@ -1261,8 +1622,7 @@ class MacAttack(QMainWindow):
 
         # Connect the textChanged signal to update the proxy count
         self.proxy_textbox.textChanged.connect(self.update_proxy_count)
-
-    
+   
     def update_proxy_count(self):
         # Get the number of lines in the proxy_textbox
         proxy_lines = self.proxy_textbox.toPlainText().splitlines()
@@ -1408,8 +1768,7 @@ class MacAttack(QMainWindow):
         else:
             self.concurrent_tests.setRange(1, 100)  # Default range
             self.proxy_concurrent_tests.setRange(1, 100)
-
-   
+  
     def update_mac_label(self, text):
         """Update the MAC address label in the main thread."""
         self.brute_mac_label.setText(text)
@@ -1742,9 +2101,9 @@ class MacAttack(QMainWindow):
             device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
 
             #logging the results
-            logging.debug(f"Serial: {serial}")
-            logging.debug(f"Device ID: {device_id}")
-            logging.debug(f"Device ID2: {device_id2}") 
+            #logging.debug(f"Serial: {serial}")
+            #logging.debug(f"Device ID: {device_id}")
+            #logging.debug(f"Device ID2: {device_id2}") 
             
             
             if not proxies:
@@ -1897,8 +2256,19 @@ class MacAttack(QMainWindow):
             #Try failed because data was non json    
             except (json.decoder.JSONDecodeError, requests.exceptions.RequestException, TypeError) as e:
                 if "Expecting value" in str(e):
-                    logging.debug("Raw Response Content:\n%s", res.text)
-                    if "ERR_ACCESS_DENIED" in res.text:
+                    #logging.debug(f"Raw Response Content:\n{mac}\n%s", res.text)
+                    
+                    if (
+                        "503 Service" in res.text
+                        or "521: Web server is down" in res.text
+                        or "The page is temporarily unavailable" in res.text
+                    ):
+                        self.update_error_text_signal.emit(f"Error for Portal: <b>503 Rate Limited</b> {selected_proxy}")
+                        self.temp_remove_proxy(selected_proxy)
+                        #break                    
+
+              
+                    elif "ERR_ACCESS_DENIED" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
                             self.proxy_error_counts[selected_proxy] = 1
@@ -1915,7 +2285,10 @@ class MacAttack(QMainWindow):
                             self.proxy_error_counts[selected_proxy] += 1                       
                         self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>ERR_READ_ERROR</b> proxy Could not connect.")
                         self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
-                    elif "Could not connect" in res.text:
+                    elif (
+                        "Could not connect" in res.text
+                        or "Network is unreachable" in res.text
+                    ):
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
                             self.proxy_error_counts[selected_proxy] = 1
@@ -2063,10 +2436,6 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(f"Error for Portal: {selected_proxy} : <b>Portal not found</b> invalid IPTV link")
                     elif "403 Forbidden" in res.text: #i dont think this is an error
                         self.proxy_error_counts[selected_proxy] = 0
-                    elif "503 Service" in res.text or "The page is temporarily unavailable" in res.text:
-                        self.update_error_text_signal.emit(f"Error for Portal: <b>503 Rate Limited</b> {selected_proxy}")
-                        self.temp_remove_proxy(selected_proxy)
-                        #break
                     elif "Connection to server failed" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -2099,16 +2468,14 @@ class MacAttack(QMainWindow):
                     elif mac in res.text:
                         #good result, reset errors
                         self.proxy_error_counts[selected_proxy] = 0
-                    
+                        logging.debug(f"Raw Response Content:\n{mac}\n%s", res.text)
              
                     else:
                         
                             #self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
-                        logging.debug(f"{str(e)}")
+                        #print(f"{str(e)}")
+                        print(f"Raw Response Content:\n{mac}\n%s", res.text)
                     self.error_count += 1
-
-
-
         
     def remove_proxy(self, proxy, proxy_error_counts):
         """Remove a proxy after exceeding error count and update UI."""
@@ -2125,7 +2492,7 @@ class MacAttack(QMainWindow):
             # Notify user
             self.update_error_text_signal.emit(f"Proxy {proxy} removed after exceeding {error_limit} consecutive errors.")
             #raise StopIteration  # This will stop the loop in BigMacAttack
-
+            
     def temp_remove_proxy(self, proxy):
         ratelimit_timeout = 60
         """Temporarily remove a proxy for ratelimit_timeout seconds, then re-add it."""
@@ -2186,7 +2553,6 @@ class MacAttack(QMainWindow):
         except Exception as e:
             logging.debug(f"Error playing sound with VLC: {e}")
 
-
     def OutputMastermind(self):
         # Fancy file-naming because why not complicate things?
         current_time = datetime.now().strftime("%m%d_%H%M%S")
@@ -2244,13 +2610,6 @@ class MacAttack(QMainWindow):
     def ErrorAnnouncer(self, message):
         self.error_text.append(message)
                 
-    def set_progress(self, value):
-        # Ensure the animation only runs if it's not already running
-        if self.progress_animation.state() != QPropertyAnimation.Running:
-            self.progress_animation.setStartValue(self.progress_bar.value())
-            self.progress_animation.setEndValue(value)
-            self.progress_animation.start()
-            
     def stop_request_thread(self):
         if self.current_request_thread is not None:
             self.current_request_thread.requestInterruption()
@@ -2266,117 +2625,13 @@ class MacAttack(QMainWindow):
         self.progress_animation.start()
         logging.debug(f"Animating progress bar from {start_val} to {value}.")
 
-    def on_initial_playlist_received(self, data):
-        if self.current_request_thread != self.sender():
-            logging.info("Received data from an old thread. Ignoring.")
-            return  # Ignore signals from older threads
-
-        if not data:
-            self.stop_request_thread()
-            self.error_label.setText("ERROR: Unable to connect to the host")
-            self.error_label.setVisible(True)
-            logging.info("Playlist data is empty.")
-            self.current_request_thread = None
-            return
-
-        for tab_name, tab_data in data.items():
-            tab_info = self.tab_data.get(tab_name)  # Use the dictionary with tab data
-            if not tab_info:
-                logging.info(f"Unknown tab name: {tab_name}")
-                continue
-
-            tab_info["playlist_data"] = tab_data
-            tab_info["current_category"] = None
-            tab_info["navigation_stack"] = []
-            self.update_playlist_view(tab_name)
-            
-        logging.debug("Playlist data loaded into tabs.")
-        self.current_request_thread = None
-
-    def update_playlist_view(self, tab_name):
-        tab_info = self.tab_data[tab_name]
-        self.playlist_model = tab_info["self.playlist_model"]
-        self.playlist_model.clear()
-        tab_info["current_view"] = "categories"
-        
-        self.playlist_view = tab_info["playlist_view"]  
-
-        if tab_info["navigation_stack"]:
-            go_back_item = QStandardItem("Go Back")
-            self.playlist_model.appendRow(go_back_item)
-
-        if tab_info["current_category"] is None:
-            for item in tab_info["playlist_data"]:
-                name = item["name"]
-                list_item = QStandardItem(name)
-                list_item.setData(item, Qt.UserRole)
-                list_item.setData("category", Qt.UserRole + 1)
-                self.playlist_model.appendRow(list_item)
-        else:
-            self.retrieve_channels(tab_name, tab_info["current_category"])
-        self.search_input.clear()
-
-    def retrieve_channels(self, tab_name, category):
-        category_type = category["category_type"]
-        category_id = category.get("category_id") or category.get("genre_id")
-
-        try:
-            self.set_progress(0)
-
-            # If a current thread is running, interrupt it and set up to start a new one
-            if self.current_request_thread is not None and self.current_request_thread.isRunning():
-                logging.info("RequestThread running, stopping it.")
-                self.current_request_thread.requestInterruption()
-                # Connect the finished signal to start a new thread once the old one is done
-                self.current_request_thread.wait()  # Wait for the thread to finish
-                self.current_request_thread.finished.connect(lambda: self.start_new_thread(tab_name, category_type, category_id))
-                return
-
-            # If no thread is running, start a new one directly
-            self.start_new_thread(tab_name, category_type, category_id)
-
-        except Exception as e:
-            logging.error(f"Exception in retrieve_channels: {e}")
-            self.error_label.setText("An error occurred while retrieving channels.")
-            self.error_label.setVisible(True)
-
     def start_new_thread(self, tab_name, category_type, category_id):
         self.request_thread = RequestThread(self.base_url, self.mac_address, category_type, category_id)
         self.request_thread.update_progress.connect(self.set_progress)
         self.request_thread.channels_loaded.connect(lambda channels: self.on_channels_loaded(tab_name, channels))
         self.request_thread.start()
         self.current_request_thread = self.request_thread
-        logging.debug(f"Started RequestThread for channels in category {category_id}.")
-               
-    def on_channels_loaded(self, tab_name, channels):
-        if self.current_request_thread != self.sender():
-            logging.debug("Received channels from an old thread. Ignoring.")
-            return  # Ignore signals from older threads
-
-        tab_info = self.tab_data[tab_name]
-        tab_info["current_channels"] = channels
-        self.update_channel_view(tab_name)
-        logging.debug(f"Channels loaded for tab {tab_name}: {len(channels)} items.")
-        self.current_request_thread = None  # Reset the current thread
-
-    def update_channel_view(self, tab_name):
-        tab_info = self.tab_data[tab_name]
-        self.playlist_model = tab_info["self.playlist_model"]
-        self.playlist_model.clear()
-        tab_info["current_view"] = "channels"
-
-        if tab_info["navigation_stack"]:
-            go_back_item = QStandardItem("Go Back")
-            self.playlist_model.appendRow(go_back_item)
-
-        for channel in tab_info["current_channels"]:
-            channel_name = channel["name"]
-            list_item = QStandardItem(channel_name)
-            list_item.setData(channel, Qt.UserRole)
-            item_type = channel.get("item_type", "channel")
-            list_item.setData(item_type, Qt.UserRole + 1)
-            self.playlist_model.appendRow(list_item)
-        self.search_input.clear()
+        logging.debug(f"Started RequestThread for channels in category {category_id}.")               
 
     def on_playlist_selection_changed(self, index):
         sender = self.sender()
@@ -2397,14 +2652,15 @@ class MacAttack(QMainWindow):
             item = self.playlist_model.itemFromIndex(index)
             item_text = item.text()
 
+            # Handle 'Go Back' functionality separately
             if item_text == "Go Back":
-                # Handle 'Go Back' functionality
                 if tab_info["navigation_stack"]:
                     nav_state = tab_info["navigation_stack"].pop()
-                    tab_info["current_category"] = nav_state["category"]
-                    tab_info["current_view"] = nav_state["view"]
-                    tab_info["current_series_info"] = nav_state["series_info"]  # Restore series_info
+                    tab_info["current_category"] = nav_state.get("category", "default_category_value")
+                    tab_info["current_view"] = nav_state.get("view", "default_view_value")
+                    tab_info["current_series_info"] = nav_state.get("series_info", None)
                     logging.debug(f"Go Back to view: {tab_info['current_view']}")
+
                     if tab_info["current_view"] == "categories":
                         self.update_playlist_view(current_tab)
                     elif tab_info["current_view"] == "channels":
@@ -2413,22 +2669,19 @@ class MacAttack(QMainWindow):
                         self.update_series_view(current_tab)
                 else:
                     logging.debug("Navigation stack is empty. Cannot go back.")
-                    #QMessageBox.information(
-                    #    self, "Info", "No previous view to go back to."
-                    #)
                     self.get_playlist()
+
             else:
                 item_data = item.data(Qt.UserRole)
                 item_type = item.data(Qt.UserRole + 1)
                 logging.debug(f"Item data: {item_data}, item type: {item_type}")
 
                 if item_type == "category":
-                    # Navigate into a category
                     tab_info["navigation_stack"].append(
                         {
                             "category": tab_info["current_category"],
                             "view": tab_info["current_view"],
-                            "series_info": tab_info["current_series_info"],  # Preserve current_series_info
+                            "series_info": tab_info["current_series_info"],
                         }
                     )
                     tab_info["current_category"] = item_data
@@ -2436,37 +2689,34 @@ class MacAttack(QMainWindow):
                     self.retrieve_channels(current_tab, tab_info["current_category"])
 
                 elif item_type == "series":
-                    # User selected a series, retrieve its seasons
+                    # Clear the series list when navigating to a specific series (only seasons should be shown now)
                     tab_info["navigation_stack"].append(
                         {
                             "category": tab_info["current_category"],
                             "view": tab_info["current_view"],
-                            "series_info": tab_info["current_series_info"],  # Preserve current_series_info
+                            "series_info": tab_info["current_series_info"],
                         }
                     )
                     tab_info["current_category"] = item_data
+                    tab_info["current_view"] = "seasons"  # Update the view to "seasons"
+                    self.update_series_view(current_tab)  # Only seasons should be shown now
+
                     logging.debug(f"Navigating to series: {item_data.get('name')}")
                     self.retrieve_series_info(current_tab, item_data)
 
                 elif item_type == "season":
-                    # User selected a season, set navigation context
                     tab_info["navigation_stack"].append(
                         {
                             "category": tab_info["current_category"],
                             "view": tab_info["current_view"],
-                            "series_info": tab_info["current_series_info"],  # Preserve current_series_info
+                            "series_info": tab_info["current_series_info"],
                         }
                     )
                     tab_info["current_category"] = item_data
-
-                    # Update view to 'seasons'
-                    tab_info["current_view"] = "seasons"
+                    tab_info["current_view"] = "episodes"  # If it's a season, show episodes now
                     self.update_series_view(current_tab)
 
-                    # Retrieve episodes using the season data
-                    logging.debug(
-                        f"Fetching episodes for season {item_data['season_number']} in series {item_data['name']}"
-                    )
+                    logging.debug(f"Fetching episodes for season {item_data['season_number']} in series {item_data['name']}")
                     self.retrieve_series_info(
                         current_tab,
                         item_data,
@@ -2474,12 +2724,10 @@ class MacAttack(QMainWindow):
                     )
 
                 elif item_type == "episode":
-                    # User selected an episode, play it
                     logging.debug(f"Playing episode: {item_data.get('name')}")
                     self.play_channel(item_data)
 
                 elif item_type in ["channel", "vod"]:
-                    # This is an IPTV channel or VOD, play it
                     logging.debug(f"Playing channel/VOD: {item_data.get('name')}")
                     self.play_channel(item_data)
 
@@ -2487,140 +2735,6 @@ class MacAttack(QMainWindow):
                     self.error_label.setText("Unknown item type")
                     self.error_label.setVisible(True)
     
-    def retrieve_series_info(self, tab_name, context_data, season_number=None):
-        tab_info = self.tab_data[tab_name]
-        try:
-            session = requests.Session()
-            retry_strategy = Retry(
-                total=5,  # Number of retry attempts
-                backoff_factor=1,  # Delay between retries (e.g., 1 second)
-                status_forcelist=[429, 500, 502, 503, 504],  # Retry on these status codes
-                method_whitelist=["HEAD", "GET", "OPTIONS"]  # Methods to retry
-            )
-            adapter = HTTPAdapter(max_retries=retry_strategy)
-            session.mount('http://', adapter)
-            session.mount('https://', adapter)
-            url = self.base_url
-            mac_address = self.mac_address
-            token = get_token(session, url, mac_address)
-
-            if token:
-                series_id = context_data.get("id")
-                if not series_id:
-                    self.error_label.setText(f"Series ID missing in context data: {context_data}")
-                    self.error_label.setVisible(True)
-                    return
-                cookies = {                   
-                     "adid": "2bdb5336edffec452536be317345eb2748e18f87",
-                     "debug": "1",
-                     "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
-                     "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
-                     "hw_version": "1.7-BD-00",
-                     "mac": mac_address,
-                     "sn": "1F2E73918FED8",
-                     "stb_lang": "en",
-                     "timezone": "America/Los_Angeles",
-                }
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-                    "Authorization": f"Bearer {token}",
-                    "X-User-Agent": "Model: MAG250; Link: WiFi",
-                }
-
-                if season_number is None:
-                    # Fetch seasons
-                    all_seasons = []
-                    page_number = 0
-                    seasons_url = f"{url}/portal.php?type=series&action=get_ordered_list&movie_id={series_id}&season_id=0&episode_id=0&JsHttpRequest=1-xml&p={page_number}"
-                    logging.debug(
-                        f"Fetching seasons URL: {seasons_url}, headers: {headers}, cookies: {cookies}"
-                    )
-
-                    while True:
-                        response = session.get(
-                            seasons_url, cookies=cookies, headers=headers, timeout=20
-                        )
-                        logging.debug(f"Seasons response: {response.text}")
-                        if response.status_code == 200:
-                            seasons_data = response.json().get("js", {}).get("data", [])
-                            if not seasons_data:
-                                break
-                            for season in seasons_data:
-                                season_id = season.get("id", "")
-                                season_number_extracted = None
-                                if season_id.startswith("season"):
-                                    match = re.match(r"season(\d+)", season_id)
-                                    if match:
-                                        season_number_extracted = int(match.group(1))
-                                    else:
-                                        self.error_label.setText(f"Unexpected season id format: {season_id}")
-                                        self.error_label.setVisible(True)
-                                else:
-                                    match = re.match(r"\d+:(\d+)", season_id)
-                                    if match:
-                                        season_number_extracted = int(match.group(1))
-                                    else:
-                                        self.error_label.setText(f"Unexpected season id format: {season_id}")
-                                        self.error_label.setVisible(True)
-  
-                                season["season_number"] = season_number_extracted
-                                season["item_type"] = "season"
-                            all_seasons.extend(seasons_data)
-                            total_items = response.json().get(
-                                "js", {}
-                            ).get("total_items", len(all_seasons))
-                            logging.debug(
-                                f"Fetched {len(all_seasons)} seasons out of {total_items}."
-                            )
-                            if len(all_seasons) >= total_items:
-                                break
-                            page_number += 1
-                        else:
-                            self.error_label.setText(f"Failed to fetch seasons for page {page_number} with status code {response.status_code}")
-                            self.error_label.setVisible(True)
-  
-                            break
-
-                    if all_seasons:
-                        tab_info["current_series_info"] = all_seasons
-                        tab_info["current_view"] = "seasons"
-                        self.update_series_view(tab_name)
-                else:
-                    # Fetch episodes for the given season
-                    series_list = context_data.get("series", [])
-                    if not series_list:
-                        logging.info("No episodes found in this season.")
-                        return
-
-                    logging.debug(f"Series episodes found: {series_list}")
-                    all_episodes = []
-                    for episode_number in series_list:
-                        episode = {
-                            "id": f"{series_id}:{episode_number}",
-                            "series_id": series_id,
-                            "season_number": season_number,
-                            "episode_number": episode_number,
-                            "name": f"Episode {episode_number}",
-                            "item_type": "episode",
-                            "cmd": context_data.get("cmd"),
-                        }
-                        logging.debug(f"Episode details: {episode}")
-                        all_episodes.append(episode)
-
-                    if all_episodes:
-                        tab_info["current_series_info"] = all_episodes
-                        tab_info["current_view"] = "episodes"
-                        self.update_series_view(tab_name)
-                    else:
-                        logging.info("No episodes found.")
-            else:
-                self.error_label.setText("Failed to retrieve token.")
-                self.error_label.setVisible(True)
-        except KeyError as e:
-            logging.error(f"KeyError retrieving series info: {str(e)}")
-        except Exception as e:
-            logging.error(f"Error retrieving series info: {str(e)}")
-
     def play_channel(self, channel):
         cmd = channel.get("cmd")
         if not cmd:
@@ -2644,16 +2758,28 @@ class MacAttack(QMainWindow):
                     token = get_token(session, url, mac_address)
                     if token:
                         cmd_encoded = quote(cmd)
-                        cookies = { 
-                             "adid": "2bdb5336edffec452536be317345eb2748e18f87",
-                             "debug": "1",
-                             "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
-                             "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
-                             "hw_version": "1.7-BD-00",
-                             "mac": mac_address,
-                             "sn": "1F2E73918FED8",
-                             "stb_lang": "en",
-                             "timezone": "America/Los_Angeles",
+
+                        #convert the mac into various hashes, if anything this will add randomness to the requests
+                        mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
+                        mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
+                        mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
+
+                        
+                        serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
+                        device_id = mac_sha256
+                        device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
+                        device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
+
+                        cookies = {           
+                            "adid": mac_sha1,
+                            "debug": "1",
+                            "device_id2": device_id2,
+                            "device_id": device_id,
+                            "hw_version": "1.7-BD-00",
+                            "mac": mac_address,
+                            "sn": serial[:13], #cut to 13 digits
+                            "stb_lang": "en",
+                            "timezone": "America/Los_Angeles", 
                         }
                         headers = {
                             "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
@@ -2696,17 +2822,30 @@ class MacAttack(QMainWindow):
                 token = get_token(session, url, mac_address)
                 if token:
                     cmd_encoded = quote(cmd)
-                    cookies = {
-                         "adid": "2bdb5336edffec452536be317345eb2748e18f87",
-                         "debug": "1",
-                         "device_id2": "F4A17F3CD21793B7C840DEEA360B11910141827E951DAEB74A3B7058C6B80F37",
-                         "device_id": "493A0F82C1BF86406DAD0191F60870BDFD4A9DCE7911404D51DAAED829B357AF",
-                         "hw_version": "1.7-BD-00",
-                         "mac": mac_address,
-                         "sn": "1F2E73918FED8",
-                         "stb_lang": "en",
-                         "timezone": "America/Los_Angeles",
+
+                    #convert the mac into various hashes, if anything this will add randomness to the requests
+                    mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
+                    mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
+                    mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
+
+                    
+                    serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
+                    device_id = mac_sha256
+                    device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
+                    device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
+
+                    cookies = {           
+                        "adid": mac_sha1,
+                        "debug": "1",
+                        "device_id2": device_id2,
+                        "device_id": device_id,
+                        "hw_version": "1.7-BD-00",
+                        "mac": mac_address,
+                        "sn": serial[:13], #cut to 13 digits
+                        "stb_lang": "en",
+                        "timezone": "America/Los_Angeles",             
                     }
+                    
                     headers = {
                         "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                         "Authorization": f"Bearer {token}",
@@ -2750,29 +2889,6 @@ class MacAttack(QMainWindow):
             QMessageBox.critical(
                 self, "Error", f"Unknown item type: {item_type}"
             )
-
-    def update_series_view(self, tab_name):
-        tab_info = self.tab_data[tab_name]
-        self.playlist_model = tab_info["self.playlist_model"]
-        self.playlist_model.clear()
-
-        if tab_info["navigation_stack"]:
-            go_back_item = QStandardItem("Go Back")
-            self.playlist_model.appendRow(go_back_item)
-
-        for item in tab_info["current_series_info"]:
-            item_type = item.get("item_type")
-            if item_type == "season":
-                name = f"Season {item['season_number']}"
-            elif item_type == "episode":
-                name = f"Episode {item['episode_number']}"
-            else:
-                name = item.get("name") or item.get("title")
-            list_item = QStandardItem(name)
-            list_item.setData(item, Qt.UserRole)
-            list_item.setData(item_type, Qt.UserRole + 1)
-            self.playlist_model.appendRow(list_item)
-        self.search_input.clear()
         
     def launch_videoPlayer(self, stream_url):
         
@@ -2821,7 +2937,35 @@ class MacAttack(QMainWindow):
         logging.error(error_message)
         self.error_label.setText(error_message)
         self.error_label.setVisible(True)
-       
+
+    def modify_vlc_proxy(self, proxy_address):
+        # Determine base_path based on whether the script is frozen or running as a script
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS  # For frozen executables
+        else:
+            base_path = os.path.abspath(".")  # For scripts run directly
+        
+        # Construct the full file path using base_path
+        file_path = os.path.join(base_path, "include", "vlcrc")  # Use os.path.join for proper path construction
+        
+        # Read the file
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+        
+        # Modify the http-proxy line
+        for i, line in enumerate(lines):
+            if "http-proxy=" in line:  # Check if the line contains 'http-proxy='
+                if proxy_address:
+                    # If the proxy_address is provided, update the line
+                    lines[i] = f"http-proxy={proxy_address}\n"
+                else:
+                    # If no proxy_address is provided, reset it to the commented line
+                    lines[i] = "#http-proxy=\n"
+        
+        # Write the modified content back to the file
+        with open(file_path, 'w') as file:
+            file.writelines(lines)
+            
     def mousePressEvent(self, event): #Pause/play video
         # Begin resizing when clicking on the border
         if event.button() == Qt.LeftButton:
