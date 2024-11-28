@@ -22,7 +22,7 @@ import configparser
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-#logging.basicConfig(level=logging.DEBUG)
+####logging.basicConfig(level=logging.DEBUG)
 
 def get_token(session, url, mac_address):
     try:
@@ -573,6 +573,7 @@ class RequestThread(QThread):
                     except requests.RequestException as e:
                         logging.debug(f"Request failed due to {e} - Retrying")
                         logging.error(f"Exception occurred during request: {e}")
+                        break
                 return [], 0
 
             # Initial fetch to get the total number of items
