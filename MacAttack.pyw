@@ -22,7 +22,7 @@ import configparser
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-####logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 
 def get_token(session, url, mac_address):
     try:
@@ -1027,53 +1027,53 @@ class MacAttack(QMainWindow):
             return
 
         for tab_name, tab_data in data.items():
-            tab_info = self.tab_data.get(tab_name)  # Use the dictionary with tab data
-            if not tab_info:
+            self.tab_info = self.tab_data.get(tab_name)  # Use the dictionary with tab data
+            if not self.tab_info:
                 logging.info(f"Unknown tab name: {tab_name}")
                 continue
 
-            tab_info["playlist_data"] = tab_data
-            tab_info["current_category"] = None
-            tab_info["navigation_stack"] = []
+            self.tab_info["playlist_data"] = tab_data
+            self.tab_info["current_category"] = None
+            self.tab_info["navigation_stack"] = []
             self.update_playlist_view(tab_name)
             
         logging.debug("Playlist data loaded into tabs.")
         self.current_request_thread = None
 
     def update_playlist_view(self, tab_name):
-        tab_info = self.tab_data[tab_name]
-        self.playlist_model = tab_info["self.playlist_model"]
+        self.tab_info = self.tab_data[tab_name]
+        self.playlist_model = self.tab_info["self.playlist_model"]
         self.playlist_model.clear()
-        tab_info["current_view"] = "categories"
+        self.tab_info["current_view"] = "categories"
         
-        self.playlist_view = tab_info["playlist_view"]  
+        self.playlist_view = self.tab_info["playlist_view"]  
 
-        if tab_info["navigation_stack"]:
+        if self.tab_info["navigation_stack"]:
             go_back_item = QStandardItem("Go Back")
             self.playlist_model.appendRow(go_back_item)
 
-        if tab_info["current_category"] is None:
-            for item in tab_info["playlist_data"]:
+        if self.tab_info["current_category"] is None:
+            for item in self.tab_info["playlist_data"]:
                 name = item["name"]
                 list_item = QStandardItem(name)
                 list_item.setData(item, Qt.UserRole)
                 list_item.setData("category", Qt.UserRole + 1)
                 self.playlist_model.appendRow(list_item)
         else:
-            self.retrieve_channels(tab_name, tab_info["current_category"])
+            self.retrieve_channels(tab_name, self.tab_info["current_category"])
         self.search_input.clear()
 
     def update_channel_view(self, tab_name):
-        tab_info = self.tab_data[tab_name]
-        self.playlist_model = tab_info["self.playlist_model"]
+        self.tab_info = self.tab_data[tab_name]
+        self.playlist_model = self.tab_info["self.playlist_model"]
         self.playlist_model.clear()
-        tab_info["current_view"] = "channels"
+        self.tab_info["current_view"] = "channels"
 
-        if tab_info["navigation_stack"]:
+        if self.tab_info["navigation_stack"]:
             go_back_item = QStandardItem("Go Back")
             self.playlist_model.appendRow(go_back_item)
 
-        for channel in tab_info["current_channels"]:
+        for channel in self.tab_info["current_channels"]:
             channel_name = channel["name"]
             list_item = QStandardItem(channel_name)
             list_item.setData(channel, Qt.UserRole)
@@ -1111,34 +1111,36 @@ class MacAttack(QMainWindow):
             logging.debug("Received channels from an old thread. Ignoring.")
             return  # Ignore signals from older threads
 
-        tab_info = self.tab_data[tab_name]
-        tab_info["current_channels"] = channels
+        self.tab_info = self.tab_data[tab_name]
+        self.tab_info["current_channels"] = channels
         self.update_channel_view(tab_name)
         logging.debug(f"Channels loaded for tab {tab_name}: {len(channels)} items.")
         self.current_request_thread = None  # Reset the current thread
                 
     def filter_playlist(self):
         search_term = self.search_input.text().lower()
-
-        for tab_name, tab_info in self.tab_data.items():
-            # Retrieve the playlist model
-            playlist_model = tab_info.get("self.playlist_model")
+        for tab_name, self.tab_info in self.tab_data.items():
+            # Retrieve the playlist model and current view data
+            playlist_model = self.tab_info.get("self.playlist_model")
             if not playlist_model:
                 logging.debug(f"Warning: No 'playlist_model' found for tab '{tab_name}'. Skipping.")
                 continue
 
-            # Get the current data from tab_info
-            playlist_data = tab_info.get("playlist_data", [])
-            current_channels = tab_info.get("current_channels", [])
-            current_series_info = tab_info.get("current_series_info", [])
+            current_view = self.tab_info.get("current_view")
+            self.visible_data = self.tab_info.get("playlist_data", [])
 
-            # Perform filtering on playlists, channels, and series list
-            filtered_playlist = self._filter_items(playlist_data, search_term)
-            filtered_channels = self._filter_items(current_channels, search_term)
-            filtered_series = self._filter_items(current_series_info, search_term)
+            # Filter the visible data
+            filtered_data = self._filter_items(self.visible_data, search_term)
 
-            # Rebuild the playlist model with the filtered data
-            self._populate_playlist_model(playlist_model, filtered_channels, filtered_playlist, filtered_series)
+            # Filter other related data (channels, series) if necessary
+            filtered_channels = self._filter_items(self.tab_info.get("current_channels", []), search_term)
+            filtered_series = self._filter_items(self.tab_info.get("current_series_info", []), search_term)
+
+            # Update the playlist model with the filtered data
+            self._populate_playlist_model(playlist_model, filtered_channels, filtered_data, filtered_series)
+
+            # Log what was filtered
+            logging.debug(f"Filtered {len(filtered_data)} items for tab '{tab_name}' in view '{current_view}'.")
 
     def _populate_playlist_model(self, playlist_model, channels, playlists, series):
         """Helper function to clear and populate the playlist model."""
@@ -1236,11 +1238,11 @@ class MacAttack(QMainWindow):
 
     def retrieve_series_info(self, tab_name, context_data, season_number=None):
         # Add the current series/seasons to the navigation stack
-        tab_info = self.tab_data[tab_name]
+        self.tab_info = self.tab_data[tab_name]
         if not season_number:
-            tab_info["navigation_stack"].append(context_data)
+            self.tab_info["navigation_stack"].append(context_data)
         else:
-            tab_info["navigation_stack"].append({"season_number": season_number})
+            self.tab_info["navigation_stack"].append({"season_number": season_number})
         try:
             session = requests.Session()
             retry_strategy = Retry(
@@ -1347,8 +1349,8 @@ class MacAttack(QMainWindow):
                             break
 
                     if all_seasons:
-                        tab_info["current_series_info"] = all_seasons
-                        tab_info["current_view"] = "seasons"
+                        self.tab_info["current_series_info"] = all_seasons
+                        self.tab_info["current_view"] = "seasons"
                         self.update_series_view(tab_name)
                 else:
                     # Fetch episodes for the given season
@@ -1373,8 +1375,8 @@ class MacAttack(QMainWindow):
                         all_episodes.append(episode)
 
                     if all_episodes:
-                        tab_info["current_series_info"] = all_episodes
-                        tab_info["current_view"] = "episodes"
+                        self.tab_info["current_series_info"] = all_episodes
+                        self.tab_info["current_view"] = "episodes"
                         self.update_series_view(tab_name)
                     else:
                         logging.info("No episodes found.")
@@ -1387,17 +1389,17 @@ class MacAttack(QMainWindow):
             logging.error(f"Error retrieving series info: {str(e)}")
         
     def update_series_view(self, tab_name):
-        tab_info = self.tab_data[tab_name]
-        self.playlist_model = tab_info["self.playlist_model"]
+        self.tab_info = self.tab_data[tab_name]
+        self.playlist_model = self.tab_info["self.playlist_model"]
         self.playlist_model.clear()
 
-        if tab_info["navigation_stack"]:
+        if self.tab_info["navigation_stack"]:
             go_back_item = QStandardItem("Go Back")
             self.playlist_model.appendRow(go_back_item)
 
         # If we're viewing seasons or episodes, only show those, not the full series list.
-        if tab_info["current_view"] == "seasons":
-            for item in tab_info["current_series_info"]:
+        if self.tab_info["current_view"] == "seasons":
+            for item in self.tab_info["current_series_info"]:
                 item_type = item.get("item_type")
                 if item_type == "season":
                     name = f"Season {item['season_number']}"
@@ -1407,8 +1409,8 @@ class MacAttack(QMainWindow):
                 list_item.setData(item, Qt.UserRole)
                 list_item.setData(item_type, Qt.UserRole + 1)
                 self.playlist_model.appendRow(list_item)
-        elif tab_info["current_view"] == "episodes":
-            for item in tab_info["current_series_info"]:
+        elif self.tab_info["current_view"] == "episodes":
+            for item in self.tab_info["current_series_info"]:
                 item_type = item.get("item_type")
                 if item_type == "episode":
                     name = f"Episode {item['episode_number']}"
@@ -1418,6 +1420,31 @@ class MacAttack(QMainWindow):
                     self.playlist_model.appendRow(list_item)
 
         self.search_input.clear()
+
+    def go_back(self):
+        # When going back, ensure we reset to the unfiltered data from the current page
+        for tab_name, self.tab_info in self.tab_data.items():
+            playlist_model = self.tab_info.get("self.playlist_model")
+            if not playlist_model:
+                logging.debug(f"Warning: No 'playlist_model' found for tab '{tab_name}'. Skipping.")
+                continue
+            
+            # Clear the filter state and store the current view data before applying the filter
+            self.is_filter_active = False
+            self.previous_data[tab_name] = {
+                'channels': self.tab_info.get("current_channels", []),
+                'playlists': self.tab_info.get("playlist_data", []),
+                'series': self.tab_info.get("current_series_info", [])
+            }
+
+            # Rebuild the model with unfiltered data
+            self._populate_playlist_model(playlist_model, 
+                                           self.previous_data[tab_name]['channels'],
+                                           self.previous_data[tab_name]['playlists'],
+                                           self.previous_data[tab_name]['series'])
+
+            logging.debug(f"Reverted to unfiltered data for tab '{tab_name}'.")
+
 
     def update_proxy(self):
         
@@ -2637,8 +2664,8 @@ class MacAttack(QMainWindow):
     def on_playlist_selection_changed(self, index):
         sender = self.sender()
         current_tab = None
-        for tab_name, tab_info in self.tab_data.items():
-            if sender == tab_info["playlist_view"]:
+        for tab_name, self.tab_info in self.tab_data.items():
+            if sender == self.tab_info["playlist_view"]:
                 current_tab = tab_name
                 break
         else:
@@ -2646,8 +2673,8 @@ class MacAttack(QMainWindow):
             self.error_label.setVisible(True)
             return
 
-        tab_info = self.tab_data[current_tab]
-        self.playlist_model = tab_info["self.playlist_model"]
+        self.tab_info = self.tab_data[current_tab]
+        self.playlist_model = self.tab_info["self.playlist_model"]
 
         if index.isValid():
             item = self.playlist_model.itemFromIndex(index)
@@ -2655,19 +2682,30 @@ class MacAttack(QMainWindow):
 
             # Handle 'Go Back' functionality separately
             if item_text == "Go Back":
-                if tab_info["navigation_stack"]:
-                    nav_state = tab_info["navigation_stack"].pop()
-                    tab_info["current_category"] = nav_state.get("category", "default_category_value")
-                    tab_info["current_view"] = nav_state.get("view", "default_view_value")
-                    tab_info["current_series_info"] = nav_state.get("series_info", None)
-                    logging.debug(f"Go Back to view: {tab_info['current_view']}")
+                self.visible_data = self.tab_info.get("playlist_data", [])
+                if self.tab_info["navigation_stack"]:
+                    print(f"NAV STACK{self.tab_info["navigation_stack"]}")
 
-                    if tab_info["current_view"] == "categories":
+                    
+                    nav_state = self.tab_info["navigation_stack"].pop()
+                    self.tab_info["current_category"] = nav_state.get("category", "default_category_value")
+                    self.tab_info["current_view"] = nav_state.get("view", "default_view_value")
+                    self.tab_info["current_series_info"] = nav_state.get("series_info", None)
+                    logging.debug(f"Go Back to view: {self.tab_info['current_view']}")
+
+                    if self.tab_info["current_view"] == "categories":
                         self.update_playlist_view(current_tab)
-                    elif tab_info["current_view"] == "channels":
+                    elif self.tab_info["current_view"] == "channels":
                         self.update_channel_view(current_tab)
-                    elif tab_info["current_view"] in ["seasons", "episodes"]:
+                                     
+##TODO fix this, have to click the go back item twice to nav back                        
+                    elif self.tab_info["current_view"] == "seasons":
                         self.update_series_view(current_tab)
+                    elif self.tab_info["current_view"] == "episodes":
+                        self.update_series_view(current_tab)
+                        
+                        
+                        
                 else:
                     logging.debug("Navigation stack is empty. Cannot go back.")
                     self.get_playlist()
@@ -2678,44 +2716,45 @@ class MacAttack(QMainWindow):
                 logging.debug(f"Item data: {item_data}, item type: {item_type}")
 
                 if item_type == "category":
-                    tab_info["navigation_stack"].append(
+                    self.tab_info["navigation_stack"].append(
                         {
-                            "category": tab_info["current_category"],
-                            "view": tab_info["current_view"],
-                            "series_info": tab_info["current_series_info"],
+                            "category": self.tab_info["current_category"],
+                            "view": self.tab_info["current_view"],
+                            "series_info": self.tab_info["current_series_info"],
                         }
                     )
-                    tab_info["current_category"] = item_data
+                    self.tab_info["current_category"] = item_data
                     logging.debug(f"Navigating to category: {item_data.get('name')}")
-                    self.retrieve_channels(current_tab, tab_info["current_category"])
+                    self.retrieve_channels(current_tab, self.tab_info["current_category"])
 
                 elif item_type == "series":
                     # Clear the series list when navigating to a specific series (only seasons should be shown now)
-                    tab_info["navigation_stack"].append(
+                    self.tab_info["navigation_stack"].append(
                         {
-                            "category": tab_info["current_category"],
-                            "view": tab_info["current_view"],
-                            "series_info": tab_info["current_series_info"],
+                            "category": self.tab_info["current_category"],
+                            "view": self.tab_info["current_view"],
+                            "series_info": self.tab_info["current_series_info"],
                         }
                     )
-                    tab_info["current_category"] = item_data
-                    tab_info["current_view"] = "seasons"  # Update the view to "seasons"
+                    self.tab_info["current_category"] = item_data
+                    self.tab_info["current_view"] = "seasons"  # Update the view to "seasons"
                     self.update_series_view(current_tab)  # Only seasons should be shown now
 
                     logging.debug(f"Navigating to series: {item_data.get('name')}")
                     self.retrieve_series_info(current_tab, item_data)
 
                 elif item_type == "season":
-                    tab_info["navigation_stack"].append(
+                    self.tab_info["navigation_stack"].append(
                         {
-                            "category": tab_info["current_category"],
-                            "view": tab_info["current_view"],
-                            "series_info": tab_info["current_series_info"],
+                            "category": self.tab_info["current_category"],
+                            "view": self.tab_info["current_view"],
+                            "series_info": self.tab_info["current_series_info"],
                         }
                     )
-                    tab_info["current_category"] = item_data
-                    tab_info["current_view"] = "episodes"  # If it's a season, show episodes now
+                    self.tab_info["current_category"] = item_data
+                    self.tab_info["current_view"] = "episodes"  # If it's a season, show episodes now
                     self.update_series_view(current_tab)
+                    
 
                     logging.debug(f"Fetching episodes for season {item_data['season_number']} in series {item_data['name']}")
                     self.retrieve_series_info(
@@ -2735,7 +2774,7 @@ class MacAttack(QMainWindow):
                 else:
                     self.error_label.setText("Unknown item type")
                     self.error_label.setVisible(True)
-    
+            
     def play_channel(self, channel):
         cmd = channel.get("cmd")
         if not cmd:
