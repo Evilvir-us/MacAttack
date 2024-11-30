@@ -22,7 +22,7 @@ import configparser
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 
 def get_token(session, url, mac_address):
     try:
@@ -1478,14 +1478,24 @@ class MacAttack(QMainWindow):
         logging.debug(f'--config={base_path}\\include\\vlcrc')
         self.instance = vlc.Instance(
             [
-                f'--config={base_path}\\include\\vlcrc', #config file holding the proxy info
-                f'--http-proxy={proxy_address}',  # setting proxy by commandline
-                f'--http-referrer={referer_url}',   # Set the referer URL (from QLineEdit)
-                '--repeat',                     # keep connected if kicked off
-                '--no-xlib',                    
-                '--vout=directx',               
-                '--no-plugins-cache',
-                '--log-verbose=1'
+                f'--config={base_path}\\include\\vlcrc',# config file holding the proxy info
+                f'--http-proxy={proxy_address}',        # setting proxy by commandline
+                f'--http-referrer={referer_url}',       # Set the referer URL (from QLineEdit)
+                '--repeat',                             # Keep connected if kicked off
+                '--no-xlib',                            # Disable X11 on Linux (if you're on Linux)
+                '--vout=directx',                       # Video output method for Windows
+                '--no-plugins-cache',                   # Don't cache plugins
+                '--log-verbose=1',                      # Verbose logging
+                '--network-caching=1000',               # Increase the network caching (in milliseconds) for smoother playback
+                '--live-caching=1000',                  # Caching for live streams, can help with interruptions
+                '--reconnect',                          # Enable automatic reconnection
+                '--reconnect-streams=10',               # Try reconnecting this many times
+                '--reconnect-delay=3',                  # Delay between reconnect attempts (in seconds)
+                '--reconnect-timeout=5',                # Timeout for each reconnect attempt
+                '--network-caching=3000',               # Increase network buffer size (in ms)
+                '--file-caching=3000',                  # Increase file buffer size (in ms)
+                '--live-caching=3000',                  # Increase live stream buffer size (in ms)
+                '--sout-mux-caching=2000',              # Increase muxing buffer                
             ]
         )
         self.videoPlayer = self.instance.media_player_new()
@@ -2679,6 +2689,7 @@ class MacAttack(QMainWindow):
         if index.isValid():
             item = self.playlist_model.itemFromIndex(index)
             item_text = item.text()
+            print(self.playlist_model.itemFromIndex(index).text())
 
             # Handle 'Go Back' functionality separately
             if item_text == "Go Back":
@@ -2689,7 +2700,7 @@ class MacAttack(QMainWindow):
                     
                     nav_state = self.tab_info["navigation_stack"].pop()
                     self.tab_info["current_category"] = nav_state.get("category", "default_category_value")
-                    self.tab_info["current_view"] = nav_state.get("view", "default_view_value")
+                    self.tab_info["current_view"] = nav_state.get("view", "undefined_view_value")
                     self.tab_info["current_series_info"] = nav_state.get("series_info", None)
                     logging.debug(f"Go Back to view: {self.tab_info['current_view']}")
 
