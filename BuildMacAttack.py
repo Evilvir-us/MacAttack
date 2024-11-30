@@ -28,7 +28,7 @@ def modify_python_file(file_path):
                     file.write("#logging.basicConfig(level=logging.DEBUG)\n")  # Replace with commented version
                 else:
                     file.write(line)
-        print(f"File {file_path} successfully modified.")
+        print(f"File {file_path} #logging.basicConfig(level=logging.DEBUG)\nDebug Logging Disabled")
     except Exception as e:
         print(f"Error modifying file: {e}")
         raise
@@ -44,7 +44,7 @@ def unmodify_python_file(file_path):
                     file.write("logging.basicConfig(level=logging.DEBUG)\n")  # Replace with active version
                 else:
                     file.write(line)
-        print(f"File {file_path} successfully restored.")
+        print(f"File {file_path} logging.basicConfig(level=logging.DEBUG)\nDebug Logging Re-Enabled")
     except Exception as e:
         print(f"Error restoring file: {e}")
         raise

@@ -66,23 +66,20 @@ def get_token(session, url, mac_address):
         return None
 
 class ProxyFetcher(QThread):
-    # Signal to update the proxy output in the UI
-    update_proxy_output_signal = pyqtSignal(str)
-    update_proxy_textbox_signal = pyqtSignal(str)
+    # Define the signal correctly
+    update_proxy_output_signal = pyqtSignal(str)  # Ensure this signal is defined
+    update_proxy_textbox_signal = pyqtSignal(str)  # Another signal to update UI with results
 
     def __init__(self):
         super().__init__()
-        self.proxy_fetching_speed = 10  # Default value
+        self.proxy_fetching_speed = 100  # default fetching speed
+        self.proxy_testing_speed = 200   # default testing speed
 
     def run(self):
         self.fetch_and_test_proxies()
 
     def fetch_and_test_proxies(self):
-        """
-        Fetches and tests proxies, emitting signals to update the UI.
-        """
-        
-        # Fetch proxies
+        # Fetch proxies concurrently
         all_proxies = self.fetch_proxies()
 
         if not all_proxies:
@@ -95,11 +92,12 @@ class ProxyFetcher(QThread):
         self.update_proxy_output_signal.emit(f"Total proxies fetched: {original_count}\n")
         self.update_proxy_output_signal.emit(f"Duplicates removed: {duplicates_removed}\n")
 
-        # Test proxies
+        # Test proxies concurrently using the testing speed
         working_proxies = []
         self.update_proxy_output_signal.emit("Testing proxies...")
 
-        with ThreadPoolExecutor(max_workers=self.proxy_fetching_speed*10) as executor:
+        # Increase `max_workers` for faster testing
+        with ThreadPoolExecutor(max_workers=self.proxy_testing_speed) as executor:
             future_to_proxy = {executor.submit(self.test_proxy, proxy): proxy for proxy in all_proxies}
             for future in as_completed(future_to_proxy):
                 proxy = future_to_proxy[future]
@@ -119,74 +117,60 @@ class ProxyFetcher(QThread):
         else:
             self.update_proxy_output_signal.emit("No working proxies found.")
 
-           
     def fetch_proxies(self):
+        proxies = []
+        sources = [
+            "https://spys.me/proxy.txt",
+            "https://free-proxy-list.net/",
+            "https://www.sslproxies.org/",
+            "https://www.freeproxy.world/?type=http&anonymity=&country=&speed=&port=&page=1"
+        ]
+
+        # Use the proxy fetching speed for concurrent fetching
+        with ThreadPoolExecutor(max_workers=self.proxy_fetching_speed) as executor:
+            futures = {executor.submit(self.fetch_from_source, url): url for url in sources}
+            for future in as_completed(futures):
+                source_url = futures[future]
+                try:
+                    source_proxies = future.result()
+                    proxies.extend(source_proxies)
+                except Exception as e:
+                    self.update_proxy_output_signal.emit(f"Error fetching from {source_url}: {e}")
+
+        return proxies
+
+    def fetch_from_source(self, url):
         """
-        Fetch proxies from different sources and return them as a list of strings.
-        This method will bypass the main thread's proxy if one is set.
+        Fetch proxies from a given URL.
         """
         proxies = []
-        
-        # Temporarily disable the main proxy if it's set
-        current_proxies = requests.Session().proxies  # This gets the session proxy
-        if current_proxies:
-            # Store current proxy settings to restore them later
-            original_proxies = current_proxies.copy()
-            # Remove proxy for this function
-            requests.Session().proxies = {}
-        else:
-            original_proxies = None
-
         try:
-            # Fetch proxy data from spys.me
-            response_spys = requests.get("https://spys.me/proxy.txt", timeout=10)
-            if response_spys.status_code == 200:
-                regex = r"[0-9]+(?:\.[0-9]+){3}:[0-9]+"
-                matches = re.finditer(regex, response_spys.text, re.MULTILINE)
-                proxies.extend([match.group() for match in matches])
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                if 'spys.me' in url:
+                    regex = r"[0-9]+(?:\.[0-9]+){3}:[0-9]+"
+                    matches = re.finditer(regex, response.text, re.MULTILINE)
+                    proxies.extend([match.group() for match in matches])
+                elif 'free-proxy-list.net' in url:
+                    html_content = response.text
+                    ip_port_pattern = re.compile(r"<td>(\d+\.\d+\.\d+\.\d+)</td><td>(\d+)</td>")
+                    matches = ip_port_pattern.findall(html_content)
+                    proxies.extend([f"{ip}:{port}" for ip, port in matches])
+                elif 'sslproxies.org' in url:
+                    html_content = response.text
+                    ip_port_pattern = re.compile(r"<td>(\d+\.\d+\.\d+\.\d+)</td><td>(\d+)</td>")
+                    matches = ip_port_pattern.findall(html_content)
+                    proxies.extend([f"{ip}:{port}" for ip, port in matches])
+                elif 'freeproxy.world' in url:
+                    html_content = response.text
+                    ip_port_pattern = re.compile(
+                        r'<td class="show-ip-div">\s*(\d+\.\d+\.\d+\.\d+)\s*</td>\s*'
+                        r'<td>\s*<a href=".*?">(\d+)</a>\s*</td>'
+                    )
+                    matches = ip_port_pattern.findall(html_content)
+                    proxies.extend([f"{ip}:{port}" for ip, port in matches])
         except requests.exceptions.RequestException as e:
-            self.update_proxy_output_signal.emit(f"Error scraping proxies 1")
-        
-        try:
-            # Fetch proxy data from free-proxy-list.net
-            response_free_proxy = requests.get("https://free-proxy-list.net/", timeout=10)
-            if response_free_proxy.status_code == 200:
-                html_content = response_free_proxy.text
-                ip_port_pattern = re.compile(r"<td>(\d+\.\d+\.\d+\.\d+)</td><td>(\d+)</td>")
-                matches = ip_port_pattern.findall(html_content)
-                proxies.extend([f"{ip}:{port}" for ip, port in matches])
-        except requests.exceptions.RequestException as e:
-            self.update_proxy_output_signal.emit(f"Error scraping proxies 2")
-        
-        try:
-            # Fetch proxy data from sslproxies.org
-            response_sslproxies = requests.get("https://www.sslproxies.org/", timeout=10)
-            if response_sslproxies.status_code == 200:
-                html_content = response_sslproxies.text
-                ip_port_pattern = re.compile(r"<td>(\d+\.\d+\.\d+\.\d+)</td><td>(\d+)</td>")
-                matches = ip_port_pattern.findall(html_content)
-                proxies.extend([f"{ip}:{port}" for ip, port in matches])
-        except requests.exceptions.RequestException as e:
-            self.update_proxy_output_signal.emit(f"Error scraping proxies 3")
-        
-        try:
-            # Fetch proxy data from https://www.freeproxy.world/
-            response_freeproxyworld = requests.get("https://www.freeproxy.world/", timeout=10)
-            if response_freeproxyworld.status_code == 200:
-                html_content = response_freeproxyworld.text
-                ip_port_pattern = re.compile(
-                    r'<td class="show-ip-div">\s*(\d+\.\d+\.\d+\.\d+)\s*</td>\s*'
-                    r'<td>\s*<a href=".*?">(\d+)</a>\s*</td>'
-                ) 
-                matches = ip_port_pattern.findall(html_content)
-                proxies.extend([f"{ip}:{port}" for ip, port in matches])
-        except requests.exceptions.RequestException as e:
-            self.update_proxy_output_signal.emit(f"Error scraping proxies 4")
-
-        # Restore the original proxy settings if they were removed
-        if original_proxies is not None:
-            requests.Session().proxies = original_proxies
-
+            logging.debug(f"Error fetching from {url}: {e}")
         return proxies
 
     def test_proxy(self, proxy):
@@ -204,7 +188,6 @@ class ProxyFetcher(QThread):
                 return proxy, True
         except requests.RequestException as e:
             logging.debug(f"Error testing proxy {proxy}: {str(e)}")
-            #self.update_proxy_output_signal.emit(f"Error testing proxy {proxy}: {str(e)}")
         return proxy, False
 
 class RequestThread(QThread):
@@ -1600,7 +1583,7 @@ class MacAttack(QMainWindow):
         # Speed input (Slider)
         self.proxy_speed_label = QLabel("Speed:")
         self.proxy_concurrent_tests = QSlider(Qt.Horizontal)  # Changed from QSpinBox to QSlider
-        self.proxy_concurrent_tests.setRange(1, 100)  # Range from 1 to 2000
+        self.proxy_concurrent_tests.setRange(1, 100)  # Range from 1 to 100
         self.proxy_concurrent_tests.setValue(100)  # Default value of 100
         self.proxy_concurrent_tests.setTickPosition(QSlider.TicksBelow)  # Show ticks below the slider
         self.proxy_concurrent_tests.setTickInterval(50)  # Interval between tick marks for better granularity
@@ -1670,7 +1653,13 @@ class MacAttack(QMainWindow):
         self.proxy_count_label.setText(f"Proxies: {proxy_count}")    
     
     def update_proxy_fetching_speed(self, value):
+        # Log the value to confirm it's being passed correctly
+        print(f"Setting proxy fetching speed to: {value}")
+        
+        # Update the speed for fetching and testing proxies
         self.proxy_fetcher.proxy_fetching_speed = value
+        self.proxy_fetcher.proxy_testing_speed = value * 3  # Increase testing speed proportionally
+        
         self.proxy_output.append(f"Proxy fetching speed set at: {value}")
         self.proxy_speed_value_label.setText(str(self.proxy_concurrent_tests.value()))
     
@@ -2225,7 +2214,7 @@ class MacAttack(QMainWindow):
                                     password = path_parts[1]
                                     logging.debug(f"Username: {username}")
                                     logging.debug(f"Password: {password}")
-                                    logging.debug(f"M3U: {domain_and_port}/get.php?username={username}&password={password}&type=m3u_plus")
+                                    logging.debug(f"M3U: {domain_and_port}/get.php?username={username}&password={password}&type=m3u_plus&output=ts")
                                     #m3ufound = 0 #disable it by changing it to 0
                                     m3ufound = 1
                                 else:
@@ -2261,7 +2250,7 @@ class MacAttack(QMainWindow):
                                         f"{'MAC:':<10} {mac}\n"
                                         f"{'Expiry:':<10} {expiry}\n"
                                         f"{'Channels:':<10} {count}\n"
-                                        f"{'M3U:':<10} {self.base_url}/get.php?username={username}&password={password}&type=m3u_plus\n\n"
+                                        f"{'M3U:':<10} {self.base_url}/get.php?username={username}&password={password}&type=m3u_plus&output=ts\n\n"
                                     )
 
                                     self.update_output_text_signal.emit(result_message)
@@ -2511,8 +2500,8 @@ class MacAttack(QMainWindow):
                     else:
                         
                             #self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
-                        #print(f"{str(e)}")
-                        print(f"Raw Response Content:\n{mac}\n%s", res.text)
+                        #logging.debug(f"{str(e)}")
+                        logging.debug(f"Raw Response Content:\n{mac}\n%s", res.text)
                     self.error_count += 1
         
     def remove_proxy(self, proxy, proxy_error_counts):
@@ -2689,13 +2678,13 @@ class MacAttack(QMainWindow):
         if index.isValid():
             item = self.playlist_model.itemFromIndex(index)
             item_text = item.text()
-            print(self.playlist_model.itemFromIndex(index).text())
+            logging.debug(self.playlist_model.itemFromIndex(index).text())
 
             # Handle 'Go Back' functionality separately
             if item_text == "Go Back":
                 self.visible_data = self.tab_info.get("playlist_data", [])
                 if self.tab_info["navigation_stack"]:
-                    print(f"NAV STACK{self.tab_info["navigation_stack"]}")
+                    logging.debug(f"NAV STACK{self.tab_info["navigation_stack"]}")
 
                     
                     nav_state = self.tab_info["navigation_stack"].pop()
