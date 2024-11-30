@@ -18,14 +18,14 @@ def run_pyinstaller():
         raise
 
 def modify_python_file(file_path):
-    """Disable debugging."""
+    """Disable debugging by replacing logging.basicConfig with the commented version."""
     try:
         with open(file_path, 'r') as file:
             lines = file.readlines()
         with open(file_path, 'w') as file:
             for line in lines:
-                if "logging.basicConfig(level=logging.DEBUG)" in line:
-                    file.write("#" + line)
+                if "logging.basicConfig" in line:
+                    file.write("#logging.basicConfig(level=logging.DEBUG)\n")  # Replace with commented version
                 else:
                     file.write(line)
         print(f"File {file_path} successfully modified.")
@@ -34,14 +34,14 @@ def modify_python_file(file_path):
         raise
 
 def unmodify_python_file(file_path):
-    """Re-enable debugging."""
+    """Re-enable debugging by replacing the commented logging.basicConfig with the active version."""
     try:
         with open(file_path, 'r') as file:
             lines = file.readlines()
         with open(file_path, 'w') as file:
             for line in lines:
-                if line.strip().startswith("#logging.basicConfig(level=logging.DEBUG)"):
-                    file.write(line.lstrip('#').lstrip())
+                if "#logging.basicConfig" in line:
+                    file.write("logging.basicConfig(level=logging.DEBUG)\n")  # Replace with active version
                 else:
                     file.write(line)
         print(f"File {file_path} successfully restored.")
