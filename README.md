@@ -47,7 +47,7 @@ For testing portal security:
 
 ---
 
-### **Mac VideoPlayer Tab**\
+### **Mac VideoPlayer Tab**
 *A modification of the open source project [IPTV-MAC-STALKER-PLAYER](https://github.com/Cyogenus/IPTV-MAC-STALKER-PLAYER)*\
 For accessing and testing playlists:
 
