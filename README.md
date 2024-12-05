@@ -32,7 +32,7 @@ Testing stalker portals can take varying amounts of time depending on the portal
 
 ---
 
-### **MacAttack Tab**  
+### **MacAttack Tab**
 For testing portal security:
 
 1. Navigate to the **Proxies** tab.  
@@ -47,7 +47,8 @@ For testing portal security:
 
 ---
 
-### **Mac VideoPlayer Tab**  
+### **Mac VideoPlayer Tab**\
+*A modification of the open source project [IPTV-MAC-STALKER-PLAYER](https://github.com/Cyogenus/IPTV-MAC-STALKER-PLAYER)*\
 For accessing and testing playlists:
 
 1. Enter your portal's URL in the first box.  
