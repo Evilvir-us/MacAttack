@@ -17,6 +17,7 @@ import requests
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
+import socket
 from urllib.parse import quote, urlparse, urlunparse
 import configparser
 from requests.adapters import HTTPAdapter
@@ -1654,7 +1655,7 @@ class MacAttack(QMainWindow):
     
     def update_proxy_fetching_speed(self, value):
         # Log the value to confirm it's being passed correctly
-        print(f"Setting proxy fetching speed to: {value}")
+        logging.info(f"Setting proxy fetching speed to: {value}")
         
         # Update the speed for fetching and testing proxies
         self.proxy_fetcher.proxy_fetching_speed = value
@@ -1737,6 +1738,15 @@ class MacAttack(QMainWindow):
         # autopause checkbox
         self.autopause_checkbox = QCheckBox("Pause the video when switching tabs")
         Settings_layout.addWidget(self.autopause_checkbox)
+        Settings_layout.addSpacing(15)  # Adds space
+
+        # More Output
+        self.moreoutput_checkbox = QCheckBox("Enhanced Output Logs (more info).")
+        Settings_layout.addWidget(self.moreoutput_checkbox)
+        
+        # single output file
+        self.singleoutputfile_checkbox = QCheckBox("Only create 1 output file\n(Output logs will be saved in the file MacAttackOutput.txt.)")
+        Settings_layout.addWidget(self.singleoutputfile_checkbox)
         Settings_layout.addSpacing(15)  # Adds space
 
         # Ludicrous speed checkbox
@@ -1943,7 +1953,9 @@ class MacAttack(QMainWindow):
             'proxy_list': self.proxy_textbox.toPlainText(),
             'proxy_concurrent_tests': str(self.proxy_concurrent_tests.value()),
             'proxy_remove_errorcount': str(self.proxy_remove_errorcount.value()),
-            'ludicrous_speed': str(self.ludicrous_speed_checkbox.isChecked())  # Save Ludicrous speed state
+            'ludicrous_speed': str(self.ludicrous_speed_checkbox.isChecked()),  # Save Ludicrous speed state
+            'moreoutput': str(self.moreoutput_checkbox.isChecked()),  # Save Enhanced Output Logs state
+            'singleoutputfile': str(self.singleoutputfile_checkbox.isChecked())  # Save Single Output File state
         }
         
         config['Window'] = {
@@ -1959,8 +1971,6 @@ class MacAttack(QMainWindow):
 
     def load_settings(self):
         """Load user settings from the configuration file and apply them to the UI elements, including the active tab."""
-
-        
         user_dir = os.path.expanduser('~')
         file_path = os.path.join(user_dir, 'evilvir.us', 'MacAttack.ini')
         
@@ -1984,6 +1994,14 @@ class MacAttack(QMainWindow):
             # Load Ludicrous speed checkbox state
             ludicrous_speed_state = config.get('Settings', 'ludicrous_speed', fallback="False")
             self.ludicrous_speed_checkbox.setChecked(ludicrous_speed_state == "True")
+            
+            # Load Enhanced Output Logs checkbox state
+            moreoutput_state = config.get('Settings', 'moreoutput', fallback="False")
+            self.moreoutput_checkbox.setChecked(moreoutput_state == "True")
+            
+            # Load Single Output File checkbox state
+            singleoutputfile_state = config.get('Settings', 'singleoutputfile', fallback="False")
+            self.singleoutputfile_checkbox.setChecked(singleoutputfile_state == "True")
             
             # Load other proxy settings
             self.proxy_textbox.setPlainText(config.get('Settings', 'proxy_list', fallback=""))
@@ -2203,23 +2221,25 @@ class MacAttack(QMainWindow):
                                 logging.debug(cmd_value4)
 
                                 parsed_url = urlparse(cmd_value4)
+                                hostname = parsed_url.hostname
+                                
+                                
                                 domain_and_port = f"{parsed_url.scheme}://{parsed_url.hostname}:{parsed_url.port}" if parsed_url.port else f"{parsed_url.scheme}://{parsed_url.hostname}"
 
                                 logging.debug(f"Real Host: {domain_and_port}")
 
                                 path_parts = parsed_url.path.strip("/").split("/")
-                                m3ufound = 0
+                                userfound = 0
                                 if len(path_parts) >= 3:
                                     username = path_parts[0]
                                     password = path_parts[1]
                                     logging.debug(f"Username: {username}")
                                     logging.debug(f"Password: {password}")
-                                    logging.debug(f"M3U: {domain_and_port}/get.php?username={username}&password={password}&type=m3u_plus&output=ts")
-                                    #m3ufound = 0 #disable it by changing it to 0
-                                    m3ufound = 1
+                                    #userfound = 0 #disable it by changing it to 0
+                                    userfound = 1
                                 else:
                                     logging.debug("Less than 2 subdirectories found in the path.")
-                                    m3ufound = 0
+                                    userfound = 0
 
                                 try:
                                     response_data = json.loads(res3.text)
@@ -2243,28 +2263,67 @@ class MacAttack(QMainWindow):
                                     output_filename = self.OutputMastermind()
                                     self.output_file = open(output_filename, "a")
 
-                                if m3ufound:
-                                    result_message = (
-                                        f"{'Host:':<10} {self.iptv_link}\n"
-                                        f"{'Backend:':<10} {domain_and_port}\n"
-                                        f"{'MAC:':<10} {mac}\n"
-                                        f"{'Expiry:':<10} {expiry}\n"
-                                        f"{'Channels:':<10} {count}\n"
-                                        f"{'M3U:':<10} {self.base_url}/get.php?username={username}&password={password}&type=m3u_plus&output=ts\n\n"
-                                    )
+                                if self.moreoutput_checkbox.isChecked():
+                                    # Helper function to resolve IP addresses
+                                    def resolve_ip_address(hostname, default_message):
+                                        try:
+                                            return socket.gethostbyname(hostname)
+                                        except socket.gaierror:
+                                            logging.info(f"Unable to resolve the IP address for {hostname}.")
+                                            return default_message
 
-                                    self.update_output_text_signal.emit(result_message)
+                                    # Resolve middleware IP address
+                                    parsed_middleware = urlparse(self.base_url)
+                                    middleware_hostname = parsed_middleware.hostname
+                                    middleware_ip_address = resolve_ip_address(middleware_hostname, "No Portal?")
+                                    logging.info(f"The IP address for {middleware_hostname} is {middleware_ip_address}")
+
+                                    # Resolve backend IP address
+                                    backend_ip_address = resolve_ip_address(hostname, "No Backend")
+                                    logging.info(f"The IP address for {hostname} is {backend_ip_address}")
+
+                                    # Determine if middleware and backend are the same
+                                    is_same_host = middleware_hostname == hostname
+                                    host_comparison = "Same middleware and backend" if is_same_host else "Different middleware and backend"
+                                    logging.info(host_comparison)
+
+                                    # Construct the result message
+                                    def generate_result_message(include_user, include_backend):
+                                        base_message = (
+                                            f"{'Portal:':<10} {self.iptv_link}\n"
+                                            f"{'Portal IP:':<10} {middleware_ip_address}\n"
+                                            f"{'MAC:':<10} {mac}\n"
+                                            f"{'Expiry:':<10} {expiry}\n"
+                                            f"{'Channels:':<10} {count}\n"
+                                        )
+                                        backend_message = (
+                                            f"{'Backend:':<10} {domain_and_port}\n"
+                                            f"{'Backend IP:':<10} {backend_ip_address}\n"
+                                        ) if include_backend else ""
+                                        
+                                        user_message = (
+                                            f"{'Username:':<10} {username}\n"
+                                            f"{'Password:':<10} {password}\n"
+                                        ) if include_user else ""
+                                        
+                                        return base_message + backend_message + user_message
+
+                                    # Emit the appropriate message based on backend and username status
+                                    result_message = generate_result_message(userfound, not is_same_host)
+                                    self.update_output_text_signal.emit(result_message)  # No extra newline here
 
                                 else:
+                                    # Simple output message when additional details are not required
                                     result_message = (
                                         f"{'Portal:':<10} {self.iptv_link}\n"
                                         f"{'MAC:':<10} {mac}\n"
                                         f"{'Expiry:':<10} {expiry}\n"
-                                        f"{'Channels:':<10} {count}\n\n"
+                                        f"{'Channels:':<10} {count}\n"
                                     )
-                                    self.update_output_text_signal.emit(result_message)
+                                    self.update_output_text_signal.emit(result_message)  # No extra newline here
 
-                                self.output_file.write(result_message)
+                                # Write to file with a single blank line after each output
+                                self.output_file.write(result_message + '\n')
                                 self.output_file.flush()  # Ensures data is written immediately
                                 if self.successsound_checkbox.isChecked():
                                     sound_thread = threading.Thread(target=self.play_success_sound)
@@ -2581,11 +2640,16 @@ class MacAttack(QMainWindow):
             logging.debug(f"Error playing sound with VLC: {e}")
 
     def OutputMastermind(self):
-        # Fancy file-naming because why not complicate things?
-        current_time = datetime.now().strftime("%m%d_%H%M%S")
-        sanitized_url = self.base_url.replace("http://", "").replace("https://", "").replace("/", "_").replace(":", "-")
-        filename = f"{sanitized_url}_{current_time}.txt"
-        return filename
+        
+        if self.singleoutputfile_checkbox.isChecked():
+            filename = "MacAttackOutput.txt"
+            return filename
+        else:
+            # Fancy file-naming because why not complicate things?
+            current_time = datetime.now().strftime("%m%d_%H%M%S")
+            sanitized_url = self.base_url.replace("http://", "").replace("https://", "").replace("/", "_").replace(":", "-")
+            filename = f"{sanitized_url}_{current_time}.txt"
+            return filename
     
     def GiveUp(self):
         # Disable further user input immediately
@@ -2596,7 +2660,7 @@ class MacAttack(QMainWindow):
         self.stop_button.setDisabled(True)
 
         # Set a delay for updating the brute_mac_label
-        QTimer.singleShot(3000, lambda: self.brute_mac_label.setText(
+        QTimer.singleShot(4000, lambda: self.brute_mac_label.setText(
             "Please Wait...\nThere are proxies in the background finishing their tasks."
         ))
 
