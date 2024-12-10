@@ -26,120 +26,119 @@ import urllib.parse
 logging.basicConfig(level=logging.DEBUG)
 
 def get_token(session, url, mac_address):
-    
-    serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
-    sn = serialnumber[0:13]
-    snlast = serialnumber[13:19]
-    device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
-    device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
-    hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
-    signature_string = f'{sn}{mac_address}'
-    signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-    metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': random.random()}
-    json_string = json.dumps(metrics)
-    encoded_string = urllib.parse.quote(json_string)        
+    try:
+        serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+        sn = serialnumber[0:13]
+        snlast = serialnumber[13:19]
+        device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
+        device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
+        hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+        signature_string = f'{sn}{mac_address}'
+        signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
+        metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': random.random()}
+        json_string = json.dumps(metrics)
+        encoded_string = urllib.parse.quote(json_string)        
+                  
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+            'Accept-Encoding': 'gzip, deflate, zstd',
+            'Accept': '*/*',
+            'Connection': 'close',
+            'Cache-Control': 'no-cache'
+        }
+
+        cookies = {
+            'adid': hw_version_2,
+            'debug': '1',
+            'device_id2': device_id2,
+            'device_id': device_id,
+            'hw_version': '1.7-B',
+            'mac': mac_address,
+            'sn': sn,
+            'stb_lang': 'en',
+            'timezone': 'America/Los_Angeles'
+        }
+
+        # Send GET request to fetch the version.js file
+        response = requests.get(f"{url}/c/version.js", headers=headers, cookies=cookies)
+
+        # Extract the version number from the response body
+        version = re.search(r"var ver = '(.*)';", response.text)
+        
+        if version:
+            portal_version = version.group(1)
+            logging.debug("Portal Version:", version.group(1))
+        else:
+            portal_version = "5.0"
+            logging.debug("Portal version not found.")
+
+        url = f"{url}/portal.php" #add portal.php for next 2 requests
+
+        # Data for the first request (to get the token)
+        data = {
+            'type': 'stb',
+            'action': 'handshake',
+            'token': '',
+            'prehash': '0'
+        }
+
+        # Step 1: Send the first request to get the token
+        response = requests.post(url, headers=headers, cookies=cookies, data=data)
+
+        # Check if the response is successful
+        if response.status_code == 200:
+            # Parse the JSON response to get the token
+            token = response.json().get("js", {}).get("token")
+            logging.debug("Received Token:", token)
+        else:
+            logging.debug(f"Failed to get token, Status Code: {response.status_code}")
+            return None
             
+        # Step 2: Use the received token to send the second request
+
+        # Update headers for the second request with the Authorization Bearer token
+        headers['Authorization'] = f'Bearer {token}'
+
+        # Data for the second request (get profile)
+        data = {
+            'type': 'stb',
+            'action': 'get_profile',
+            'hd': '1',
+            'ver': f'ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: {portal_version}; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c',
+            'num_banks': '2',
+            'sn': sn,
+            'stb_type': 'MAG250',
+            'client_type': 'STB',
+            'image_version': '218',
+            'video_out': 'hdmi',
+            'device_id': device_id2,
+            'device_id2': device_id2,
+            'signature': signature,
+            'auth_second_step': '1',
+            'hw_version': '1.7-BD-00',
+            'not_valid_token': '0',
+            'metrics': metrics,
+            'hw_version_2': hw_version_2,
+            'timestamp': round(time.time()),
+            'api_signature': '262',
+            'prehash': '0'
+        }
+
+        # Send the second request
+        response = requests.post(url, headers=headers, cookies=cookies, data=data)
+
+        # Output the result of the second request
+        logging.debug("Response Status Code:", response.status_code)
+        logging.debug("Response Text:")
+        logging.debug(response.text)   
         
-    
-
-
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
-        'Accept-Encoding': 'gzip, deflate, zstd',
-        'Accept': '*/*',
-        'Connection': 'close',
-        'Cache-Control': 'no-cache'
-    }
-
-    # Cookies 
-    cookies = {
-        'adid': hw_version_2,
-        'debug': '1',
-        'device_id2': device_id2,
-        'device_id': device_id,
-        'hw_version': '1.7-B',
-        'mac': mac_address,
-        'sn': sn,
-        'stb_lang': 'en',
-        'timezone': 'America/Los_Angeles'
-    }
-
-    # Send GET request to fetch the version.js file
-    response = requests.get(f"{url}/c/version.js", headers=headers, cookies=cookies)
-
-    # Extract the version number from the response body using regular expression
-    version = re.search(r"var ver = '(.*)';", response.text)
-    
-    if version:
-        portal_version = version.group(1)
-        print("Portal Version:", version.group(1))
-    else:
-        portal_version = "5.0"
-        print("Portal version not found.")
-
-    url = f"{url}/portal.php" #add portal.php for next 2 requests
-
-    # Data for the first request (to get the token)
-    data = {
-        'type': 'stb',
-        'action': 'handshake',
-        'token': '',
-        'prehash': '0'
-    }
-
-    # Step 1: Send the first request to get the token
-    response = requests.post(url, headers=headers, cookies=cookies, data=data)
-
-    # Check if the response is successful
-    if response.status_code == 200:
-        # Parse the JSON response to get the token
-        token = response.json().get("js", {}).get("token")
-        print("Received Token:", token)
-    else:
-        print("Failed to get token, Status Code:", response.status_code)
-        exit(1)
+        return token
         
-    # Step 2: Use the received token to send the second request
+    except Exception as e:
+        logging.error(f"Unexpected error in get_token: {e}")
+        return None
 
-    # Update headers for the second request with the Authorization Bearer token
-    headers['Authorization'] = f'Bearer {token}'
-
-    # Data for the second request (get profile)
-    data = {
-        'type': 'stb',
-        'action': 'get_profile',
-        'hd': '1',
-        'ver': f'ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: {portal_version}; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c',
-        'num_banks': '2',
-        'sn': sn,
-        'stb_type': 'MAG250',
-        'client_type': 'STB',
-        'image_version': '218',
-        'video_out': 'hdmi',
-        'device_id': device_id2,
-        'device_id2': device_id2,
-        'signature': signature,
-        'auth_second_step': '1',
-        'hw_version': '1.7-BD-00',
-        'not_valid_token': '0',
-        'metrics': metrics,
-        'hw_version_2': hw_version_2,
-        'timestamp': round(time.time()),
-        'api_signature': '262',
-        'prehash': '0'
-    }
-
-    # Send the second request
-    response = requests.post(url, headers=headers, cookies=cookies, data=data)
-
-    # Output the result of the second request
-    print("Response Status Code:", response.status_code)
-    print("Response Text:")
-    print(response.text)   
-    
-    return token
-    
+        
 class ProxyFetcher(QThread):
     # Define the signal correctly
     update_proxy_output_signal = pyqtSignal(str)  # Ensure this signal is defined
@@ -358,120 +357,7 @@ class RequestThread(QThread):
         # Emit the completed data
         self.request_complete.emit(data)
 
-    def get_token(self, session, url, mac_address):
-        
-        serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
-        sn = serialnumber[0:13]
-        snlast = serialnumber[13:19]
-        device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
-        device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
-        hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
-        signature_string = f'{sn}{mac_address}'
-        signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-        metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': random.random()}
-        json_string = json.dumps(metrics)
-        encoded_string = urllib.parse.quote(json_string)        
-                
-            
-        
 
-
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
-            'Accept-Encoding': 'gzip, deflate, zstd',
-            'Accept': '*/*',
-            'Connection': 'close',
-            'Cache-Control': 'no-cache'
-        }
-
-        # Cookies 
-        cookies = {
-            'adid': hw_version_2,
-            'debug': '1',
-            'device_id2': device_id2,
-            'device_id': device_id,
-            'hw_version': '1.7-B',
-            'mac': mac_address,
-            'sn': sn,
-            'stb_lang': 'en',
-            'timezone': 'America/Los_Angeles'
-        }
-
-        # Send GET request to fetch the version.js file
-        response = requests.get(f"{url}/c/version.js", headers=headers, cookies=cookies)
-
-        # Extract the version number from the response body using regular expression
-        version = re.search(r"var ver = '(.*)';", response.text)
-        
-        if version:
-            portal_version = version.group(1)
-            print("Portal Version:", version.group(1))
-        else:
-            portal_version = "5.0"
-            print("Portal version not found.")
-
-        url = f"{url}/portal.php" #add portal.php for next 2 requests
-
-        # Data for the first request (to get the token)
-        data = {
-            'type': 'stb',
-            'action': 'handshake',
-            'token': '',
-            'prehash': '0'
-        }
-
-        # Step 1: Send the first request to get the token
-        response = requests.post(url, headers=headers, cookies=cookies, data=data)
-
-        # Check if the response is successful
-        if response.status_code == 200:
-            # Parse the JSON response to get the token
-            token = response.json().get("js", {}).get("token")
-            print("Received Token:", token)
-        else:
-            print("Failed to get token, Status Code:", response.status_code)
-            exit(1)
-            
-        # Step 2: Use the received token to send the second request
-
-        # Update headers for the second request with the Authorization Bearer token
-        headers['Authorization'] = f'Bearer {token}'
-
-        # Data for the second request (get profile)
-        data = {
-            'type': 'stb',
-            'action': 'get_profile',
-            'hd': '1',
-            'ver': f'ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: {portal_version}; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c',
-            'num_banks': '2',
-            'sn': sn,
-            'stb_type': 'MAG250',
-            'client_type': 'STB',
-            'image_version': '218',
-            'video_out': 'hdmi',
-            'device_id': device_id2,
-            'device_id2': device_id2,
-            'signature': signature,
-            'auth_second_step': '1',
-            'hw_version': '1.7-BD-00',
-            'not_valid_token': '0',
-            'metrics': metrics,
-            'hw_version_2': hw_version_2,
-            'timestamp': round(time.time()),
-            'api_signature': '262',
-            'prehash': '0'
-        }
-
-        # Send the second request
-        response = requests.post(url, headers=headers, cookies=cookies, data=data)
-
-        # Output the result of the second request
-        print("Response Status Code:", response.status_code)
-        print("Response Text:")
-        print(response.text)   
-        
-        return token
             
             
 
