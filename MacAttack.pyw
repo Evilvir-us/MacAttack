@@ -22,8 +22,7 @@ from urllib.parse import quote, urlparse, urlunparse
 import configparser
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-import urllib.parse
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 
 def get_token(session, url, mac_address):
     try:
@@ -35,9 +34,8 @@ def get_token(session, url, mac_address):
         hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
         signature_string = f'{sn}{mac_address}'
         signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-        metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': random.random()}
-        json_string = json.dumps(metrics)
-        encoded_string = urllib.parse.quote(json_string)        
+        metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+        json_string = json.dumps(metrics)       
                   
         headers = {
             'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
@@ -2224,8 +2222,8 @@ class MacAttack(QMainWindow):
 
                 if res.text:
                     data = json.loads(res.text)
-                    tok = data.get('js', {}).get('token')  # Safely access token to prevent KeyError
-
+                    #tok = data.get('js', {}).get('token')  # Safely access token to prevent KeyError
+                    tok = get_token
                     url2 = f"{self.base_url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
                     headers = {
                         "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
