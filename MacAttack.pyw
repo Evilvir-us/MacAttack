@@ -32,7 +32,7 @@ from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-logging.disable(logging.CRITICAL)
+logging.basicConfig(level=logging.ERROR)
 
 @contextmanager
 def no_proxy_environment():
@@ -2276,12 +2276,12 @@ class MacAttack(QMainWindow):
                         token = data.get('js', {}).get('token')  # Safely access token to prevent KeyError
                         logging.debug(f"TOKEN: {token}")
 
-                        if token:
-                            base_token = token
-                            token = self.get_token(s, url, mac, proxies) #activates token for some providers
-                            logging.debug(f"Clean TOKEN: {token}")
-                            if not token:
-                                token = base_token
+                        #if token:
+                        #    base_token = token
+                        #    token = self.get_token(s, self.base_url, mac, proxies) #activates token for some providers
+                        #    logging.debug(f"Clean TOKEN: {token}")
+                        #    if not token:
+                        #        token = base_token
                         url2 = f"{self.base_url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
                         headers = {
                             "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
@@ -2381,20 +2381,20 @@ class MacAttack(QMainWindow):
                                         # Construct the result message
                                         def generate_result_message(include_user, include_backend):
                                             # Get the current date and time in the desired format
-                                            current_time = datetime.now().strftime("%B %d, %Y %H:%M")
+                                            current_time = datetime.now().strftime("%B %d, %Y, %I:%M %p")
 
                                             base_message = (
                                                 f"{'Portal:':<10} {self.iptv_link}\n"
-                                                f"{'Portal IP:':<10} {middleware_ip_address}\n"
-                                                f"{'MAC:':<10} {mac}\n"
-                                                f"{'Discovered:':<10} {current_time}\n"  # Added discovered line
-                                                f"{'Expiry:':<10} {expiry}\n"
+                                                f"{'PortalIP:':<10} {middleware_ip_address}\n"
+                                                f"{'MAC addr:':<10} {mac}\n"
+                                                f"{'Found on:':<10} {current_time}\n"  # Added discovered line
+                                                f"{'Exp date:':<10} {expiry}\n"
                                                 f"{'Channels:':<10} {count}\n"
                                             )
                                             
                                             backend_message = (
-                                                f"{'Backend:':<10} {domain_and_port}\n"
-                                                f"{'Backend IP:':<10} {backend_ip_address}\n"
+                                                f"{'Backend: ':<10} {domain_and_port}\n"
+                                                f"{'Back IP: ':<10} {backend_ip_address}\n"
                                             ) if include_backend else ""
                                             
                                             user_message = (
@@ -2411,9 +2411,9 @@ class MacAttack(QMainWindow):
                                     else:
                                         # Simple output message when additional details are not required
                                         result_message = (
-                                            f"{'Portal:':<10} {self.iptv_link}\n"
-                                            f"{'MAC:':<10} {mac}\n"
-                                            f"{'Expiry:':<10} {expiry}\n"
+                                            f"{'Portal:  ':<10} {self.iptv_link}\n"
+                                            f"{'MAC addr:':<10} {mac}\n"
+                                            f"{'Exp date:':<10} {expiry}\n"
                                             f"{'Channels:':<10} {count}\n"
                                         )
                                         self.update_output_text_signal.emit(result_message)  # No extra newline here
@@ -2670,108 +2670,109 @@ class MacAttack(QMainWindow):
                     #self.error_count += 1
     def get_token(self, session, url, mac_address, proxies=None):
         try:
-            serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
-            sn = serialnumber[0:13]
-            device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
-            device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
-            hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
-            signature_string = f'{sn}{mac_address}'
-            signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+            with no_proxy_environment(): #Bypass the enviroment proxy set in the video player tab
+                serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+                sn = serialnumber[0:13]
+                device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
+                device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
+                hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+                signature_string = f'{sn}{mac_address}'
+                signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
+                metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
 
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
-                'Accept-Encoding': 'gzip, deflate, zstd',
-                'Accept': '*/*',
-                'Cache-Control': 'no-cache'
-            }
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                    'Accept-Encoding': 'gzip, deflate, zstd',
+                    'Accept': '*/*',
+                    'Cache-Control': 'no-cache'
+                }
 
-            cookies = {
-                'adid': hw_version_2,
-                'debug': '1',
-                'device_id2': device_id2,
-                'device_id': device_id2,
-                'hw_version': '1.7-B',
-                'mac': mac_address,
-                'sn': sn,
-                'stb_lang': 'en',
-                'timezone': 'America/Los_Angeles'
-            }
+                cookies = {
+                    'adid': hw_version_2,
+                    'debug': '1',
+                    'device_id2': device_id2,
+                    'device_id': device_id2,
+                    'hw_version': '1.7-B',
+                    'mac': mac_address,
+                    'sn': sn,
+                    'stb_lang': 'en',
+                    'timezone': 'America/Los_Angeles'
+                }
 
-            # Send GET request to fetch the version.js file with optional proxy
-            response = session.get(f"{url}/c/version.js", headers=headers, cookies=cookies, proxies=proxies)
+                # Send GET request to fetch the version.js file with optional proxy
+                response = session.get(f"{url}/c/version.js", headers=headers, cookies=cookies, proxies=proxies)
 
-            # Extract the version number from the response body
-            version = re.search(r"var ver = '(.*)';", response.text)
-            
-            if version:
-                portal_version = version.group(1)
-                logging.debug("Portal Version: %s", version.group(1))
-            else:
-                portal_version = "5.0"
-                logging.debug("Portal version not found.")
-
-            url = f"{url}/portal.php"  # Add portal.php for next 2 requests
-
-            # Data for the first request (to get the token)
-            data = {
-                'type': 'stb',
-                'action': 'handshake',
-                'token': '',
-                'prehash': '0'
-            }
-
-            # Step 1: Send the first request to get the token with optional proxy
-            response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
-
-            # Check if the response is successful
-            if response.status_code == 200:
-                # Parse the JSON response to get the token
-                token = response.json().get("js", {}).get("token")
-                logging.debug("Received Token: %s", token)
-            else:
-                logging.debug(f"Failed to get token, Status Code: {response.status_code}")
-                return None
+                # Extract the version number from the response body
+                version = re.search(r"var ver = '(.*)';", response.text)
                 
-            # Step 2: Use the received token to send the second request
+                if version:
+                    portal_version = version.group(1)
+                    logging.debug("Portal Version: %s", version.group(1))
+                else:
+                    portal_version = "5.0"
+                    logging.debug("Portal version not found.")
 
-            # Update headers for the second request with the Authorization Bearer token
-            headers['Authorization'] = f'Bearer {token}'
+                url = f"{url}/portal.php"  # Add portal.php for next 2 requests
 
-            # Data for the second request (get profile)
-            data = {
-                'type': 'stb',
-                'action': 'get_profile',
-                'hd': '1',
-                'ver': f'ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: {portal_version}; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c',
-                'num_banks': '2',
-                'sn': sn,
-                'stb_type': 'MAG250',
-                'client_type': 'STB',
-                'image_version': '218',
-                'video_out': 'hdmi',
-                'device_id': device_id2,
-                'device_id2': device_id2,
-                'signature': signature,
-                'auth_second_step': '1',
-                'hw_version': '1.7-BD-00',
-                'not_valid_token': '0',
-                'metrics': metrics,
-                'hw_version_2': hw_version_2,
-                'timestamp': round(time.time()),
-                'api_signature': '262',
-                'prehash': '0'
-            }
+                # Data for the first request (to get the token)
+                data = {
+                    'type': 'stb',
+                    'action': 'handshake',
+                    'token': '',
+                    'prehash': '0'
+                }
 
-            # Send the second request with optional proxy
-            response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
+                # Step 1: Send the first request to get the token with optional proxy
+                response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
 
-            # Output the result of the second request
-            logging.debug(f"Response Status Code: {response.status_code}")
-            logging.debug("Response Text:")
-            logging.debug(response.text)   
+                # Check if the response is successful
+                if response.status_code == 200:
+                    # Parse the JSON response to get the token
+                    token = response.json().get("js", {}).get("token")
+                    logging.debug("Received Token: %s", token)
+                else:
+                    logging.debug(f"Failed to get token, Status Code: {response.status_code}")
+                    return None
+                    
+                # Step 2: Use the received token to send the second request
 
-            return token
+                # Update headers for the second request with the Authorization Bearer token
+                headers['Authorization'] = f'Bearer {token}'
+
+                # Data for the second request (get profile)
+                data = {
+                    'type': 'stb',
+                    'action': 'get_profile',
+                    'hd': '1',
+                    'ver': f'ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: {portal_version}; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c',
+                    'num_banks': '2',
+                    'sn': sn,
+                    'stb_type': 'MAG250',
+                    'client_type': 'STB',
+                    'image_version': '218',
+                    'video_out': 'hdmi',
+                    'device_id': device_id2,
+                    'device_id2': device_id2,
+                    'signature': signature,
+                    'auth_second_step': '1',
+                    'hw_version': '1.7-BD-00',
+                    'not_valid_token': '0',
+                    'metrics': metrics,
+                    'hw_version_2': hw_version_2,
+                    'timestamp': round(time.time()),
+                    'api_signature': '262',
+                    'prehash': '0'
+                }
+
+                # Send the second request with optional proxy
+                response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
+
+                # Output the result of the second request
+                logging.debug(f"Response Status Code: {response.status_code}")
+                logging.debug("Response Text:")
+                logging.debug(response.text)   
+
+                return token
 
         except Exception as e:
             logging.error(f"Unexpected error in get_token: {e}")
@@ -3399,8 +3400,11 @@ class MacAttack(QMainWindow):
 
     def closeEvent(self, event):
         self.videoPlayer.stop()
+        window.hide()
         self.SaveTheDay()
-        self.GiveUp()               
+        self.GiveUp()
+        for thread in self.threads:
+            thread.join()    
         event.accept()
 
 if __name__ == "__main__":
