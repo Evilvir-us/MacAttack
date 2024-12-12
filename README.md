@@ -66,8 +66,6 @@ For a detailed walkthrough, watch this [video tutorial](https://www.youtube.com/
 ---
 
 ## Screenshots
-
-### Interface:
 ![Screenshot 1](https://evilvir.us/application/files/5817/3190/3286/Macattack1.png)  
 ![Screenshot 2](https://evilvir.us/application/files/6717/3190/3290/Macattack2.png)
 
