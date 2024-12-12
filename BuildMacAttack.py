@@ -25,10 +25,10 @@ def modify_python_file(file_path):
         with open(file_path, 'w') as file:
             for line in lines:
                 if "logging.basicConfig" in line:
-                    file.write("#logging.basicConfig(level=logging.DEBUG)\n")  # Replace with commented version
+                    file.write("logging.disable(logging.CRITICAL)\n")  # disable debugging
                 else:
                     file.write(line)
-        print(f"File {file_path} #logging.basicConfig(level=logging.DEBUG)\nDebug Logging Disabled")
+        print(f"File {file_path} logging.disable(logging.CRITICAL)\nDebug Logging Disabled")
     except Exception as e:
         print(f"Error modifying file: {e}")
         raise
@@ -40,7 +40,7 @@ def unmodify_python_file(file_path):
             lines = file.readlines()
         with open(file_path, 'w') as file:
             for line in lines:
-                if "#logging.basicConfig" in line:
+                if "logging.disable" in line:
                     file.write("logging.basicConfig(level=logging.DEBUG)\n")  # Replace with active version
                 else:
                     file.write(line)
