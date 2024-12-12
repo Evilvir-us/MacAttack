@@ -32,7 +32,7 @@ from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.DEBUG)
 
 @contextmanager
 def no_proxy_environment():
@@ -2276,12 +2276,12 @@ class MacAttack(QMainWindow):
                         token = data.get('js', {}).get('token')  # Safely access token to prevent KeyError
                         logging.debug(f"TOKEN: {token}")
 
-                        #if token:
-                        #    base_token = token
-                        #    token = self.get_token(s, self.base_url, mac, proxies) #activates token for some providers
-                        #    logging.debug(f"Clean TOKEN: {token}")
-                        #    if not token:
-                        #        token = base_token
+                        if token:
+                            base_token = token
+                            token = self.get_token(s, self.base_url, mac, proxies) #activates token for some providers
+                            logging.debug(f"Activated TOKEN: {token}")
+                            if not token:
+                                token = base_token
                         url2 = f"{self.base_url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
                         headers = {
                             "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
