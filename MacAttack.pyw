@@ -32,7 +32,7 @@ from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 
 @contextmanager
 def no_proxy_environment():
@@ -63,6 +63,9 @@ def get_token(session, url, mac_address):
         sn = serialnumber[0:13]
         device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
         device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
+        
+        
+        
         hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
         signature_string = f'{sn}{mac_address}'
         signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
@@ -79,7 +82,7 @@ def get_token(session, url, mac_address):
             'adid': hw_version_2,
             'debug': '1',
             'device_id2': device_id2,
-            'device_id': device_id2,
+            'device_id': device_id,
             'hw_version': '1.7-B',
             'mac': mac_address,
             'sn': sn,
@@ -159,7 +162,7 @@ def get_token(session, url, mac_address):
         logging.debug("Response Status Code: %d", response.status_code)
         logging.debug("Response Text:")
         logging.debug(response.text)   
-
+        print(token)
         return token
 
     except Exception as e:
@@ -2248,7 +2251,7 @@ class MacAttack(QMainWindow):
                         'adid': hw_version_2,
                         'debug': '1',
                         'device_id2': device_id2,
-                        'device_id': device_id2,
+                        'device_id': device_id,
                         'hw_version': '1.7-B',
                         'mac': mac,
                         'sn': sn,
@@ -2386,8 +2389,11 @@ class MacAttack(QMainWindow):
                                             base_message = (
                                                 f"{'Portal:':<10} {self.iptv_link}\n"
                                                 f"{'PortalIP:':<10} {middleware_ip_address}\n"
-                                                f"{'MAC addr:':<10} {mac}\n"
-                                                f"{'Found on:':<10} {current_time}\n"  # Added discovered line
+                                                f"{'MAC:':<10} {mac}\n"
+                                                f"{'DeviceID1:':<10} {device_id} Fail, use device_id2 both device ids.\n"
+                                                f"{'DeviceID2:':<10} {device_id2}\n"
+                                                f"{'Serial Num:':<10} {sn}\n"
+                                                f"{'Found on:':<10} {current_time}\n"
                                                 f"{'Exp date:':<10} {expiry}\n"
                                                 f"{'Channels:':<10} {count}\n"
                                             )
@@ -2691,7 +2697,7 @@ class MacAttack(QMainWindow):
                     'adid': hw_version_2,
                     'debug': '1',
                     'device_id2': device_id2,
-                    'device_id': device_id2,
+                    'device_id': device_id,
                     'hw_version': '1.7-B',
                     'mac': mac_address,
                     'sn': sn,
@@ -2866,6 +2872,7 @@ class MacAttack(QMainWindow):
             return filename
     
     def GiveUp(self):
+        self.killthreads()
         QTimer.singleShot(10000, lambda: self.start_button.setDisabled(False)) #stop waiting after a time
         # Disable further user input immediately
         logging.debug("GiveUp initiated: Preparing to stop threads.")
@@ -3397,7 +3404,14 @@ class MacAttack(QMainWindow):
             else:  # When any tab other than Tab 1 is selected
                 if self.videoPlayer.is_playing():  # Check if the video is currently playing
                     self.videoPlayer.pause()  # Pause the video
-
+    def killthreads(self):
+        def join_threads():
+            for thread in self.threads:
+                thread.join()  # Wait for each thread to finish
+        # Run the joining process in its own thread
+        joiner_thread = threading.Thread(target=join_threads)
+        joiner_thread.start()
+    
     def closeEvent(self, event):
         self.videoPlayer.stop()
         window.hide()
