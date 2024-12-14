@@ -31,7 +31,7 @@ from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QCheckBox,
                              QWidget)
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.DEBUG)
 
 @contextmanager
 def no_proxy_environment():
@@ -2078,82 +2078,81 @@ class MacAttack(QMainWindow):
                                     except (TypeError, json.decoder.JSONDecodeError) as e:
                                         self.update_error_text_signal.emit(f"Data parsing error for channels data: {str(e)}")
                                         count = 0
-                                if count < 1:
-                                    count = "Unknown"
-                                logging.info("Mac found")
-                                if self.autoloadmac_checkbox.isChecked():
-                                    self.hostname_input.setText(self.base_url)
-                                    self.mac_input.setText(mac)
-                                if self.output_file is None:
-                                    output_filename = self.OutputMastermind()
-                                    self.output_file = open(output_filename, "a")
-                                if self.moreoutput_checkbox.isChecked():
-                                    # Helper function to resolve IP addresses
-                                    def resolve_ip_address(hostname, default_message):
-                                        try:
-                                            return socket.gethostbyname(hostname)
-                                        except socket.gaierror:
-                                            logging.info(f"Unable to resolve the IP address for {hostname}.")
-                                            return default_message
-                                    # Resolve middleware IP address
-                                    parsed_middleware = urlparse(self.base_url)
-                                    middleware_hostname = parsed_middleware.hostname
-                                    middleware_ip_address = resolve_ip_address(middleware_hostname, "No Portal?")
-                                    logging.info(f"The IP address for {middleware_hostname} is {middleware_ip_address}")
-                                    # Resolve backend IP address
-                                    backend_ip_address = resolve_ip_address(hostname, "No Backend")
-                                    logging.info(f"The IP address for {hostname} is {backend_ip_address}")
-                                    # Determine if middleware and backend are the same
-                                    is_same_host = middleware_hostname == hostname
-                                    host_comparison = "Same middleware and backend" if is_same_host else "Different middleware and backend"
-                                    logging.info(host_comparison)
-                                    # Construct the result message
-                                    def generate_result_message(include_user, include_backend):
-                                        # Get the current date and time in the desired format
-                                        current_time = datetime.now().strftime("%B %d, %Y, %I:%M %p")
-                                        base_message = (
+                                if count > 0:
+                                    logging.info("Mac found")
+                                    if self.autoloadmac_checkbox.isChecked():
+                                        self.hostname_input.setText(self.base_url)
+                                        self.mac_input.setText(mac)
+                                    if self.output_file is None:
+                                        output_filename = self.OutputMastermind()
+                                        self.output_file = open(output_filename, "a")
+                                    if self.moreoutput_checkbox.isChecked():
+                                        # Helper function to resolve IP addresses
+                                        def resolve_ip_address(hostname, default_message):
+                                            try:
+                                                return socket.gethostbyname(hostname)
+                                            except socket.gaierror:
+                                                logging.info(f"Unable to resolve the IP address for {hostname}.")
+                                                return default_message
+                                        # Resolve middleware IP address
+                                        parsed_middleware = urlparse(self.base_url)
+                                        middleware_hostname = parsed_middleware.hostname
+                                        middleware_ip_address = resolve_ip_address(middleware_hostname, "No Portal?")
+                                        logging.info(f"The IP address for {middleware_hostname} is {middleware_ip_address}")
+                                        # Resolve backend IP address
+                                        backend_ip_address = resolve_ip_address(hostname, "No Backend")
+                                        logging.info(f"The IP address for {hostname} is {backend_ip_address}")
+                                        # Determine if middleware and backend are the same
+                                        is_same_host = middleware_hostname == hostname
+                                        host_comparison = "Same middleware and backend" if is_same_host else "Different middleware and backend"
+                                        logging.info(host_comparison)
+                                        # Construct the result message
+                                        def generate_result_message(include_user, include_backend):
+                                            # Get the current date and time in the desired format
+                                            current_time = datetime.now().strftime("%B %d, %Y, %I:%M %p")
+                                            base_message = (
+                                                f"{'Portal:':<10} {self.iptv_link}\n"
+                                                f"{'PortalIP:':<10} {middleware_ip_address}\n"
+                                                f"{'MAC Addr:':<10} {mac}\n"
+                                                f"{'DeviceID:':<10} {device_id}\n"
+                                                f"{'SecondID:':<10} {device_id2}\n"
+                                                f"{'Serial #:':<10} {sn}\n"
+                                                f"{'Found on:':<10} {current_time}\n"
+                                                f"{'Exp date:':<10} {expiry}\n"
+                                                f"{'Channels:':<10} {count}\n"
+                                            )
+                                            backend_message = (
+                                                f"{'Backend: ':<10} {domain_and_port}\n"
+                                                f"{'IP Addr: ':<10} {backend_ip_address}\n"
+                                            ) if include_backend else ""
+                                            user_message = (
+                                                f"{'Username:':<10} {username}\n"
+                                                f"{'Password:':<10} {password}\n"
+                                            ) if include_user else ""
+                                            return base_message + backend_message + user_message
+                                        # Emit the appropriate message based on backend and username status
+                                        result_message = generate_result_message(userfound, not is_same_host)
+                                        self.update_output_text_signal.emit(result_message)  # No extra newline here
+                                    else:
+                                        # Simple output message when additional details are not required
+                                        result_message = (
                                             f"{'Portal:':<10} {self.iptv_link}\n"
-                                            f"{'PortalIP:':<10} {middleware_ip_address}\n"
-                                            f"{'MAC Addr:':<10} {mac}\n"
-                                            f"{'DeviceID:':<10} {device_id}\n"
-                                            f"{'SecondID:':<10} {device_id2}\n"
-                                            f"{'Serial #:':<10} {sn}\n"
-                                            f"{'Found on:':<10} {current_time}\n"
+                                            f"{'MAC addr:':<10} {mac}\n"
                                             f"{'Exp date:':<10} {expiry}\n"
                                             f"{'Channels:':<10} {count}\n"
                                         )
-                                        backend_message = (
-                                            f"{'Backend: ':<10} {domain_and_port}\n"
-                                            f"{'IP Addr: ':<10} {backend_ip_address}\n"
-                                        ) if include_backend else ""
-                                        user_message = (
-                                            f"{'Username:':<10} {username}\n"
-                                            f"{'Password:':<10} {password}\n"
-                                        ) if include_user else ""
-                                        return base_message + backend_message + user_message
-                                    # Emit the appropriate message based on backend and username status
-                                    result_message = generate_result_message(userfound, not is_same_host)
-                                    self.update_output_text_signal.emit(result_message)  # No extra newline here
+                                        self.update_output_text_signal.emit(result_message)  # No extra newline here
+                                    # Write to file with a single blank line after each output
+                                    self.output_file.write(result_message + '\n')
+                                    self.output_file.flush()  # Ensures data is written immediately
+                                    if self.successsound_checkbox.isChecked():
+                                        sound_thread = threading.Thread(target=self.play_success_sound)
+                                        sound_thread.start()  # Start the background thread
+                                    if self.autostop_checkbox.isChecked():
+                                        logging.debug("autostop_checkbox is checked, stopping...")
+                                        self.stop_button.click()
                                 else:
-                                    # Simple output message when additional details are not required
-                                    result_message = (
-                                        f"{'Portal:':<10} {self.iptv_link}\n"
-                                        f"{'MAC addr:':<10} {mac}\n"
-                                        f"{'Exp date:':<10} {expiry}\n"
-                                        f"{'Channels:':<10} {count}\n"
-                                    )
-                                    self.update_output_text_signal.emit(result_message)  # No extra newline here
-                                # Write to file with a single blank line after each output
-                                self.output_file.write(result_message + '\n')
-                                self.output_file.flush()  # Ensures data is written immediately
-                                if self.successsound_checkbox.isChecked():
-                                    sound_thread = threading.Thread(target=self.play_success_sound)
-                                    sound_thread.start()  # Start the background thread
-                                if self.autostop_checkbox.isChecked():
-                                    logging.debug("autostop_checkbox is checked, stopping...")
-                                    self.stop_button.click()
-                                #else:
-                                #    result_message = f"MAC: {mac} connects, but has 0 channels. Bummer."
+                                    result_message = f"MAC: {mac} connects, but has 0 channels. Bummer."
                                     
                                     
                                     
