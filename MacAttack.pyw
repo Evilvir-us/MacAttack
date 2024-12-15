@@ -35,6 +35,7 @@ from PyQt5.QtGui import (
     QPixmap,
     QStandardItem,
     QStandardItemModel,
+    QTextCursor,
 )
 from PyQt5.QtWidgets import (
     QAbstractItemView,
@@ -1746,12 +1747,30 @@ class MacAttack(QMainWindow):
         self.proxy_output.setHtml("Proxy testing will output here...\n")
         self.proxy_output.setReadOnly(True)
         self.proxy_output.setFont(monospace_font)
-        # Set the maximum height to 200px
+        # Set the maximum height to 60px
         self.proxy_output.setMaximumHeight(60)
         # Add the proxy output area to the layout
         proxy_layout.addWidget(self.proxy_output)
         # Connect the textChanged signal to update the proxy count
         self.proxy_textbox.textChanged.connect(self.update_proxy_count)
+        # Set a buffer for the proxy testing console
+        self.proxy_output.textChanged.connect(self.trim_proxy_output)
+
+    def trim_proxy_output(self):
+        """Trim the proxy output log to keep only the last 10 lines."""
+        max_lines = 4
+
+        # Get the current text and split it into lines
+        current_text = self.proxy_output.toPlainText()
+        lines = current_text.splitlines()
+
+        # If the number of lines exceeds the max_lines, trim the content
+        if len(lines) > max_lines:
+            # Keep only the last `max_lines` lines
+            lines = lines[-max_lines:]
+
+            # Update the text area with the last `max_lines` lines
+            self.proxy_output.setPlainText("\n".join(lines))
 
     def update_proxy_count(self):
         # Get the number of lines in the proxy_textbox
@@ -2038,13 +2057,17 @@ class MacAttack(QMainWindow):
             color: white;
             background-color:  #10273d;
             border: 12px solid  #2E2E2E;
-        """
+            """
         )
         self.output_text.setPlainText("Output LOG:\nResults will appear here.\n")
         self.output_text.setReadOnly(True)
         monospace_font = QFont("Lucida Console", 10)
         self.output_text.setFont(monospace_font)
         layout.addWidget(self.output_text)
+
+        # Keep the output log to a maximum of output__history_buffer lines
+        self.output__history_buffer = 1000
+        self.output_text.textChanged.connect(self.trim_output_log)
         # Error Log Area
         self.error_text = QTextEdit()
         self.error_text.setStyleSheet(
@@ -2055,18 +2078,79 @@ class MacAttack(QMainWindow):
             border-left: 12px solid  #2E2E2E;
             border-right: 12px solid  #2E2E2E;
             border-bottom: 0px;
-        """
+            """
         )
         self.error_text.setHtml("")
         self.error_text.setHtml(
             """
-        Error LOG:<br>It's normal for errors to appear down here.
-        """
+            Error LOG:<br>It's normal for errors to appear down here.
+            """
         )
         self.error_text.setReadOnly(True)
         self.error_text.setFont(monospace_font)
         layout.addWidget(self.error_text)
         layout.addSpacing(15)  # Adds space
+
+        # Keep the log to a maximum of error__history_buffer lines
+        self.error__history_buffer = 100
+        self.error_text.textChanged.connect(self.trim_error_log)
+
+        self.error_text.setReadOnly(True)
+        self.error_text.setFont(monospace_font)
+        layout.addWidget(self.error_text)
+        layout.addSpacing(15)  # Adds space
+
+    def trim_output_log(self):
+        """Trims the output log to keep only the last output__history_buffer lines."""
+        document = self.output_text.document()
+        block_count = document.blockCount()
+        if block_count > self.output__history_buffer:
+            cursor = QTextCursor(document)
+            cursor.movePosition(QTextCursor.Start)  # Go to the beginning
+            for _ in range(block_count - self.output__history_buffer):
+                cursor.select(QTextCursor.BlockUnderCursor)
+                cursor.removeSelectedText()
+                cursor.deleteChar()  # Ensure newline is removed
+
+    def trim_error_log(self):
+        """Trims the error log to keep only the last visible lines-based buffer, accounting for line wrapping."""
+        # Calculate the number of visible lines
+        font_metrics = self.error_text.fontMetrics()
+        line_height = font_metrics.lineSpacing()  # Height of a single line
+        visible_height = self.error_text.height()  # Height of the visible area
+
+        # Count the total number of lines considering wrapped lines
+        document = self.error_text.document()
+        total_wrapped_lines = 0
+        for block_index in range(document.blockCount()):
+            block = document.findBlockByNumber(block_index)
+            block_layout = block.layout()
+            if block_layout is not None:
+                block_height = block_layout.boundingRect().height()
+                wrapped_lines_in_block = block_height // line_height
+                total_wrapped_lines += max(1, wrapped_lines_in_block)  # At least 1 line per block
+
+        # Calculate the buffer size as the number of visible slots minus one
+        visible_lines = visible_height // line_height
+        self.error__history_buffer = max(1, visible_lines)  # Ensure buffer size is positive
+
+        # Trim the log if the total wrapped lines exceed the buffer size
+        if total_wrapped_lines > self.error__history_buffer:
+            cursor = QTextCursor(document)
+            cursor.movePosition(QTextCursor.Start)  # Go to the beginning
+            lines_to_remove = total_wrapped_lines - self.error__history_buffer
+
+            # Remove blocks until the wrapped line count is within the buffer size
+            while lines_to_remove > 0:
+                block = document.firstBlock()
+                block_layout = block.layout()
+                if block_layout is not None:
+                    block_height = block_layout.boundingRect().height()
+                    wrapped_lines_in_block = block_height // line_height
+                    lines_to_remove -= max(1, wrapped_lines_in_block)
+                cursor.select(QTextCursor.BlockUnderCursor)
+                cursor.removeSelectedText()
+                cursor.deleteChar()  # Ensure newline is removed
 
     def SaveTheDay(self):
         """Save user settings, including window geometry, active tab, and other preferences to the configuration file."""
