@@ -11,11 +11,8 @@ import socket
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from urllib.parse import quote, urlparse, urlunparse
 from contextlib import contextmanager
-import requests
 import vlc
 from PyQt5.QtCore import (
     QBuffer,
@@ -59,8 +56,11 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import quote, urlparse, urlunparse
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -825,7 +825,9 @@ class MacAttack(QMainWindow):
         self.threads = []
         self.output_file = None
         self.video_worker = None  # Initialize to None
-        self.current_request_thread = None  # Initialize here
+        self.current_request_thread = None  # Initialize
+        self.last_trim_time = 0  # Initialize the time of the last trim (in seconds)
+        self.last_error_trim_time = 0  # Initialize the time of the last trim (in seconds)
         # Initialize ProxyFetcher thread
         self.proxy_fetcher = ProxyFetcher()
         # Connect signals from ProxyFetcher to update the UI
@@ -1896,6 +1898,33 @@ class MacAttack(QMainWindow):
         line2.setFrameShape(QFrame.HLine)
         line2.setFrameShadow(QFrame.Sunken)
         output_layout.addWidget(line2)
+        
+        
+        # Add a horizontal layout for the label and spinbox
+        buffer_layout = QHBoxLayout()
+        buffer_layout.setAlignment(Qt.AlignLeft)  # Align the layout contents to the left
+
+        # Create a widget to apply background color
+        buffer_widget = QWidget()
+        buffer_widget.setLayout(buffer_layout)
+        buffer_widget.setStyleSheet("background-color: green;")  # Set background color to green
+
+        buffer_label = QLabel("Output window buffer")
+        buffer_layout.addWidget(buffer_label)
+        self.output_buffer_spinbox = QSpinBox()
+        self.output_buffer_spinbox.setRange(1, 99900)  # Set max range for the spinbox 
+        self.output_buffer_spinbox.setValue(2500)  # Set default value
+        self.output_buffer_spinbox.setSingleStep(100)  # Increment in steps of 100
+        self.output_buffer_spinbox.setFixedWidth(60)  # Set the width of the spinbox
+        buffer_layout.addWidget(self.output_buffer_spinbox)
+        lines_label = QLabel("lines.")
+        buffer_layout.addWidget(lines_label)
+
+        output_layout.addWidget(buffer_widget)  # Add the widget with the background color to the output_layout
+
+    
+        
+        # Enhanced Output Logs        
         self.moreoutput_checkbox = QCheckBox(
             "Enhanced Output Logs.\n (Includes additional details such as Serial Numbers, Device IDs, etc.)"
         )
@@ -2065,8 +2094,9 @@ class MacAttack(QMainWindow):
         self.output_text.setFont(monospace_font)
         layout.addWidget(self.output_text)
 
-        # Keep the output log to a maximum of output__history_buffer lines
-        self.output__history_buffer = 1000
+        # Keep the output log to a maximum of output_history_buffer lines
+        
+
         self.output_text.textChanged.connect(self.trim_output_log)
         # Error Log Area
         self.error_text = QTextEdit()
@@ -2088,11 +2118,12 @@ class MacAttack(QMainWindow):
         )
         self.error_text.setReadOnly(True)
         self.error_text.setFont(monospace_font)
+        self.error_text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # Disable vertical scrollbar
+        self.error_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # Disable horizontal scrollbar
+        self.error_text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # Let it grow with content
         layout.addWidget(self.error_text)
         layout.addSpacing(15)  # Adds space
 
-        # Keep the log to a maximum of error__history_buffer lines
-        self.error__history_buffer = 100
         self.error_text.textChanged.connect(self.trim_error_log)
 
         self.error_text.setReadOnly(True)
@@ -2100,54 +2131,51 @@ class MacAttack(QMainWindow):
         layout.addWidget(self.error_text)
         layout.addSpacing(15)  # Adds space
 
+
     def trim_output_log(self):
-        """Trims the output log to keep only the last output__history_buffer lines."""
+        """Trims the output log to retain only the last 'output_history_buffer' lines. Runs no more than once per second to avoid deleting too many lines."""
+
+        current_time = time.time()  # Get the current time in seconds
+        
+        # If it has been less than 1 second since the last trim, do nothing
+        if current_time - self.last_trim_time < 1:
+            return
+        
+        # Update the last trim time
+        self.last_trim_time = current_time
+        
+        self.output_history_buffer = self.output_buffer_spinbox.value()
         document = self.output_text.document()
         block_count = document.blockCount()
-        if block_count > self.output__history_buffer:
+        
+        if block_count > self.output_history_buffer:
             cursor = QTextCursor(document)
             cursor.movePosition(QTextCursor.Start)  # Go to the beginning
-            for _ in range(block_count - self.output__history_buffer):
+            for _ in range(block_count - self.output_history_buffer):
                 cursor.select(QTextCursor.BlockUnderCursor)
                 cursor.removeSelectedText()
                 cursor.deleteChar()  # Ensure newline is removed
 
     def trim_error_log(self):
-        """Trims the error log to keep only the last visible lines-based buffer, accounting for line wrapping."""
-        # Calculate the number of visible lines
-        font_metrics = self.error_text.fontMetrics()
-        line_height = font_metrics.lineSpacing()  # Height of a single line
-        visible_height = self.error_text.height()  # Height of the visible area
-
-        # Count the total number of lines considering wrapped lines
+        """Trims the error log to retain only the last 100 lines. Runs no more than once per second to avoid deleting too many lines."""
+        
+        current_time = time.time()  # Get the current time in seconds
+        
+        # If it has been less than 1 second since the last trim, do nothing
+        if current_time - self.last_error_trim_time < 1:
+            return
+        
+        # Update the last trim time
+        self.last_error_trim_time = current_time
+        
+        self.error__history_buffer = 100  # Keep only the last 100 lines
         document = self.error_text.document()
-        total_wrapped_lines = 0
-        for block_index in range(document.blockCount()):
-            block = document.findBlockByNumber(block_index)
-            block_layout = block.layout()
-            if block_layout is not None:
-                block_height = block_layout.boundingRect().height()
-                wrapped_lines_in_block = block_height // line_height
-                total_wrapped_lines += max(1, wrapped_lines_in_block)  # At least 1 line per block
-
-        # Calculate the buffer size as the number of visible slots minus one
-        visible_lines = visible_height // line_height
-        self.error__history_buffer = max(1, visible_lines)  # Ensure buffer size is positive
-
-        # Trim the log if the total wrapped lines exceed the buffer size
-        if total_wrapped_lines > self.error__history_buffer:
+        block_count = document.blockCount()
+        
+        if block_count > self.error__history_buffer:
             cursor = QTextCursor(document)
             cursor.movePosition(QTextCursor.Start)  # Go to the beginning
-            lines_to_remove = total_wrapped_lines - self.error__history_buffer
-
-            # Remove blocks until the wrapped line count is within the buffer size
-            while lines_to_remove > 0:
-                block = document.firstBlock()
-                block_layout = block.layout()
-                if block_layout is not None:
-                    block_height = block_layout.boundingRect().height()
-                    wrapped_lines_in_block = block_height // line_height
-                    lines_to_remove -= max(1, wrapped_lines_in_block)
+            for _ in range(block_count - self.error__history_buffer):
                 cursor.select(QTextCursor.BlockUnderCursor)
                 cursor.removeSelectedText()
                 cursor.deleteChar()  # Ensure newline is removed
@@ -2172,16 +2200,11 @@ class MacAttack(QMainWindow):
             "proxy_list": self.proxy_textbox.toPlainText(),
             "proxy_concurrent_tests": str(self.proxy_concurrent_tests.value()),
             "proxy_remove_errorcount": str(self.proxy_remove_errorcount.value()),
-            "ludicrous_speed": str(
-                self.ludicrous_speed_checkbox.isChecked()
-            ),  # Save Ludicrous speed state
-            "moreoutput": str(
-                self.moreoutput_checkbox.isChecked()
-            ),  # Save Enhanced Output Logs state
-            "singleoutputfile": str(
-                self.singleoutputfile_checkbox.isChecked()
-            ),  # Save Single Output File state
-            "proxy_input": self.proxy_input.text(),  # Save proxy input field text
+            "ludicrous_speed": str(self.ludicrous_speed_checkbox.isChecked()),
+            "moreoutput": str(self.moreoutput_checkbox.isChecked()),
+            "singleoutputfile": str(self.singleoutputfile_checkbox.isChecked()),
+            "proxy_input": self.proxy_input.text(),
+            "output_buffer": str(self.output_buffer_spinbox.value()),
         }
         config["Window"] = {
             "width": self.width(),
@@ -2192,7 +2215,6 @@ class MacAttack(QMainWindow):
         with open(file_path, "w") as configfile:
             config.write(configfile)
         logging.debug("Settings saved.")
-
     def load_settings(self):
         """Load user settings from the configuration file and apply them to the UI elements, including the active tab."""
         user_dir = os.path.expanduser("~")
@@ -2201,72 +2223,45 @@ class MacAttack(QMainWindow):
         if os.path.exists(file_path):
             config.read(file_path)
             # Load UI settings
-            self.iptv_link_entry.setText(
-                config.get("Settings", "iptv_link", fallback="")
-            )
-            self.concurrent_tests.setValue(
-                config.getint("Settings", "concurrent_tests", fallback=10)
-            )
+            self.iptv_link_entry.setText(config.get("Settings", "iptv_link", fallback=""))
+            self.concurrent_tests.setValue(config.getint("Settings", "concurrent_tests", fallback=10))
             self.hostname_input.setText(config.get("Settings", "hostname", fallback=""))
             self.mac_input.setText(config.get("Settings", "mac", fallback=""))
             # Load checkbox states
-            self.autoloadmac_checkbox.setChecked(
-                config.get("Settings", "autoloadmac", fallback="False") == "True"
-            )
-            self.autostop_checkbox.setChecked(
-                config.get("Settings", "autostop", fallback="False") == "True"
-            )
-            self.successsound_checkbox.setChecked(
-                config.get("Settings", "successsound", fallback="False") == "True"
-            )
-            self.autopause_checkbox.setChecked(
-                config.get("Settings", "autopause", fallback="True") == "True"
-            )
-            self.proxy_enabled_checkbox.setChecked(
-                config.get("Settings", "proxy_enabled", fallback="False") == "True"
-            )
+            self.autoloadmac_checkbox.setChecked(config.get("Settings", "autoloadmac", fallback="False") == "True")
+            self.autostop_checkbox.setChecked(config.get("Settings", "autostop", fallback="False") == "True")
+            self.successsound_checkbox.setChecked(config.get("Settings", "successsound", fallback="False") == "True")
+            self.autopause_checkbox.setChecked(config.get("Settings", "autopause", fallback="True") == "True")
+            self.proxy_enabled_checkbox.setChecked(config.get("Settings", "proxy_enabled", fallback="False") == "True")
             # Load Ludicrous speed checkbox state
-            ludicrous_speed_state = config.get(
-                "Settings", "ludicrous_speed", fallback="False"
-            )
+            ludicrous_speed_state = config.get("Settings", "ludicrous_speed", fallback="False")
             self.ludicrous_speed_checkbox.setChecked(ludicrous_speed_state == "True")
             # Load Enhanced Output Logs checkbox state
             moreoutput_state = config.get("Settings", "moreoutput", fallback="False")
             self.moreoutput_checkbox.setChecked(moreoutput_state == "True")
             # Load Single Output File checkbox state
-            singleoutputfile_state = config.get(
-                "Settings", "singleoutputfile", fallback="False"
-            )
+            singleoutputfile_state = config.get("Settings", "singleoutputfile", fallback="False")
             self.singleoutputfile_checkbox.setChecked(singleoutputfile_state == "True")
             # Load other proxy settings
-            self.proxy_textbox.setPlainText(
-                config.get("Settings", "proxy_list", fallback="")
-            )
-            self.proxy_concurrent_tests.setValue(
-                config.getint("Settings", "proxy_concurrent_tests", fallback=100)
-            )
-            self.proxy_remove_errorcount.setValue(
-                config.getint("Settings", "proxy_remove_errorcount", fallback=1)
-            )
+            self.proxy_textbox.setPlainText(config.get("Settings", "proxy_list", fallback=""))
+            self.proxy_concurrent_tests.setValue(config.getint("Settings", "proxy_concurrent_tests", fallback=100))
+            self.proxy_remove_errorcount.setValue(config.getint("Settings", "proxy_remove_errorcount", fallback=1))
             # Load proxy input
             self.proxy_input.setText(config.get("Settings", "proxy_input", fallback=""))
+            # Load output buffer value
+            self.output_buffer_spinbox.setValue(config.getint("Settings", "output_buffer", fallback=1000))
             # Load active tab
-            self.tabs.setCurrentIndex(
-                config.getint("Settings", "active_tab", fallback=0)
-            )
+            self.tabs.setCurrentIndex(config.getint("Settings", "active_tab", fallback=0))
             # Load window geometry
             if config.has_section("Window"):
-                self.resize(
-                    config.getint("Window", "width", fallback=800),
-                    config.getint("Window", "height", fallback=600),
-                )
-                self.move(
-                    config.getint("Window", "x", fallback=200),
-                    config.getint("Window", "y", fallback=200),
-                )
+                self.resize(config.getint("Window", "width", fallback=800),
+                            config.getint("Window", "height", fallback=600))
+                self.move(config.getint("Window", "x", fallback=200),
+                          config.getint("Window", "y", fallback=200))
             logging.debug("Settings loaded.")
         else:
             logging.debug("No settings file found.")
+
 
     def set_window_icon(self):
         # Base64 encoded image string (replace with your own base64 string)
