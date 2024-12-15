@@ -62,7 +62,7 @@ from requests.packages.urllib3.util.retry import Retry
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote, urlparse, urlunparse
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 
 
 @contextmanager
@@ -827,7 +827,9 @@ class MacAttack(QMainWindow):
         self.video_worker = None  # Initialize to None
         self.current_request_thread = None  # Initialize
         self.last_trim_time = 0  # Initialize the time of the last trim (in seconds)
-        self.last_error_trim_time = 0  # Initialize the time of the last trim (in seconds)
+        self.last_error_trim_time = (
+            0  # Initialize the time of the last trim (in seconds)
+        )
         # Initialize ProxyFetcher thread
         self.proxy_fetcher = ProxyFetcher()
         # Connect signals from ProxyFetcher to update the UI
@@ -1898,21 +1900,24 @@ class MacAttack(QMainWindow):
         line2.setFrameShape(QFrame.HLine)
         line2.setFrameShadow(QFrame.Sunken)
         output_layout.addWidget(line2)
-        
-        
+
         # Add a horizontal layout for the label and spinbox
         buffer_layout = QHBoxLayout()
-        buffer_layout.setAlignment(Qt.AlignLeft)  # Align the layout contents to the left
+        buffer_layout.setAlignment(
+            Qt.AlignLeft
+        )  # Align the layout contents to the left
 
         # Create a widget to apply background color
         buffer_widget = QWidget()
         buffer_widget.setLayout(buffer_layout)
-        buffer_widget.setStyleSheet("background-color: green;")  # Set background color to green
+        buffer_widget.setStyleSheet(
+            "background-color: green;"
+        )  # Set background color to green
 
         buffer_label = QLabel("Output window buffer")
         buffer_layout.addWidget(buffer_label)
         self.output_buffer_spinbox = QSpinBox()
-        self.output_buffer_spinbox.setRange(1, 99900)  # Set max range for the spinbox 
+        self.output_buffer_spinbox.setRange(1, 99900)  # Set max range for the spinbox
         self.output_buffer_spinbox.setValue(2500)  # Set default value
         self.output_buffer_spinbox.setSingleStep(100)  # Increment in steps of 100
         self.output_buffer_spinbox.setFixedWidth(60)  # Set the width of the spinbox
@@ -1920,11 +1925,11 @@ class MacAttack(QMainWindow):
         lines_label = QLabel("lines.")
         buffer_layout.addWidget(lines_label)
 
-        output_layout.addWidget(buffer_widget)  # Add the widget with the background color to the output_layout
+        output_layout.addWidget(
+            buffer_widget
+        )  # Add the widget with the background color to the output_layout
 
-    
-        
-        # Enhanced Output Logs        
+        # Enhanced Output Logs
         self.moreoutput_checkbox = QCheckBox(
             "Enhanced Output Logs.\n (Includes additional details such as Serial Numbers, Device IDs, etc.)"
         )
@@ -2095,7 +2100,6 @@ class MacAttack(QMainWindow):
         layout.addWidget(self.output_text)
 
         # Keep the output log to a maximum of output_history_buffer lines
-        
 
         self.output_text.textChanged.connect(self.trim_output_log)
         # Error Log Area
@@ -2118,9 +2122,15 @@ class MacAttack(QMainWindow):
         )
         self.error_text.setReadOnly(True)
         self.error_text.setFont(monospace_font)
-        self.error_text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # Disable vertical scrollbar
-        self.error_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # Disable horizontal scrollbar
-        self.error_text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # Let it grow with content
+        self.error_text.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff
+        )  # Disable vertical scrollbar
+        self.error_text.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff
+        )  # Disable horizontal scrollbar
+        self.error_text.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding
+        )  # Let it grow with content
         layout.addWidget(self.error_text)
         layout.addSpacing(15)  # Adds space
 
@@ -2131,23 +2141,22 @@ class MacAttack(QMainWindow):
         layout.addWidget(self.error_text)
         layout.addSpacing(15)  # Adds space
 
-
     def trim_output_log(self):
         """Trims the output log to retain only the last 'output_history_buffer' lines. Runs no more than once per second to avoid deleting too many lines."""
 
         current_time = time.time()  # Get the current time in seconds
-        
+
         # If it has been less than 1 second since the last trim, do nothing
         if current_time - self.last_trim_time < 1:
             return
-        
+
         # Update the last trim time
         self.last_trim_time = current_time
-        
+
         self.output_history_buffer = self.output_buffer_spinbox.value()
         document = self.output_text.document()
         block_count = document.blockCount()
-        
+
         if block_count > self.output_history_buffer:
             cursor = QTextCursor(document)
             cursor.movePosition(QTextCursor.Start)  # Go to the beginning
@@ -2158,20 +2167,20 @@ class MacAttack(QMainWindow):
 
     def trim_error_log(self):
         """Trims the error log to retain only the last 100 lines. Runs no more than once per second to avoid deleting too many lines."""
-        
+
         current_time = time.time()  # Get the current time in seconds
-        
+
         # If it has been less than 1 second since the last trim, do nothing
         if current_time - self.last_error_trim_time < 1:
             return
-        
+
         # Update the last trim time
         self.last_error_trim_time = current_time
-        
+
         self.error__history_buffer = 100  # Keep only the last 100 lines
         document = self.error_text.document()
         block_count = document.blockCount()
-        
+
         if block_count > self.error__history_buffer:
             cursor = QTextCursor(document)
             cursor.movePosition(QTextCursor.Start)  # Go to the beginning
@@ -2215,6 +2224,7 @@ class MacAttack(QMainWindow):
         with open(file_path, "w") as configfile:
             config.write(configfile)
         logging.debug("Settings saved.")
+
     def load_settings(self):
         """Load user settings from the configuration file and apply them to the UI elements, including the active tab."""
         user_dir = os.path.expanduser("~")
@@ -2223,45 +2233,76 @@ class MacAttack(QMainWindow):
         if os.path.exists(file_path):
             config.read(file_path)
             # Load UI settings
-            self.iptv_link_entry.setText(config.get("Settings", "iptv_link", fallback=""))
-            self.concurrent_tests.setValue(config.getint("Settings", "concurrent_tests", fallback=10))
+            self.iptv_link_entry.setText(
+                config.get("Settings", "iptv_link", fallback="")
+            )
+            self.concurrent_tests.setValue(
+                config.getint("Settings", "concurrent_tests", fallback=10)
+            )
             self.hostname_input.setText(config.get("Settings", "hostname", fallback=""))
             self.mac_input.setText(config.get("Settings", "mac", fallback=""))
             # Load checkbox states
-            self.autoloadmac_checkbox.setChecked(config.get("Settings", "autoloadmac", fallback="False") == "True")
-            self.autostop_checkbox.setChecked(config.get("Settings", "autostop", fallback="False") == "True")
-            self.successsound_checkbox.setChecked(config.get("Settings", "successsound", fallback="False") == "True")
-            self.autopause_checkbox.setChecked(config.get("Settings", "autopause", fallback="True") == "True")
-            self.proxy_enabled_checkbox.setChecked(config.get("Settings", "proxy_enabled", fallback="False") == "True")
+            self.autoloadmac_checkbox.setChecked(
+                config.get("Settings", "autoloadmac", fallback="False") == "True"
+            )
+            self.autostop_checkbox.setChecked(
+                config.get("Settings", "autostop", fallback="False") == "True"
+            )
+            self.successsound_checkbox.setChecked(
+                config.get("Settings", "successsound", fallback="False") == "True"
+            )
+            self.autopause_checkbox.setChecked(
+                config.get("Settings", "autopause", fallback="True") == "True"
+            )
+            self.proxy_enabled_checkbox.setChecked(
+                config.get("Settings", "proxy_enabled", fallback="False") == "True"
+            )
             # Load Ludicrous speed checkbox state
-            ludicrous_speed_state = config.get("Settings", "ludicrous_speed", fallback="False")
+            ludicrous_speed_state = config.get(
+                "Settings", "ludicrous_speed", fallback="False"
+            )
             self.ludicrous_speed_checkbox.setChecked(ludicrous_speed_state == "True")
             # Load Enhanced Output Logs checkbox state
             moreoutput_state = config.get("Settings", "moreoutput", fallback="False")
             self.moreoutput_checkbox.setChecked(moreoutput_state == "True")
             # Load Single Output File checkbox state
-            singleoutputfile_state = config.get("Settings", "singleoutputfile", fallback="False")
+            singleoutputfile_state = config.get(
+                "Settings", "singleoutputfile", fallback="False"
+            )
             self.singleoutputfile_checkbox.setChecked(singleoutputfile_state == "True")
             # Load other proxy settings
-            self.proxy_textbox.setPlainText(config.get("Settings", "proxy_list", fallback=""))
-            self.proxy_concurrent_tests.setValue(config.getint("Settings", "proxy_concurrent_tests", fallback=100))
-            self.proxy_remove_errorcount.setValue(config.getint("Settings", "proxy_remove_errorcount", fallback=1))
+            self.proxy_textbox.setPlainText(
+                config.get("Settings", "proxy_list", fallback="")
+            )
+            self.proxy_concurrent_tests.setValue(
+                config.getint("Settings", "proxy_concurrent_tests", fallback=100)
+            )
+            self.proxy_remove_errorcount.setValue(
+                config.getint("Settings", "proxy_remove_errorcount", fallback=1)
+            )
             # Load proxy input
             self.proxy_input.setText(config.get("Settings", "proxy_input", fallback=""))
             # Load output buffer value
-            self.output_buffer_spinbox.setValue(config.getint("Settings", "output_buffer", fallback=1000))
+            self.output_buffer_spinbox.setValue(
+                config.getint("Settings", "output_buffer", fallback=1000)
+            )
             # Load active tab
-            self.tabs.setCurrentIndex(config.getint("Settings", "active_tab", fallback=0))
+            self.tabs.setCurrentIndex(
+                config.getint("Settings", "active_tab", fallback=0)
+            )
             # Load window geometry
             if config.has_section("Window"):
-                self.resize(config.getint("Window", "width", fallback=800),
-                            config.getint("Window", "height", fallback=600))
-                self.move(config.getint("Window", "x", fallback=200),
-                          config.getint("Window", "y", fallback=200))
+                self.resize(
+                    config.getint("Window", "width", fallback=800),
+                    config.getint("Window", "height", fallback=600),
+                )
+                self.move(
+                    config.getint("Window", "x", fallback=200),
+                    config.getint("Window", "y", fallback=200),
+                )
             logging.debug("Settings loaded.")
         else:
             logging.debug("No settings file found.")
-
 
     def set_window_icon(self):
         # Base64 encoded image string (replace with your own base64 string)
@@ -2672,6 +2713,9 @@ class MacAttack(QMainWindow):
                         "Could not connect" in res.text
                         or "Network is unreachable" in res.text
                         or "Non-compliance" in res.text
+                        or "Connection timed out" in res.text
+                        or "URL could not be retrieved" in res.text
+                        or "ISOLIR" in res.text
                     ):
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -2708,6 +2752,18 @@ class MacAttack(QMainWindow):
                         self.remove_proxy(
                             selected_proxy, self.proxy_error_counts
                         )  # remove the proxy if it exceeds the allowed error count
+                    elif "socket: " in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1
+                        self.update_error_text_signal.emit(
+                            f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Socket Error</b> proxy socket error"
+                        )
+                        self.remove_proxy(
+                            selected_proxy, self.proxy_error_counts
+                        )  # remove the proxy if it exceeds the allowed error count
                     elif "Error code 520" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -2732,7 +2788,11 @@ class MacAttack(QMainWindow):
                         self.remove_proxy(
                             selected_proxy, self.proxy_error_counts
                         )  # remove the proxy if it exceeds the allowed error count
-                    elif "500 Internal Server Error" in res.text:
+                    elif (
+                        "500 Internal Server Error" in res.text
+                        or "server misbehaving" in res.text
+                        or "server error" in res.text
+                    ):
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
                             self.proxy_error_counts[selected_proxy] = 1
@@ -2780,6 +2840,18 @@ class MacAttack(QMainWindow):
                         self.remove_proxy(
                             selected_proxy, self.proxy_error_counts
                         )  # remove the proxy if it exceeds the
+                    elif "address already in use" in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1
+                        self.update_error_text_signal.emit(
+                            f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Address already in use</b> Proxy's port unavailable."
+                        )
+                        self.remove_proxy(
+                            selected_proxy, self.proxy_error_counts
+                        )  # remove the proxy if it exceeds the
                     elif "DNS resolution error" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -2816,7 +2888,11 @@ class MacAttack(QMainWindow):
                         self.remove_proxy(
                             selected_proxy, self.proxy_error_counts
                         )  # remove the proxy if it exceeds the allowed error count
-                    elif "504 Gateway" in res.text:
+                    elif (
+                        "504 Gateway" in res.text
+                        or "ERROR: Gateway Timeout" in res.text
+                        or "i/o timeout" in res.text
+                    ):
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
                             self.proxy_error_counts[selected_proxy] = 1
@@ -2900,6 +2976,30 @@ class MacAttack(QMainWindow):
                         self.remove_proxy(
                             selected_proxy, self.proxy_error_counts
                         )  # remove the proxy if it exceeds the allowed error count
+                    elif "<title>æ" in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1
+                        self.update_error_text_signal.emit(
+                            f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>æ æ³æ¾ç¤ºæ­¤é¡µ</b> WTF even is this?"
+                        )
+                        self.remove_proxy(
+                            selected_proxy, self.proxy_error_counts
+                        )  # remove the proxy if it exceeds the allowed error count
+                    elif "404 Not Found" in res.text:
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1
+                        self.update_error_text_signal.emit(
+                            f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>404 Not Found</b> proxy cannot find portal."
+                        )
+                        self.remove_proxy(
+                            selected_proxy, self.proxy_error_counts
+                        )  # remove the proxy if it exceeds the allowed error count
                     elif "ERROR: Not Found" in res.text:
                         self.update_error_text_signal.emit(
                             f"Error for Portal: {selected_proxy} : <b>Portal not found</b> invalid IPTV link"
@@ -2943,6 +3043,21 @@ class MacAttack(QMainWindow):
                         # good result, reset errors
                         self.proxy_error_counts[selected_proxy] = 0
                         logging.debug(f"Raw Response Content:\n{mac}\n%s", res.text)
+                    elif re.search(
+                        r"<html><head><title>.*</title></head><body></body></html>",
+                        res.text,
+                    ):
+                        # Track error count for the proxy
+                        if selected_proxy not in self.proxy_error_counts:
+                            self.proxy_error_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_counts[selected_proxy] += 1
+                        self.update_error_text_signal.emit(
+                            f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Proxy Server issue</b> >Empty response"
+                        )
+                        self.remove_proxy(
+                            selected_proxy, self.proxy_error_counts
+                        )  # remove the proxy if it exceeds the allowed error count
                     else:
                         # self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
                         # logging.debug(f"{str(e)}")
