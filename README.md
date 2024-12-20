@@ -45,6 +45,8 @@ For testing portal security:
 
 3. Click **Start** to begin the test.
 
+> **Note:** It is not recommended to use a VPN and proxies simultaneously. The VPN may interfere with proxy sessions, preventing the expected results. Choose one or the other: either enable the VPN and disable proxies, or enable proxies and disable the VPN.
+
 ---
 
 ### **Mac VideoPlayer Tab**
