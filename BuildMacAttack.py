@@ -1,5 +1,67 @@
 import subprocess
 import os
+import requests
+import re
+
+def get_latest_github_version():
+    """Fetches the latest release version from the GitHub repository."""
+    try:
+        response = requests.get('https://api.github.com/repos/Evilvir-us/MacAttack/releases/latest')
+        response.raise_for_status()
+        release_data = response.json()
+        latest_version = release_data['tag_name']  # 'v2.5.1'
+        return latest_version.lstrip('v')  # Remove the leading 'v' to get '2.5.1'
+    except requests.RequestException as e:
+        print(f"Error fetching the latest GitHub version: {e}")
+        raise
+
+def compare_versions(version1, version2):
+    """Compares two version strings in the format 'x.y.z'."""
+    version1_parts = [int(part) for part in version1.split('.')]
+    version2_parts = [int(part) for part in version2.split('.')]
+    
+    # Compare part by part
+    return (version1_parts > version2_parts) - (version1_parts < version2_parts)
+
+def increment_version(version):
+    """Increments the version by 1 (increases the patch version)."""
+    version_parts = version.split('.')
+    version_parts[-1] = str(int(version_parts[-1]) + 1)  # Increment the patch version
+    return '.'.join(version_parts)
+
+def update_version_in_file(file_path, new_version):
+    """Updates the VERSION line in the MacAttack.pyw file."""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:  # Open with UTF-8 encoding
+            content = file.read()
+        
+        # Find and update the VERSION line, accounting for quotes around the version
+        content = re.sub(r'VERSION = "\d+\.\d+\.\d+"', f'VERSION = "{new_version}"', content)
+
+        with open(file_path, 'w', encoding='utf-8') as file:  # Write with UTF-8 encoding
+            file.write(content)
+
+        print(f"Updated VERSION to {new_version} in {file_path}")
+    except Exception as e:
+        print(f"Error updating the version in file: {e}")
+        raise
+
+def replace_logging_config(file_path):
+    """Replace logging.basicConfig lines with 'logging.basicConfig(level=logging.CRITICAL + 1)'."""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:  # Open with UTF-8 encoding
+            content = file.read()
+        
+        # Replace any logging.basicConfig(level=...) with logging.basicConfig(level=logging.CRITICAL + 1)
+        content = re.sub(r'logging\.basicConfig\(level=[a-zA-Z0-9._]+\)', 'logging.basicConfig(level=logging.CRITICAL + 1)', content)
+
+        with open(file_path, 'w', encoding='utf-8') as file:  # Write with UTF-8 encoding
+            file.write(content)
+
+        print(f"Updated logging.basicConfig lines in {file_path}")
+    except Exception as e:
+        print(f"Error replacing logging.basicConfig in file: {e}")
+        raise
 
 def run_pyinstaller():
     """Runs PyInstaller to create the executable with custom options."""
@@ -17,38 +79,6 @@ def run_pyinstaller():
         print(f"Error running PyInstaller: {e}")
         raise
 
-def modify_python_file(file_path):
-    """Disable debugging by replacing logging.basicConfig with the commented version."""
-    try:
-        with open(file_path, 'r') as file:
-            lines = file.readlines()
-        with open(file_path, 'w') as file:
-            for line in lines:
-                if "logging.basicConfig" in line:
-                    file.write("logging.disable(logging.CRITICAL)\n")  # disable debugging
-                else:
-                    file.write(line)
-        print(f"File {file_path} logging.disable(logging.CRITICAL)\nDebug Logging Disabled")
-    except Exception as e:
-        print(f"Error modifying file: {e}")
-        raise
-
-def unmodify_python_file(file_path):
-    """Re-enable debugging by replacing the commented logging.basicConfig with the active version."""
-    try:
-        with open(file_path, 'r') as file:
-            lines = file.readlines()
-        with open(file_path, 'w') as file:
-            for line in lines:
-                if "logging.disable" in line:
-                    file.write("logging.basicConfig(level=logging.DEBUG)\n")  # Replace with active version
-                else:
-                    file.write(line)
-        print(f"File {file_path} logging.basicConfig(level=logging.DEBUG)\nDebug Logging Re-Enabled")
-    except Exception as e:
-        print(f"Error restoring file: {e}")
-        raise
-
 def copy_executable():
     """Copies the generated executable to the current directory."""
     try:
@@ -61,12 +91,43 @@ def copy_executable():
         print(f"Error copying executable: {e}")
         raise
 
+def modify_python_file(file_path, github_version):
+    """Check and update the version and logging config in the file if necessary."""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:  # Open with UTF-8 encoding
+            content = file.read()
+        
+        # Extract the current version from the file (accounting for quotes)
+        current_version_match = re.search(r'VERSION = "(\d+\.\d+\.\d+)"', content)
+        if current_version_match:
+            current_version = current_version_match.group(1)
+            print(f"Current VERSION = {current_version}")
+            # Compare the current version with the GitHub version
+            if compare_versions(current_version, github_version) < 0:
+                print(f"Current version {current_version} is lower than GitHub version {github_version}. Updating...")
+                new_version = increment_version(github_version)
+                update_version_in_file(file_path, new_version)
+            elif compare_versions(current_version, github_version) == 0:
+                print(f"Current version {current_version} is the same as GitHub version {github_version}. Incrementing version...")
+                new_version = increment_version(current_version)
+                update_version_in_file(file_path, new_version)
+            else:
+                print("Current version is up-to-date.")
+        else:
+            print("No VERSION line found in the file.")
+
+        # Replace logging.basicConfig lines
+        replace_logging_config(file_path)
+    except Exception as e:
+        print(f"Error modifying file: {e}")
+        raise
+
 def main():
     """Main function to execute all steps."""
-    modify_python_file('MacAttack.pyw')
-    run_pyinstaller()
-    copy_executable()
-    unmodify_python_file('MacAttack.pyw')
+    github_version = get_latest_github_version()  # Get latest version from GitHub
+    modify_python_file('MacAttack.pyw', github_version)  # Modify file with the new version and logging config
+    run_pyinstaller()  # Build the executable
+    copy_executable()  # Copy the executable to the current directory
     input("Process complete. Press Enter to exit...")
 
 if __name__ == "__main__":

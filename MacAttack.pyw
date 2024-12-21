@@ -1,10 +1,7 @@
-# Current version of the script
-VERSION = "4.3.5"
+VERSION = "4.3.6"
 import semver
 import webbrowser
 import base64
-
-# import concurrent.futures
 import configparser
 import hashlib
 import json
@@ -18,7 +15,7 @@ import threading
 from threading import Lock
 import traceback
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from contextlib import contextmanager
 import vlc
 from PyQt5.QtCore import (
@@ -64,13 +61,10 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 import requests
-
-# from requests.adapters import HTTPAdapter
-# from requests.packages.urllib3.util.retry import Retry
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote, urlparse, urlunparse
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.CRITICAL + 1)
 
 
 @contextmanager
@@ -122,7 +116,7 @@ def get_token(session, url, mac_address, timeout=30):
         }
 
         response = session.get(
-            handshake_url, cookies=cookies, headers=headers, timeout=10
+            handshake_url, cookies=cookies, headers=headers, timeout=15
         )
         response.raise_for_status()
         token = response.json().get("js", {}).get("token")
@@ -138,7 +132,6 @@ def get_token(session, url, mac_address, timeout=30):
 
 
 class ProxyFetcher(QThread):
-    # Define the signal correctly
     update_proxy_output_signal = pyqtSignal(str)  # Ensure this signal is defined
     update_proxy_textbox_signal = pyqtSignal(
         str
@@ -1101,6 +1094,7 @@ class MacAttack(QMainWindow):
         self.current_request_thread = self.request_thread
         logging.debug("Started RequestThread for playlist.")
 
+    """this needs to be reworked
     def filter_playlist(self):
         search_term = self.search_input.text().lower()
         for tab_name, self.tab_info in self.tab_data.items():
@@ -1132,7 +1126,7 @@ class MacAttack(QMainWindow):
             )
 
     def _populate_playlist_model(self, playlist_model, channels, playlists, series):
-        """Helper function to clear and populate the playlist model."""
+        # Helper function to clear and populate the playlist model.
         playlist_model.clear()
         # Add the "Go Back" item if we are not in a filtered state
         if (
@@ -1166,7 +1160,7 @@ class MacAttack(QMainWindow):
             playlist_model.appendRow(list_item)
 
     def _filter_items(self, items, search_term):
-        """Helper function to filter items based on the search term."""
+        # Helper function to filter items based on the search term.
         return [
             item
             for item in items
@@ -1177,11 +1171,12 @@ class MacAttack(QMainWindow):
         ]
 
     def _create_list_item(self, data, name, item_type):
-        """Helper function to create a list item with attached data."""
+        # Helper function to create a list item with attached data.
         list_item = QStandardItem(name)
         list_item.setData(data, Qt.UserRole)
         list_item.setData(item_type, Qt.UserRole + 1)
         return list_item
+    """
 
     def update_proxy(self):
         proxy_address = self.proxy_input.text()
@@ -1538,7 +1533,7 @@ class MacAttack(QMainWindow):
 
         # Ludicrous speed checkbox
         self.ludicrous_speed_checkbox = QCheckBox(
-            "Enable Ludicrous speed! \n(This will likely crash your app, and probably even your computer)"
+            "Enable Ludicrous Speed! \n(Running at high speeds may cause the app to become unresponsive)"
         )
         self.ludicrous_speed_checkbox.stateChanged.connect(self.enable_ludicrous_speed)
         self.ludicrous_speed_checkbox.setStyleSheet(
@@ -1556,9 +1551,7 @@ class MacAttack(QMainWindow):
         )
         general_layout.addWidget(self.ludicrous_speed_checkbox)
 
-        self.dont_update_checkbox = QCheckBox(
-            "Don't check for updates. (MacAttack will launch faster when checked)"
-        )
+        self.dont_update_checkbox = QCheckBox("Don't check for updates.")
         self.dont_update_checkbox.setStyleSheet(
             """
             QCheckBox {
@@ -1600,7 +1593,7 @@ class MacAttack(QMainWindow):
         buffer_label = QLabel("Output window buffer")
         buffer_layout.addWidget(buffer_label)
         self.output_buffer_spinbox = QSpinBox()
-        self.output_buffer_spinbox.setRange(1, 99900)  # Set max range for the spinbox
+        self.output_buffer_spinbox.setRange(1, 99999)  # Set max range for the spinbox
         self.output_buffer_spinbox.setValue(2500)  # Set default value
         self.output_buffer_spinbox.setSingleStep(100)  # Increment in steps of 100
         self.output_buffer_spinbox.setFixedWidth(60)  # Set the width of the spinbox
@@ -1633,10 +1626,10 @@ class MacAttack(QMainWindow):
 
         # Deviceids Output and Backend info (side by side)
         self.deviceid_output_checkbox = QCheckBox(
-            "Device IDs. (Serial Numbers, Device IDs, etc.)"
+            "Device IDs. (Serial Number, IDs, etc.)"
         )
         self.backend_output_checkbox = QCheckBox(
-            "Backend info (if different from portal)"
+            "Backend Info (if different from portal)"
         )
         self.deviceid_output_checkbox.setFixedWidth(output_checkbox_width)
         self.backend_output_checkbox.setFixedWidth(output_checkbox_width)
@@ -1647,7 +1640,7 @@ class MacAttack(QMainWindow):
         output_layout.addLayout(horizontal_layout_1)
 
         # IP addresses and Usernames and passwords (side by side)
-        self.ip_address_output_checkbox = QCheckBox("IP addresses")
+        self.ip_address_output_checkbox = QCheckBox("IP Addresses")
         self.username_output_checkbox = QCheckBox("Usernames and Passwords (if found)")
         self.ip_address_output_checkbox.setFixedWidth(output_checkbox_width)
         self.username_output_checkbox.setFixedWidth(output_checkbox_width)
@@ -1658,7 +1651,7 @@ class MacAttack(QMainWindow):
         output_layout.addLayout(horizontal_layout_2)
 
         # Portal location and timezone with Max Connections (side by side)
-        self.location_output_checkbox = QCheckBox("Portal location and timezone")
+        self.location_output_checkbox = QCheckBox("Portal Location/Timezone")
         self.max_connections_output_checkbox = QCheckBox("Max Connections (if found)")
         self.location_output_checkbox.setFixedWidth(output_checkbox_width)
         self.max_connections_output_checkbox.setFixedWidth(output_checkbox_width)
@@ -1667,6 +1660,28 @@ class MacAttack(QMainWindow):
         # Set alignment for horizontal layout
         horizontal_layout_3.setAlignment(Qt.AlignLeft)
         output_layout.addLayout(horizontal_layout_3)
+
+        # Proxy used (underneath Portal location and timezone)
+        self.proxy_used_output_checkbox = QCheckBox("Proxy Used")
+        self.proxy_used_output_checkbox.setFixedWidth(output_checkbox_width)
+
+        
+        # Create a checkbox for something later, next to proxy info
+        self.future_output_checkbox = QCheckBox(
+            "checkbox label"
+        )
+        self.future_output_checkbox.setFixedWidth(output_checkbox_width)
+
+        # Create a horizontal layout to add both checkboxes side by side
+        proxy_layout = QHBoxLayout()
+        proxy_layout.addWidget(self.proxy_used_output_checkbox)
+        # proxy_layout.addWidget(self.future_output_checkbox)
+
+        # Set alignment for the new horizontal layout
+        proxy_layout.setAlignment(Qt.AlignLeft)
+
+        # Add the new horizontal layout to the main output layout
+        output_layout.addLayout(proxy_layout)
 
         # Date Found with Date Created (side by side)
         self.datefound_output_checkbox = QCheckBox("Date Found")
@@ -1736,6 +1751,26 @@ class MacAttack(QMainWindow):
         # Set the main layout
         Settings_frame.setLayout(layout)
 
+        # Create a horizontal layout for the Defaults button and version label
+        bottom_layout = QHBoxLayout()
+
+        # Create a "Defaults" button and align it to the left
+        defaults_button = QPushButton("Defaults")
+        defaults_button.setFixedSize(80, 25)  # Adjust size as needed
+        defaults_button.clicked.connect(
+            self.factory_reset
+        )  # Connect the button to the factory_reset function
+        bottom_layout.addWidget(defaults_button, alignment=Qt.AlignLeft)
+
+        # Create a label for the version and align it to the right
+        version_label = QLabel(f"MacAttack v{VERSION}")
+        version_label.setAlignment(Qt.AlignBottom | Qt.AlignRight)
+        version_label.setStyleSheet("font-size: 10px; color: gray;")
+        bottom_layout.addWidget(version_label, alignment=Qt.AlignRight)
+
+        # Add the horizontal layout to the Settings_frame layout
+        layout.addLayout(bottom_layout)
+
     def enable_ludicrous_speed(self):
         if self.ludicrous_speed_checkbox.isChecked():
             self.ludicrous_speed_checkbox.setText(
@@ -1783,7 +1818,7 @@ class MacAttack(QMainWindow):
         self.speed_label = QLabel("Speed:")
         self.concurrent_tests = QSlider(Qt.Horizontal)
         self.concurrent_tests.setRange(1, 100)
-        self.concurrent_tests.setValue(5)
+        self.concurrent_tests.setValue(10)
         self.concurrent_tests.setTickPosition(QSlider.TicksBelow)
         self.concurrent_tests.setTickInterval(1)
         combined_layout.addWidget(self.speed_label)
@@ -1940,6 +1975,69 @@ class MacAttack(QMainWindow):
                 cursor.removeSelectedText()
                 cursor.deleteChar()  # Ensure newline is removed
 
+    def factory_reset(self):
+        """Delete the configuration file, reset settings to defaults, and reload settings."""
+        reply = QMessageBox.question(
+            self,
+            "Factory Reset",
+            "Are you sure? This will reset everything. The output file will not be deleted.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if reply == QMessageBox.No:
+            logging.debug("Factory reset canceled by the user.")
+            return  # Exit the function if the user selects "No"
+
+        user_dir = os.path.expanduser("~")
+        file_path = os.path.join(user_dir, "evilvir.us", "MacAttack.ini")
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                logging.debug("Configuration file deleted for factory reset.")
+            else:
+                logging.debug("No configuration file found to delete.")
+
+            # Reset UI elements to default values
+            self.iptv_link_entry.setText(
+                "http://evilvir.us.streamtv.to:8080/c/"
+            )  # Set the default IPTV link
+            self.concurrent_tests.setValue(10)
+            self.hostname_input.setText("")
+            self.mac_input.setText("")
+            self.autoloadmac_checkbox.setChecked(False)
+            self.autostop_checkbox.setChecked(False)
+            self.successsound_checkbox.setChecked(False)
+            self.autopause_checkbox.setChecked(True)
+            self.proxy_enabled_checkbox.setChecked(False)
+            self.ludicrous_speed_checkbox.setChecked(False)
+            self.deviceid_output_checkbox.setChecked(False)
+            self.ip_address_output_checkbox.setChecked(False)
+            self.location_output_checkbox.setChecked(False)
+            self.backend_output_checkbox.setChecked(False)
+            self.username_output_checkbox.setChecked(False)
+            self.datefound_output_checkbox.setChecked(False)
+            self.max_connections_output_checkbox.setChecked(False)
+            self.date_created_output_checkbox.setChecked(False)
+            self.proxy_used_output_checkbox.setChecked(False)
+            self.singleoutputfile_checkbox.setChecked(True)
+            self.future_output_checkbox.setChecked(False)
+            self.proxy_textbox.setPlainText("")
+            self.proxy_concurrent_tests.setValue(100)
+            self.proxy_remove_errorcount.setValue(5)
+            self.proxy_input.setText("")
+            self.output_buffer_spinbox.setValue(2500)
+            self.tabs.setCurrentIndex(0)
+            self.dont_update_checkbox.setChecked(False)
+            self.resize(1138, 522)
+            self.move(200, 200)
+
+            logging.debug("UI reset to default values.")
+        except Exception as e:
+            logging.error(f"Error while performing factory reset: {e}")
+        finally:
+            self.load_settings()  # Reload settings to ensure consistency
+
     def SaveTheDay(self):
         """Save user settings, including window geometry, active tab, and other preferences to the configuration file."""
         user_dir = os.path.expanduser("~")
@@ -1970,15 +2068,13 @@ class MacAttack(QMainWindow):
             "singleoutputfile": str(self.singleoutputfile_checkbox.isChecked()),
             "max_connections_output": str(
                 self.max_connections_output_checkbox.isChecked()
-            ),  # Save Max Connections state
-            "date_created_output": str(
-                self.date_created_output_checkbox.isChecked()
-            ),  # Save Date Created state
+            ),
+            "date_created_output": str(self.date_created_output_checkbox.isChecked()),
+            "proxy_used_output": str(self.proxy_used_output_checkbox.isChecked()),
             "proxy_input": self.proxy_input.text(),
             "output_buffer": str(self.output_buffer_spinbox.value()),
-            "dont_update": str(
-                self.dont_update_checkbox.isChecked()
-            ),  # Save the new checkbox state
+            "dont_update": str(self.dont_update_checkbox.isChecked()),
+            "future_output": str(self.future_output_checkbox.isChecked()),
         }
         config["Window"] = {
             "width": self.width(),
@@ -2022,15 +2118,13 @@ class MacAttack(QMainWindow):
             self.proxy_enabled_checkbox.setChecked(
                 config.get("Settings", "proxy_enabled", fallback="False") == "True"
             )
-            # Load Ludicrous speed checkbox state
-            ludicrous_speed_state = config.get(
-                "Settings", "ludicrous_speed", fallback="False"
+            self.ludicrous_speed_checkbox.setChecked(
+                config.get("Settings", "ludicrous_speed", fallback="False") == "True"
             )
-            self.ludicrous_speed_checkbox.setChecked(ludicrous_speed_state == "True")
-            # Load Enhanced Output Logs checkbox state
-            moreoutput_state = config.get("Settings", "moreoutput", fallback="False")
-            self.deviceid_output_checkbox.setChecked(moreoutput_state == "True")
-            # Load new output_tab checkboxes
+            self.deviceid_output_checkbox.setChecked(
+                config.get("Settings", "moreoutput", fallback="False") == "True"
+            )
+            # Load output_tab checkboxes
             self.ip_address_output_checkbox.setChecked(
                 config.get("Settings", "ip_address_output", fallback="False") == "True"
             )
@@ -2046,22 +2140,24 @@ class MacAttack(QMainWindow):
             self.datefound_output_checkbox.setChecked(
                 config.get("Settings", "datefound_output", fallback="False") == "True"
             )
-            # Load Max Connections checkbox state
             self.max_connections_output_checkbox.setChecked(
                 config.get("Settings", "max_connections_output", fallback="False")
                 == "True"
             )
-            # Load Date Created checkbox state
             self.date_created_output_checkbox.setChecked(
                 config.get("Settings", "date_created_output", fallback="False")
                 == "True"
             )
-            # Load Single Output File checkbox state
-            singleoutputfile_state = config.get(
-                "Settings", "singleoutputfile", fallback="False"
+            self.proxy_used_output_checkbox.setChecked(
+                config.get("Settings", "proxy_used_output", fallback="False") == "True"
             )
-            self.singleoutputfile_checkbox.setChecked(singleoutputfile_state == "True")
-            # Load other proxy settings
+            self.singleoutputfile_checkbox.setChecked(
+                config.get("Settings", "singleoutputfile", fallback="False") == "True"
+            )
+            self.future_output_checkbox.setChecked(
+                config.get("Settings", "future_output", fallback="False")
+                == "True"
+            )
             self.proxy_textbox.setPlainText(
                 config.get("Settings", "proxy_list", fallback="")
             )
@@ -2069,22 +2165,18 @@ class MacAttack(QMainWindow):
                 config.getint("Settings", "proxy_concurrent_tests", fallback=100)
             )
             self.proxy_remove_errorcount.setValue(
-                config.getint("Settings", "proxy_remove_errorcount", fallback=1)
+                config.getint("Settings", "proxy_remove_errorcount", fallback=5)
             )
-            # Load proxy input
             self.proxy_input.setText(config.get("Settings", "proxy_input", fallback=""))
-            # Load output buffer value
             self.output_buffer_spinbox.setValue(
-                config.getint("Settings", "output_buffer", fallback=1000)
+                config.getint("Settings", "output_buffer", fallback=2500)
             )
-            # Load active tab
             self.tabs.setCurrentIndex(
                 config.getint("Settings", "active_tab", fallback=0)
             )
-            # Load the "Don't check for updates" checkbox state
-            dont_update_state = config.get("Settings", "dont_update", fallback="False")
-            self.dont_update_checkbox.setChecked(dont_update_state == "True")
-
+            self.dont_update_checkbox.setChecked(
+                config.get("Settings", "dont_update", fallback="False") == "True"
+            )
             # Load window geometry
             if config.has_section("Window"):
                 self.resize(
@@ -2100,59 +2192,6 @@ class MacAttack(QMainWindow):
             logging.debug("No settings file found.")
         if not self.dont_update_checkbox.isChecked():
             self.get_update()
-
-    def show_update_popup(self, VERSION, latest_version, release_url):
-        # Create the update popup
-        msg = QMessageBox()
-        msg.setIcon(QMessageBox.Information)
-        msg.setWindowTitle(f"MacAttack v{VERSION} Update Available!")
-        msg.setText(f"A new version v{latest_version} is available!")
-        msg.setInformativeText(
-            f"Click the button below to view the release notes or download it:"
-        )
-
-        # Create a button inside the message box
-        button = QPushButton(f"View Update v{latest_version}")
-        button.clicked.connect(lambda: webbrowser.open(release_url))
-
-        msg.addButton(button, QMessageBox.AcceptRole)
-
-        # Show the message box
-        msg.exec_()
-
-    def get_update(self):
-
-        # GitHub API URL for latest release
-        url = f"https://api.github.com/repos/Evilvir-us/MacAttack/releases/latest"
-
-        try:
-            # Fetch the latest release information
-            response = requests.get(url)
-            response.raise_for_status()  # Check for errors
-            latest_release = response.json()
-
-            # Get the latest version tag and release URL
-            latest_version = latest_release["tag_name"]
-            release_url = latest_release["html_url"]
-            logging.info(f"Latest version on GitHub: {latest_version}")
-
-            # Remove the 'v' prefix if it exists (to ensure proper comparison)
-            if latest_version.startswith("v"):
-                latest_version = latest_version[1:]
-
-            # Compare the versions
-            if semver.compare(VERSION, latest_version) < 0:
-                logging.info(
-                    f"Update available! Current version: {VERSION}, Latest version: {latest_version}"
-                )
-                self.show_update_popup(VERSION, latest_version, release_url)
-            else:
-                logging.info(
-                    f"You are up to date! Current version: {VERSION}, Latest version: {latest_version}"
-                )
-
-        except requests.RequestException as e:
-            logging.info(f"Error fetching update info: {e}")
 
     def set_window_icon(self):
         # Base64 encoded image string (replace with your own base64 string)
@@ -2262,7 +2301,7 @@ class MacAttack(QMainWindow):
                 self.update_mac_label_signal.emit(f"Testing MAC: {mac}")
             if proxies:
                 self.update_mac_label_signal.emit(
-                    f"Testing MAC: {mac}, Using PROXY: {selected_proxy}"
+                    f"Testing MAC: {mac:<19} Using PROXY: {selected_proxy:<23}"
                 )
             try:
                 with no_proxy_environment():  # Bypass the enviroment proxy set in the video player tab
@@ -2431,8 +2470,8 @@ class MacAttack(QMainWindow):
                                                         "created_at"
                                                     ]
                                                 )
-                                                created_at = datetime.utcfromtimestamp(
-                                                    created_at_timestamp
+                                                created_at = datetime.fromtimestamp(
+                                                    created_at_timestamp, timezone.utc
                                                 ).strftime("%B %d, %Y, %I:%M %p")
                                             except (ValueError, TypeError):
                                                 created_at = None  # In case of error, set it to None
@@ -2499,7 +2538,9 @@ class MacAttack(QMainWindow):
                                         self.mac_input.setText(mac)
                                     if self.output_file is None:
                                         output_filename = self.OutputMastermind()
-                                        self.output_file = open(output_filename, "a")
+                                        self.output_file = open(
+                                            output_filename, "a", encoding="utf-8"
+                                        )  # Ensure UTF-8 encoding
 
                                     # Helper function to resolve IP addresses
                                     def resolve_ip_address(hostname, default_message):
@@ -2515,14 +2556,15 @@ class MacAttack(QMainWindow):
                                         # Get location details for an IP address using ipinfo.io API.
                                         url = f"https://ipinfo.io/{ip_address}/json"
                                         try:
-                                            response = requests.get(url)
-                                            response.raise_for_status()
-                                            data = response.json()
-                                            return {
-                                                "City": data.get("city"),
-                                                "Country": data.get("country"),
-                                                "Timezone": data.get("timezone"),
-                                            }
+                                            with no_proxy_environment():  # Bypass the enviroment proxy set in the video player tab
+                                                response = requests.get(url)
+                                                response.raise_for_status()
+                                                data = response.json()
+                                                return {
+                                                    "City": data.get("city"),
+                                                    "Country": data.get("country"),
+                                                    "Timezone": data.get("timezone"),
+                                                }
                                         except (
                                             requests.exceptions.RequestException
                                         ) as e:
@@ -2571,6 +2613,9 @@ class MacAttack(QMainWindow):
                                     include_date_created = (
                                         self.date_created_output_checkbox.isChecked()
                                     )  # Date Created checkbox
+                                    include_proxy_used = (
+                                        self.proxy_used_output_checkbox.isChecked()
+                                    )  # Proxy Used checkbox
                                     current_time = datetime.now().strftime(
                                         "%B %d, %Y, %I:%M %p"
                                     )
@@ -2612,14 +2657,18 @@ class MacAttack(QMainWindow):
                                             else ""
                                         )
 
-                                    result_message = (
-                                        f"{'Portal:':<10} {self.iptv_link}\n"
-                                    )
+                                    result_message = f"{'Portal:':<10} {self.iptv_link}\n"
 
                                     if include_ip_addresses and middleware_ip_address:
                                         result_message += f"{'PortalIP:':<10} {middleware_ip_address}\n"
 
                                     result_message += f"{'MAC Addr:':<10} {mac}\n"
+
+                                    if (
+                                        include_proxy_used
+                                        and selected_proxy != "Your Connection"
+                                    ):
+                                        result_message += f"{'Proxy IP:':<10} {selected_proxy}\n"
 
                                     if (
                                         include_location_and_timezone
@@ -2632,9 +2681,7 @@ class MacAttack(QMainWindow):
                                     result_message += f"{'DeviceID:':<10} {device_id}\n{'SecondID:':<10} {device_id2}\n{'Serial #:':<10} {sn}\n"
 
                                     if include_backend_info and domain_and_port:
-                                        result_message += (
-                                            f"{'Backend:':<10} {domain_and_port}\n"
-                                        )
+                                        result_message += f"{'Backend:':<10} {domain_and_port}\n"
                                         if include_ip_addresses and backend_ip_address:
                                             result_message += f"{'IP Addr:':<10} {backend_ip_address}\n"
                                         if (
@@ -2656,17 +2703,11 @@ class MacAttack(QMainWindow):
                                         result_message += f"{'Username:':<10} {username}\n{'Password:':<10} {password}\n"
 
                                     if include_max_connections and max_connections:
-                                        result_message += (
-                                            f"{'Max Conn:':<10} {max_connections}\n"
-                                        )
+                                        result_message += f"{'Max Conn:':<10} {max_connections}\n"
                                     if include_date_found:
-                                        result_message += (
-                                            f"{'Found on:':<10} {current_time}\n"
-                                        )
+                                        result_message += f"{'Found on:':<10} {current_time}\n"
                                     if include_date_created and created_at is not None:
-                                        result_message += (
-                                            f"{'Creation:':<10} {created_at}\n"
-                                        )
+                                        result_message += f"{'Creation:':<10} {created_at}\n"
 
                                     result_message += f"{'Exp date:':<10} {expiry}\n{'Channels:':<10} {count}\n"
 
@@ -3040,6 +3081,7 @@ class MacAttack(QMainWindow):
                     elif "ERROR: Not Found" in res.text:
                         self.update_error_text_signal.emit(
                             f"Error for Proxy: {selected_proxy} : <b>Portal not found</b> couldnt find the portal."
+                            # Not removing this to prevent proxy removal in case of a connection error.
                         )
                     elif "403 Forbidden" in res.text:  # i dont think this is an error
                         self.proxy_error_counts[selected_proxy] = 0
@@ -3616,7 +3658,6 @@ class MacAttack(QMainWindow):
         return False
 
     def retrieve_channels(self, tab_name, category):
-        tab_info = self.tab_data[tab_name]
         category_type = category["category_type"]
         category_id = category.get("category_id") or category.get("genre_id")
         num_threads = 5
@@ -4075,6 +4116,66 @@ class MacAttack(QMainWindow):
         # Run the joining process in its own thread
         joiner_thread = threading.Thread(target=join_threads)
         joiner_thread.start()
+
+    def show_update_popup(self, VERSION, latest_version, release_url):
+        # Create the update popup
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle(f"MacAttack v{VERSION} Update Available!")
+        msg.setText(f"A new version v{latest_version} is available!")
+        msg.setInformativeText(
+            "Click the button below to view the release notes or download it:"
+        )
+
+        # Create a button to view the update
+        button = QPushButton(f"Update v{latest_version}")
+        button.clicked.connect(lambda: webbrowser.open(release_url))
+
+        # Create a cancel button
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(msg.reject)
+
+        # Add buttons to the message box
+        msg.addButton(button, QMessageBox.AcceptRole)
+        msg.addButton(cancel_button, QMessageBox.RejectRole)
+
+        # Show the message box
+        msg.exec_()
+
+    def get_update(self):
+
+        # GitHub API URL for latest release
+        url = "https://api.github.com/repos/Evilvir-us/MacAttack/releases/latest"
+
+        try:
+            with no_proxy_environment():  # Bypass the enviroment proxy set in the video player tab
+                # Fetch the latest release information
+                response = requests.get(url)
+                response.raise_for_status()  # Check for errors
+                latest_release = response.json()
+
+                # Get the latest version tag and release URL
+                latest_version = latest_release["tag_name"]
+                release_url = latest_release["html_url"]
+                logging.info(f"Latest version on GitHub: {latest_version}")
+
+                # Remove the 'v' prefix if it exists (to ensure proper comparison)
+                if latest_version.startswith("v"):
+                    latest_version = latest_version[1:]
+
+                # Compare the versions
+                if semver.compare(VERSION, latest_version) < 0:
+                    logging.info(
+                        f"Update available! Current version: {VERSION}, Latest version: {latest_version}"
+                    )
+                    self.show_update_popup(VERSION, latest_version, release_url)
+                else:
+                    logging.info(
+                        f"You are up to date! Current version: {VERSION}, Latest version: {latest_version}"
+                    )
+
+        except requests.RequestException as e:
+            logging.info(f"Error fetching update info: {e}")
 
     def closeEvent(self, event):
         self.videoPlayer.stop()
