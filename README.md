@@ -10,7 +10,7 @@ MacAttack is a GUI tool designed for **testing and brute forcing your own IPTV s
 
 IPTV stalker portals are commonly shared in IPTV groups across platforms like [Telegram](https://www.google.com/search?q=inurl:%22t.me%22%20telegram+iptv+mac+portal), [Reddit](https://www.reddit.com/r/iptvglory/), and [other forums](https://www.google.com/search?q="00%3A1a%3A79"+"%2Fc%2F"). These portal links typically end in `/c/`.
 
-MacAttack helps identify unshared and accessible MAC addresses in these portals. If a portal's page title reads `stalker_portal` when opened in your browser, it can likely be tested with this tool. Keep in mind that some providers secure their portals using device serial numbers, which prevents brute-forcing.
+MacAttack helps identify unshared and accessible MAC addresses in these portals. If a portal's page title reads `stalker_portal` when opened in your browser, it can likely be tested with this tool. 
 
 ---
 
@@ -44,6 +44,8 @@ For testing portal security:
    - Set the desired speed (1-100).  
 
 3. Click **Start** to begin the test.
+
+> **Note:** It is not recommended to use a VPN and proxies simultaneously. The VPN may interfere with proxy sessions, preventing the expected results. Choose one or the other: either enable the VPN and disable proxies, or enable proxies and disable the VPN.
 
 ---
 
