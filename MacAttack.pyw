@@ -1,4 +1,4 @@
-VERSION = "4.3.6"
+VERSION = "4.3.7"
 import semver
 import webbrowser
 import base64
@@ -64,7 +64,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote, urlparse, urlunparse
 
-logging.basicConfig(level=logging.CRITICAL + 1)
+logging.basicConfig(level=logging.ERROR)
 
 
 @contextmanager
@@ -1667,15 +1667,15 @@ class MacAttack(QMainWindow):
 
         
         # Create a checkbox for something later, next to proxy info
-        self.future_output_checkbox = QCheckBox(
-            "checkbox label"
+        self.proxy_location_output_checkbox = QCheckBox(
+            "Proxy Location"
         )
-        self.future_output_checkbox.setFixedWidth(output_checkbox_width)
+        self.proxy_location_output_checkbox.setFixedWidth(output_checkbox_width)
 
         # Create a horizontal layout to add both checkboxes side by side
         proxy_layout = QHBoxLayout()
         proxy_layout.addWidget(self.proxy_used_output_checkbox)
-        # proxy_layout.addWidget(self.future_output_checkbox)
+        proxy_layout.addWidget(self.proxy_location_output_checkbox)
 
         # Set alignment for the new horizontal layout
         proxy_layout.setAlignment(Qt.AlignLeft)
@@ -2020,8 +2020,9 @@ class MacAttack(QMainWindow):
             self.max_connections_output_checkbox.setChecked(False)
             self.date_created_output_checkbox.setChecked(False)
             self.proxy_used_output_checkbox.setChecked(False)
+            self.proxy_location_output_checkbox.setChecked(False)
             self.singleoutputfile_checkbox.setChecked(True)
-            self.future_output_checkbox.setChecked(False)
+            self.proxy_location_output_checkbox.setChecked(False)
             self.proxy_textbox.setPlainText("")
             self.proxy_concurrent_tests.setValue(100)
             self.proxy_remove_errorcount.setValue(5)
@@ -2074,7 +2075,7 @@ class MacAttack(QMainWindow):
             "proxy_input": self.proxy_input.text(),
             "output_buffer": str(self.output_buffer_spinbox.value()),
             "dont_update": str(self.dont_update_checkbox.isChecked()),
-            "future_output": str(self.future_output_checkbox.isChecked()),
+            "proxy_location_output": str(self.proxy_location_output_checkbox.isChecked()),
         }
         config["Window"] = {
             "width": self.width(),
@@ -2154,8 +2155,8 @@ class MacAttack(QMainWindow):
             self.singleoutputfile_checkbox.setChecked(
                 config.get("Settings", "singleoutputfile", fallback="False") == "True"
             )
-            self.future_output_checkbox.setChecked(
-                config.get("Settings", "future_output", fallback="False")
+            self.proxy_location_output_checkbox.setChecked(
+                config.get("Settings", "proxy_location_output", fallback="False")
                 == "True"
             )
             self.proxy_textbox.setPlainText(
@@ -2609,13 +2610,35 @@ class MacAttack(QMainWindow):
                                     )
                                     include_max_connections = (
                                         self.max_connections_output_checkbox.isChecked()
-                                    )  # Max Connections checkbox
+                                    )
                                     include_date_created = (
                                         self.date_created_output_checkbox.isChecked()
-                                    )  # Date Created checkbox
+                                    )
                                     include_proxy_used = (
                                         self.proxy_used_output_checkbox.isChecked()
-                                    )  # Proxy Used checkbox
+                                    )
+                                    include_proxy_location = (
+                                        self.proxy_location_output_checkbox.isChecked()
+                                    )
+                                    
+                                    if include_proxy_location and selected_proxy != "Your Connection":
+                                        # Strip the port
+                                        proxy_ip = selected_proxy.split(":")[0]
+                                        proxy_location = (
+                                            get_location(proxy_ip)
+                                        )
+                                        proxy_city = (
+                                            proxy_location.get("City", "Unknown")
+                                            if proxy_location
+                                            else ""
+                                        )
+                                        proxy_country = (
+                                            proxy_location.get("Country", "Unknown")
+                                            if proxy_location
+                                            else ""
+                                        )
+                                        
+                                    
                                     current_time = datetime.now().strftime(
                                         "%B %d, %Y, %I:%M %p"
                                     )
@@ -2669,6 +2692,12 @@ class MacAttack(QMainWindow):
                                         and selected_proxy != "Your Connection"
                                     ):
                                         result_message += f"{'Proxy IP:':<10} {selected_proxy}\n"
+
+                                    if (
+                                        include_proxy_location
+                                        and selected_proxy != "Your Connection"
+                                    ):
+                                        result_message += f"{'location:':<10} {proxy_city}, {proxy_country}\n"
 
                                     if (
                                         include_location_and_timezone
