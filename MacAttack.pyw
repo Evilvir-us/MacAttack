@@ -1,4 +1,6 @@
-VERSION = "4.3.7"
+#TODO: add a global custom_macs and set it on start, then retore the global list when stop is clicked (if the checkbox is selected)
+
+VERSION = "4.4.1"
 import semver
 import webbrowser
 import base64
@@ -700,13 +702,9 @@ class MacAttack(QMainWindow):
     update_mac_label_signal = pyqtSignal(str)
     update_output_text_signal = pyqtSignal(str)
     update_error_text_signal = pyqtSignal(str)
-    macattack_update_proxy_textbox_signal = pyqtSignal(
-        str
-    )  # macattack clean bad proxies
-    # proxies_fetched_signal = pyqtSignal(str)  # Signal to send fetched proxies to the UI
-    # working_proxies_signal = pyqtSignal(str)  # Signal to send working proxies to the UI
-    # error_signal = pyqtSignal(str)  # Signal to send errors to the UI
-    # output_signal = pyqtSignal(str)  # Signal to send print output to QTextEdit
+    macattack_update_proxy_textbox_signal = pyqtSignal(str)  # macattack clean bad proxies
+    macattack_update_mac_textbox_signal = pyqtSignal(str)  # macattack remove custom mac
+    
 
     def __init__(self):
         super().__init__()
@@ -751,6 +749,9 @@ class MacAttack(QMainWindow):
         )
         self.macattack_update_proxy_textbox_signal.connect(
             self.macattack_update_proxy_textbox
+        )
+        self.macattack_update_mac_textbox_signal.connect(
+            self.macattack_update_mac_textbox
         )
         QApplication.setStyle("Fusion")
         theme = """
@@ -1321,7 +1322,7 @@ class MacAttack(QMainWindow):
         self.proxy_textbox.setReadOnly(False)
         monospace_font = QFont(
             "Lucida Console", 10
-        )  # You can use "Courier New" or other monospaced fonts like "Consolas"
+        )
         self.proxy_textbox.setFont(monospace_font)
         proxy_layout.addWidget(self.proxy_textbox)
         # Create a horizontal layout for the button and speed input
@@ -1563,6 +1564,44 @@ class MacAttack(QMainWindow):
         )
         general_layout.addWidget(self.dont_update_checkbox)
 
+        # Add "Use Custom MAC Addresses" checkbox        
+        self.use_custom_macs_checkbox = QCheckBox(
+            "Use Custom MAC Addresses\n"
+            "Beta feature: Removes MAC addresses from the list when successful.\n"
+            "Note: Needs update to also remove non-successful MACs (excluding error entries)."
+        )
+        
+        
+        
+        
+        self.use_custom_macs_checkbox.stateChanged.connect(self.toggle_custom_macs_textbox)  # Connect signal to function
+        general_layout.addWidget(self.use_custom_macs_checkbox)
+
+        # text area for entering custom MAC addresses
+        self.custom_macs_textbox = QTextEdit()
+        self.custom_macs_textbox.setStyleSheet(
+            """
+            color: black;
+            background-color: lightgrey;
+            border-left: 12px solid  #2E2E2E;
+            border-right: 12px solid  #2E2E2E;
+            border-bottom: none;
+            border-top: none;
+            """
+        )
+        self.custom_macs_textbox.setReadOnly(False)
+        monospace_font = QFont("Lucida Console", 10)
+        self.custom_macs_textbox.setFont(monospace_font)
+        self.custom_macs_textbox.setPlaceholderText("Enter custom MAC addresses here")
+        self.custom_macs_textbox.setVisible(False)  # Initially hidden
+        general_layout.addWidget(self.custom_macs_textbox)
+
+        # Restore the list when I click Stop checkbox
+        self.restore_custom_macs_checkbox = QCheckBox("Restore the list when I click Stop")
+        self.restore_custom_macs_checkbox.setVisible(False)  # Hide the checkbox initially
+        general_layout.addWidget(self.restore_custom_macs_checkbox)
+            
+
         # Add the tabs to the tab widget
         tab_widget.addTab(general_tab, "General")
         tab_widget.addTab(output_tab, "Output")
@@ -1770,6 +1809,14 @@ class MacAttack(QMainWindow):
 
         # Add the horizontal layout to the Settings_frame layout
         layout.addLayout(bottom_layout)
+
+    def toggle_custom_macs_textbox(self, state):
+        if state == Qt.Checked:
+            self.custom_macs_textbox.setVisible(True)
+            self.restore_custom_macs_checkbox.setVisible(True)
+        else:
+            self.custom_macs_textbox.setVisible(False)
+            self.restore_custom_macs_checkbox.setVisible(False)
 
     def enable_ludicrous_speed(self):
         if self.ludicrous_speed_checkbox.isChecked():
@@ -2060,22 +2107,22 @@ class MacAttack(QMainWindow):
             "proxy_concurrent_tests": str(self.proxy_concurrent_tests.value()),
             "proxy_remove_errorcount": str(self.proxy_remove_errorcount.value()),
             "ludicrous_speed": str(self.ludicrous_speed_checkbox.isChecked()),
-            "moreoutput": str(self.deviceid_output_checkbox.isChecked()),
+            "deviceid_output": str(self.deviceid_output_checkbox.isChecked()),
             "ip_address_output": str(self.ip_address_output_checkbox.isChecked()),
             "location_output": str(self.location_output_checkbox.isChecked()),
             "backend_output": str(self.backend_output_checkbox.isChecked()),
             "username_output": str(self.username_output_checkbox.isChecked()),
             "datefound_output": str(self.datefound_output_checkbox.isChecked()),
             "singleoutputfile": str(self.singleoutputfile_checkbox.isChecked()),
-            "max_connections_output": str(
-                self.max_connections_output_checkbox.isChecked()
-            ),
+            "max_connections_output": str(self.max_connections_output_checkbox.isChecked()),
             "date_created_output": str(self.date_created_output_checkbox.isChecked()),
             "proxy_used_output": str(self.proxy_used_output_checkbox.isChecked()),
             "proxy_input": self.proxy_input.text(),
             "output_buffer": str(self.output_buffer_spinbox.value()),
             "dont_update": str(self.dont_update_checkbox.isChecked()),
             "proxy_location_output": str(self.proxy_location_output_checkbox.isChecked()),
+            "use_custom_macs": str(self.use_custom_macs_checkbox.isChecked()),  # Save checkbox state
+            "custom_macs_text": self.custom_macs_textbox.toPlainText(),  # Save text box content
         }
         config["Window"] = {
             "width": self.width(),
@@ -2123,7 +2170,7 @@ class MacAttack(QMainWindow):
                 config.get("Settings", "ludicrous_speed", fallback="False") == "True"
             )
             self.deviceid_output_checkbox.setChecked(
-                config.get("Settings", "moreoutput", fallback="False") == "True"
+                config.get("Settings", "deviceid_output", fallback="False") == "True"
             )
             # Load output_tab checkboxes
             self.ip_address_output_checkbox.setChecked(
@@ -2177,6 +2224,13 @@ class MacAttack(QMainWindow):
             )
             self.dont_update_checkbox.setChecked(
                 config.get("Settings", "dont_update", fallback="False") == "True"
+            )
+            # Load custom MAC settings
+            self.use_custom_macs_checkbox.setChecked(
+                config.get("Settings", "use_custom_macs", fallback="False") == "True"
+            )
+            self.custom_macs_textbox.setPlainText(
+                config.get("Settings", "custom_macs_text", fallback="")
             )
             # Load window geometry
             if config.has_section("Window"):
@@ -2263,11 +2317,30 @@ class MacAttack(QMainWindow):
         self.SaveTheDay()
 
     def RandomMacGenerator(self, prefix="00:1A:79:"):
-        return f"{prefix}{random.randint(0, 255):02X}:{random.randint(0, 255):02X}:{random.randint(0, 255):02X}"
+        custommacs = self.use_custom_macs_checkbox.isChecked()
 
+        if not custommacs:
+            # Generate a random MAC address using the given prefix
+            return f"{prefix}{random.randint(0, 255):02X}:{random.randint(0, 255):02X}:{random.randint(0, 255):02X}"
+        else:
+            # Get custom MACs from the textbox
+            custom_macs_text = self.custom_macs_textbox.toPlainText().strip()
+            custom_macs = [line.strip() for line in custom_macs_text.splitlines() if line.strip()]
+
+            if not custom_macs:
+                return ""  # Return an empty string if no MACs
+            
+            # Return a random MAC address from the custom list
+            return random.choice(custom_macs)
+
+        
     def macattack_update_proxy_textbox(self, new_text):
         # Slot to handle signal
         self.proxy_textbox.setText(new_text)
+    
+    def macattack_update_mac_textbox(self, new_text):
+        # Slot to handle signal
+        self.custom_macs_textbox.setText(new_text)
 
     def BigMacAttack(self):
         # BigMacAttack: Two all-beef patties, special sauce, lettuce, cheese, pickles, onions, on a sesame seed bun.
@@ -2293,6 +2366,11 @@ class MacAttack(QMainWindow):
             else:
                 selected_proxy = "Your Connection"
             mac = self.RandomMacGenerator()  # Generate a random MAC
+            if mac == "":
+                    # Show error message
+                    self.stop_button.click()
+                    self.update_error_text_signal.emit("ERROR: Custom MACs list is empty")
+                    return  # Stop the process if no MACs are available
             serialnumber = hashlib.md5(mac.encode()).hexdigest().upper()
             sn = serialnumber[0:13]
             device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
@@ -2534,6 +2612,11 @@ class MacAttack(QMainWindow):
                                 # new output changes
                                 if count > 0:
                                     logging.info("Mac found")
+                                    custommacs = self.use_custom_macs_checkbox.isChecked()  # Check the state of the checkbox
+
+                                    if custommacs:
+                                        self.remove_custom_mac(mac)
+                                        
                                     if self.autoloadmac_checkbox.isChecked():
                                         self.hostname_input.setText(self.base_url)
                                         self.mac_input.setText(mac)
@@ -2595,6 +2678,9 @@ class MacAttack(QMainWindow):
                                     # Construct the result message based on checkbox states
                                     include_date_found = (
                                         self.datefound_output_checkbox.isChecked()
+                                    )
+                                    include_deviceids = (
+                                        self.deviceid_output_checkbox.isChecked()
                                     )
                                     include_user_creds = (
                                         self.username_output_checkbox.isChecked()
@@ -2707,7 +2793,8 @@ class MacAttack(QMainWindow):
                                             f"{'Location:':<10} {middleware_city}, {middleware_country}\n"
                                             f"{'Timezone:':<10} {middleware_timezone}\n"
                                         )
-                                    result_message += f"{'DeviceID:':<10} {device_id}\n{'SecondID:':<10} {device_id2}\n{'Serial #:':<10} {sn}\n"
+                                    if include_deviceids:
+                                        result_message += f"{'DeviceID:':<10} {device_id}\n{'SecondID:':<10} {device_id2}\n{'Serial #:':<10} {sn}\n"
 
                                     if include_backend_info and domain_and_port:
                                         result_message += f"{'Backend:':<10} {domain_and_port}\n"
@@ -3171,7 +3258,20 @@ class MacAttack(QMainWindow):
                         # logging.debug(f"{str(e)}")
                         logging.debug(f"Raw Response Content:\n{mac}\n", res.text)
                     # self.error_count += 1
+    def remove_custom_mac(self, mac):
+        print(f"removing {mac}")
+        # Remove mac from the list
+        current_text = self.custom_macs_textbox.toPlainText()
+        new_text = "\n".join(
+            line for line in current_text.splitlines() if line.strip() != mac
+        )
+        self.macattack_update_mac_textbox_signal.emit(new_text)
+        # Notify user
+        self.update_error_text_signal.emit(
+            f"{mac} removed"
+        )
 
+    
     def remove_proxy(self, proxy, proxy_error_counts):
         """Remove a proxy after exceeding error count and update UI."""
         error_limit = self.proxy_remove_errorcount.value()
