@@ -1,5 +1,5 @@
 #TODO: add a global custom_macs and set it on start, then retore the global list when stop is clicked (if the checkbox is selected)
-
+# also add checkboxes to ini file and defaults        
 VERSION = "4.4.1"
 import semver
 import webbrowser
