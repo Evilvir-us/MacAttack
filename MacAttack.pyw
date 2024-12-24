@@ -2369,6 +2369,10 @@ class MacAttack(QMainWindow):
     def BigMacAttack(self):
         # BigMacAttack: Two all-beef patties, special sauce, lettuce, cheese, pickles, onions, on a sesame seed bun.
         proxies = []  # Default to empty list in case no proxies are provided
+        hostname = None
+        domain_and_port = None
+        username = None
+        password = None
         self.recentlyfound = [] # Erase recently found list
         while self.running:  # Loop will continue as long as self.running is True
             created_at = None
@@ -2394,7 +2398,7 @@ class MacAttack(QMainWindow):
             if mac == "":
                     # Show error message
                     self.stop_button.click()
-                    self.update_error_text_signal.emit("ERROR: Custom MACs list is empty")
+                    self.update_error_text_signal.emit("Completed: Custom MACs list is empty")
                     return  # Stop the process if no MACs are available
             serialnumber = hashlib.md5(mac.encode()).hexdigest().upper()
             sn = serialnumber[0:13]
@@ -2517,6 +2521,8 @@ class MacAttack(QMainWindow):
                                                 if parsed_url.port
                                                 else f"{parsed_url.scheme}://{parsed_url.hostname}"
                                             )
+                                            #00:1A:79:18:3d:c5
+
                                             logging.debug(
                                                 f"Real Host: {domain_and_port}"
                                             )
@@ -2528,6 +2534,7 @@ class MacAttack(QMainWindow):
                                             userfound = 0
                                             username = None
                                             password = None
+                                            
                                             if len(path_parts) >= 3:
                                                 username = path_parts[0]
                                                 password = path_parts[1]
@@ -2643,9 +2650,7 @@ class MacAttack(QMainWindow):
                                         TypeError,
                                         json.decoder.JSONDecodeError,
                                     ) as e:
-                                        self.update_error_text_signal.emit(
-                                            f"Data parsing error for channels data: {str(e)}"
-                                        )
+                                        logging.info(f"Data parsing error for channels data: {str(e)}")
                                         count = 0
                                 # new output changes
 
@@ -2769,6 +2774,8 @@ class MacAttack(QMainWindow):
                                     )
 
                                     backend_ip_address = None
+
+
                                     try:
                                         backend_ip_address = resolve_ip_address(
                                             hostname, "No Backend"
@@ -2805,7 +2812,7 @@ class MacAttack(QMainWindow):
                                             else ""
                                         )
 
-                                    result_message = f"{' Portal :':<10} {self.iptv_link}\n"
+                                    result_message = f"{'~Portal~:':<10} {self.iptv_link}\n"
                                     result_message += f"{'MAC Addr:':<10} {mac}\n"
                                     
                                     if include_ip_addresses and middleware_ip_address:
