@@ -1,4 +1,4 @@
-VERSION = "4.4.1"
+VERSION = "4.4.2"
 import semver
 import webbrowser
 import base64
@@ -3439,8 +3439,12 @@ class MacAttack(QMainWindow):
         
         self.killthreads()
         QTimer.singleShot(
-            15000, lambda: self.start_button.setDisabled(False)
-        )  # stop waiting after a time
+            15000, 
+            lambda: (
+                self.start_button.setDisabled(False) 
+                if not self.stop_button.isEnabled() else None
+            )
+        )  # enable start_button if stop_button is disabled
         
         # Disable further user input immediately
         logging.info("GiveUp initiated: Preparing to stop threads.")
