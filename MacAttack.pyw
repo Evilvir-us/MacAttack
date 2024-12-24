@@ -66,7 +66,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote, urlparse, urlunparse
 
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.CRITICAL + 1)
 
 
 @contextmanager
@@ -258,8 +258,8 @@ class ProxyFetcher(QThread):
         proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
         try:
             with no_proxy_environment():  # Bypass the enviroment proxy set in the video player tab
-                response = requests.get(url, proxies=proxies, timeout=10)
-                if response.status_code == 200:
+                response = requests.get(url, proxies=proxies, timeout=20)
+                if response.status_code in {200, 503}:
                     return proxy, True
         except requests.RequestException as e:
             logging.debug(f"Error testing proxy {proxy}: {str(e)}")
@@ -733,6 +733,8 @@ class MacAttack(QMainWindow):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
         self.running = False
         self.threads = []
+        # Initialize recentlyfound as an empty list
+        self.recentlyfound = []
         self.output_file = None
         self.video_worker = None  # Initialize to None
         self.current_request_thread = None  # Initialize
@@ -871,6 +873,13 @@ class MacAttack(QMainWindow):
         self.move_start_pos = None
         if self.tabs.currentIndex() == 1:  # Ensure we're on the Mac VideoPlayer tab
             self.videoPlayer.play()  # Play the video
+
+    def add_recently_found(self, mac):
+        if mac not in self.recentlyfound:
+            self.recentlyfound.append(mac)
+            logging.info(f"MAC address {mac} added.")
+        else:
+            logging.info(f"MAC address {mac} is already in the list.")
 
     def build_mac_videoPlayer_gui(self, parent):
         # Central widget for the "Mac VideoPlayer" tab
@@ -1524,60 +1533,39 @@ class MacAttack(QMainWindow):
         line1.setFrameShadow(QFrame.Sunken)
         general_layout.addWidget(line1)
 
-        self.autostop_checkbox = QCheckBox("Stop the attack whenever a MAC is found")
-        general_layout.addWidget(self.autostop_checkbox)
+        # Create a label above the checkboxes
+        macfound_label = QLabel("When a MAC is found:")
+        macfound_label.setAlignment(Qt.AlignTop)
+        general_layout.addWidget(macfound_label)
 
-        self.successsound_checkbox = QCheckBox("Play a sound whenever a MAC is found")
-        general_layout.addWidget(self.successsound_checkbox)
+        # Create a horizontal layout for the checkboxes
+        macfound_checkboxes = QHBoxLayout()
+
+        self.successsound_checkbox = QCheckBox("Play a sound.")
+        macfound_checkboxes.addWidget(self.successsound_checkbox)
+
+        self.autostop_checkbox = QCheckBox("Stop the attack.")
+        macfound_checkboxes.addWidget(self.autostop_checkbox)
+
+        # Add the horizontal layout to the main general_layout
+        general_layout.addLayout(macfound_checkboxes)
 
         general_layout.addSpacing(15)
-
-        # Ludicrous speed checkbox
-        self.ludicrous_speed_checkbox = QCheckBox(
-            "Enable Ludicrous Speed! \n(Running at high speeds may cause the app to become unresponsive)"
-        )
-        self.ludicrous_speed_checkbox.stateChanged.connect(self.enable_ludicrous_speed)
-        self.ludicrous_speed_checkbox.setStyleSheet(
-            """
-            QCheckBox:checked {
-                background-color: Black;
-                color: red;
-            }
-            QCheckBox {
-                background-color:  #666666;
-                padding: 5px;
-                border: 2px solid black;
-            }
-            """
-        )
-        general_layout.addWidget(self.ludicrous_speed_checkbox)
-
-        self.dont_update_checkbox = QCheckBox("Don't check for updates.")
-        self.dont_update_checkbox.setStyleSheet(
-            """
-            QCheckBox {
-                background-color:  #666666;
-                padding: 5px;
-                border: 2px solid black;
-            }
-            """
-        )
-        general_layout.addWidget(self.dont_update_checkbox)
+        
+        # Add label above the "Custom MACs" section
+        macs_label = QLabel("Custom MACs:")
+        general_layout.addWidget(macs_label)
 
         # Add "Use Custom MAC Addresses" checkbox        
         self.use_custom_macs_checkbox = QCheckBox(
             "Use Custom MAC Addresses\n"
-            "Beta feature: Removes MAC addresses from the list when successful.\n"
-            "Note: Needs update to also remove non-successful MACs (excluding error entries)."
+            "  MAC addresses will be removed from the list when used."
         )
-        
-        
-        
-        
+
         self.use_custom_macs_checkbox.stateChanged.connect(self.toggle_custom_macs_textbox)  # Connect signal to function
         general_layout.addWidget(self.use_custom_macs_checkbox)
 
-        # text area for entering custom MAC addresses
+        # Text area for entering custom MAC addresses
         self.custom_macs_textbox = QTextEdit()
         self.custom_macs_textbox.setStyleSheet(
             """
@@ -1596,11 +1584,31 @@ class MacAttack(QMainWindow):
         self.custom_macs_textbox.setVisible(False)  # Initially hidden
         general_layout.addWidget(self.custom_macs_textbox)
 
+        self.custom_macs_textbox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
         # Restore the list when I click Stop checkbox
         self.restore_custom_macs_checkbox = QCheckBox("Restore the list when I click Stop")
         self.restore_custom_macs_checkbox.setVisible(False)  # Hide the checkbox initially
         general_layout.addWidget(self.restore_custom_macs_checkbox)
-            
+
+        # Create a label above the checkboxes
+        system_settings_label = QLabel("System settings:")
+        system_settings_label.setAlignment(Qt.AlignTop)
+        general_layout.addWidget(system_settings_label)
+
+        # Create a horizontal layout for the checkboxes
+        system_settings_checkboxes = QHBoxLayout()
+
+        # Ludicrous Speed checkbox
+        self.ludicrous_speed_checkbox = QCheckBox("Enable Ludicrous Speed!")
+        system_settings_checkboxes.addWidget(self.ludicrous_speed_checkbox)
+
+        # Don't check for updates checkbox
+        self.dont_update_checkbox = QCheckBox("Don't check for updates.")
+        system_settings_checkboxes.addWidget(self.dont_update_checkbox)
+
+        # Add the horizontal layout to the main general_layout
+        general_layout.addLayout(system_settings_checkboxes)
 
         # Add the tabs to the tab widget
         tab_widget.addTab(general_tab, "General")
@@ -1609,6 +1617,8 @@ class MacAttack(QMainWindow):
 
         # Add the tab widget to the main layout
         layout.addWidget(tab_widget)
+        
+        
         # OUTPUT TAB
         output_label = QLabel("Output Settings")
         output_label.setAlignment(Qt.AlignTop)
@@ -1678,23 +1688,23 @@ class MacAttack(QMainWindow):
         horizontal_layout_1.setAlignment(Qt.AlignLeft)
         output_layout.addLayout(horizontal_layout_1)
 
-        # IP addresses and Usernames and passwords (side by side)
+        # IP addresses and Portal Location/Timezone (side by side)
         self.ip_address_output_checkbox = QCheckBox("IP Addresses")
-        self.username_output_checkbox = QCheckBox("Usernames and Passwords (if found)")
+        self.location_output_checkbox = QCheckBox("Location/Timezone (IP address req'd)")
         self.ip_address_output_checkbox.setFixedWidth(output_checkbox_width)
-        self.username_output_checkbox.setFixedWidth(output_checkbox_width)
+        self.location_output_checkbox.setFixedWidth(output_checkbox_width)
         horizontal_layout_2.addWidget(self.ip_address_output_checkbox)
-        horizontal_layout_2.addWidget(self.username_output_checkbox)
+        horizontal_layout_2.addWidget(self.location_output_checkbox)
         # Set alignment for horizontal layout
         horizontal_layout_2.setAlignment(Qt.AlignLeft)
         output_layout.addLayout(horizontal_layout_2)
 
-        # Portal location and timezone with Max Connections (side by side)
-        self.location_output_checkbox = QCheckBox("Portal Location/Timezone")
+        # Usernames and Passwords and Max Connections (side by side)
+        self.username_output_checkbox = QCheckBox("Username/Password (if found)")
         self.max_connections_output_checkbox = QCheckBox("Max Connections (if found)")
-        self.location_output_checkbox.setFixedWidth(output_checkbox_width)
+        self.username_output_checkbox.setFixedWidth(output_checkbox_width)
         self.max_connections_output_checkbox.setFixedWidth(output_checkbox_width)
-        horizontal_layout_3.addWidget(self.location_output_checkbox)
+        horizontal_layout_3.addWidget(self.username_output_checkbox)
         horizontal_layout_3.addWidget(self.max_connections_output_checkbox)
         # Set alignment for horizontal layout
         horizontal_layout_3.setAlignment(Qt.AlignLeft)
@@ -1707,7 +1717,7 @@ class MacAttack(QMainWindow):
         
         # Create a checkbox for something later, next to proxy info
         self.proxy_location_output_checkbox = QCheckBox(
-            "Proxy Location"
+            "Proxy Location (Proxy Used Req'd)"
         )
         self.proxy_location_output_checkbox.setFixedWidth(output_checkbox_width)
 
@@ -1821,13 +1831,13 @@ class MacAttack(QMainWindow):
     def enable_ludicrous_speed(self):
         if self.ludicrous_speed_checkbox.isChecked():
             self.ludicrous_speed_checkbox.setText(
-                "                       🚨Ludicrous Speed Activated!🚨 \n(Running at high speeds WILL cause the app to become unresponsive)"
+                "     🚨Ludicrous Speed Activated!🚨 \nRunning at high speeds can crash the app."
             )
             self.concurrent_tests.setRange(1, 1000)
             self.proxy_concurrent_tests.setRange(1, 1000)
         else:
             self.ludicrous_speed_checkbox.setText(
-                "Enable Ludicrous Speed! \n(Running at high speeds may cause the app to become unresponsive)"
+                "Enable Ludicrous Speed!"
             )
             self.concurrent_tests.setRange(1, 100)  # Default range
             self.proxy_concurrent_tests.setRange(1, 100)
@@ -2070,15 +2080,18 @@ class MacAttack(QMainWindow):
             self.proxy_location_output_checkbox.setChecked(False)
             self.singleoutputfile_checkbox.setChecked(True)
             self.proxy_location_output_checkbox.setChecked(False)
-            self.proxy_textbox.setPlainText("")
+            #self.proxy_textbox.setPlainText("")
             self.proxy_concurrent_tests.setValue(100)
             self.proxy_remove_errorcount.setValue(5)
             self.proxy_input.setText("")
             self.output_buffer_spinbox.setValue(2500)
-            self.tabs.setCurrentIndex(0)
+            #self.tabs.setCurrentIndex(0)
             self.dont_update_checkbox.setChecked(False)
-            self.resize(1138, 522)
-            self.move(200, 200)
+            self.use_custom_macs_checkbox.setChecked(False)
+            self.restore_custom_macs_checkbox.setChecked(False)
+            
+            #self.resize(1138, 522)
+            #self.move(200, 200)
 
             logging.debug("UI reset to default values.")
         except Exception as e:
@@ -2123,6 +2136,7 @@ class MacAttack(QMainWindow):
             "proxy_location_output": str(self.proxy_location_output_checkbox.isChecked()),
             "use_custom_macs": str(self.use_custom_macs_checkbox.isChecked()),  # Save checkbox state
             "custom_macs_text": self.custom_macs_textbox.toPlainText(),  # Save text box content
+            "restore_custom_macs": str(self.restore_custom_macs_checkbox.isChecked())  # Save restore checkbox state
         }
         config["Window"] = {
             "width": self.width(),
@@ -2132,7 +2146,7 @@ class MacAttack(QMainWindow):
         }
         with open(file_path, "w") as configfile:
             config.write(configfile)
-        logging.debug("Settings saved.")
+        print("Settings saved.")
 
     def load_settings(self):
         """Load user settings from the configuration file and apply them to the UI elements, including the active tab."""
@@ -2232,6 +2246,10 @@ class MacAttack(QMainWindow):
             self.custom_macs_textbox.setPlainText(
                 config.get("Settings", "custom_macs_text", fallback="")
             )
+            # Load the restore checkbox state
+            self.restore_custom_macs_checkbox.setChecked(
+                config.get("Settings", "restore_custom_macs", fallback="False") == "True"
+            )
             # Load window geometry
             if config.has_section("Window"):
                 self.resize(
@@ -2248,6 +2266,7 @@ class MacAttack(QMainWindow):
         if not self.dont_update_checkbox.isChecked():
             self.get_update()
 
+
     def set_window_icon(self):
         # Base64 encoded image string (replace with your own base64 string)
         base64_image_data = "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"
@@ -2263,6 +2282,7 @@ class MacAttack(QMainWindow):
         self.setWindowIcon(QIcon(pixmap))
 
     def TestDrive(self):
+        self.SaveTheDay()
         # Update button states immediately
         self.running = True
         self.start_button.setDisabled(True)
@@ -2314,7 +2334,7 @@ class MacAttack(QMainWindow):
             thread.start()
             # Track threads
             self.threads.append(thread)
-        self.SaveTheDay()
+        #self.SaveTheDay()
 
     def RandomMacGenerator(self, prefix="00:1A:79:"):
         custommacs = self.use_custom_macs_checkbox.isChecked()
@@ -2345,6 +2365,7 @@ class MacAttack(QMainWindow):
     def BigMacAttack(self):
         # BigMacAttack: Two all-beef patties, special sauce, lettuce, cheese, pickles, onions, on a sesame seed bun.
         proxies = []  # Default to empty list in case no proxies are provided
+        self.recentlyfound = [] # Erase recently found list
         while self.running:  # Loop will continue as long as self.running is True
             created_at = None
             max_connections = None
@@ -2412,7 +2433,17 @@ class MacAttack(QMainWindow):
                     # If proxy is enabled, add the proxy to the session
                     if proxies:
                         s.proxies.update(proxies)
+                        
+                    
                     res = s.get(url, timeout=25, allow_redirects=False)
+                    print(f"Status Code: {res.status_code}")
+                    if (res.status_code == 200 or res.status_code == 204) and not "REMOTE_ADDR" in res.text and not "Backend not available" in res.text:
+                        custommacs = self.use_custom_macs_checkbox.isChecked()  # Check the state of the checkbox
+                        if custommacs:
+                            self.remove_custom_mac(mac)
+                        
+                    logging.info(f"Response Text: {res.text}")  # For HTML content or text
+                    logging.debug(f"Response Headers: {res.headers}")
                     if res.text:
                         data = json.loads(res.text)
                         token = data.get("js", {}).get("token")
@@ -2431,6 +2462,9 @@ class MacAttack(QMainWindow):
                         )
 
                         res2 = s.get(url2, timeout=25, allow_redirects=False)
+                        logging.debug(f"2Status Code: {res2.status_code}")
+                        logging.debug(f"2Response Text: {res2.text}")  # For HTML content or text
+                        logging.debug(f"2Response Headers: {res2.headers}")
                         if res2.text:
                             data = json.loads(res2.text)
                             if (
@@ -2610,12 +2644,11 @@ class MacAttack(QMainWindow):
                                         )
                                         count = 0
                                 # new output changes
+
                                 if count > 0:
                                     logging.info("Mac found")
-                                    custommacs = self.use_custom_macs_checkbox.isChecked()  # Check the state of the checkbox
 
-                                    if custommacs:
-                                        self.remove_custom_mac(mac)
+
                                         
                                     if self.autoloadmac_checkbox.isChecked():
                                         self.hostname_input.setText(self.base_url)
@@ -2638,14 +2671,16 @@ class MacAttack(QMainWindow):
 
                                     def get_location(ip_address=""):
                                         # Get location details for an IP address using ipinfo.io API.
-                                        url = f"https://ipinfo.io/{ip_address}/json"
+                                        #url = f"https://ipinfo.io/{ip_address}/json"
+                                        url = f"http://ip-api.com/json/{ip_address}"
+                                        #url = f"http://ip-api.com/json/{ip_address}"
                                         try:
                                             with no_proxy_environment():  # Bypass the enviroment proxy set in the video player tab
                                                 response = requests.get(url)
                                                 response.raise_for_status()
                                                 data = response.json()
                                                 return {
-                                                    "City": data.get("city"),
+                                                    "City": data.get("regionName"),
                                                     "Country": data.get("country"),
                                                     "Timezone": data.get("timezone"),
                                                 }
@@ -2766,51 +2801,58 @@ class MacAttack(QMainWindow):
                                             else ""
                                         )
 
-                                    result_message = f"{'Portal:':<10} {self.iptv_link}\n"
-
-                                    if include_ip_addresses and middleware_ip_address:
-                                        result_message += f"{'PortalIP:':<10} {middleware_ip_address}\n"
-
+                                    result_message = f"{' Portal :':<10} {self.iptv_link}\n"
                                     result_message += f"{'MAC Addr:':<10} {mac}\n"
-
-                                    if (
-                                        include_proxy_used
-                                        and selected_proxy != "Your Connection"
-                                    ):
-                                        result_message += f"{'Proxy IP:':<10} {selected_proxy}\n"
-
-                                    if (
-                                        include_proxy_location
-                                        and selected_proxy != "Your Connection"
-                                    ):
-                                        result_message += f"{'location:':<10} {proxy_city}, {proxy_country}\n"
+                                    
+                                    if include_ip_addresses and middleware_ip_address:
+                                        result_message += f"{'PortalIP:':<10} {middleware_ip_address}"
 
                                     if (
                                         include_location_and_timezone
                                         and middleware_city
+                                        and include_ip_addresses
                                     ):
                                         result_message += (
-                                            f"{'Location:':<10} {middleware_city}, {middleware_country}\n"
+                                            f" ({middleware_city}, {middleware_country})\n"
                                             f"{'Timezone:':<10} {middleware_timezone}\n"
                                         )
+                                    elif include_ip_addresses and middleware_ip_address:
+                                        result_message += "\n"
+
                                     if include_deviceids:
                                         result_message += f"{'DeviceID:':<10} {device_id}\n{'SecondID:':<10} {device_id2}\n{'Serial #:':<10} {sn}\n"
 
-                                    if include_backend_info and domain_and_port:
-                                        result_message += f"{'Backend:':<10} {domain_and_port}\n"
+                                    if include_backend_info and domain_and_port and middleware_ip_address != backend_ip_address:
+                                        result_message += f"{'Backend :':<10} {domain_and_port}\n"
                                         if include_ip_addresses and backend_ip_address:
-                                            result_message += f"{'IP Addr:':<10} {backend_ip_address}\n"
+                                            result_message += f"{'IP Addr :':<10} {backend_ip_address}"
                                         if (
                                             include_location_and_timezone
-                                            and middleware_ip_address
-                                            != backend_ip_address
+                                            and middleware_ip_address != backend_ip_address
                                             and backend_city
                                         ):
                                             result_message += (
-                                                f"{'Location:':<10} {backend_city}, {backend_country}\n"
+                                                f" ({backend_city}, {backend_country})\n"
                                                 f"{'Timezone:':<10} {backend_timezone}\n"
                                             )
+                                        elif include_deviceids:
+                                            result_message += "\n"
+                                        
+                                    if (
+                                        include_proxy_used
+                                        and selected_proxy != "Your Connection"
+                                    ):
+                                        result_message += f"{'Proxy IP:':<10} {selected_proxy}"
 
+                                    if (
+                                        include_proxy_location
+                                        and selected_proxy != "Your Connection"
+                                        and include_proxy_used
+                                    ):
+                                        result_message += f" ({proxy_city}, {proxy_country})\n"
+                                    elif include_proxy_used and selected_proxy != "Your Connection":
+                                        result_message += "\n"
+                                        
                                     if (
                                         include_user_creds
                                         and username is not None
@@ -2827,28 +2869,28 @@ class MacAttack(QMainWindow):
 
                                     result_message += f"{'Exp date:':<10} {expiry}\n{'Channels:':<10} {count}\n"
 
-                                    # Emit the result message to the output signal
-                                    self.update_output_text_signal.emit(result_message)
+                                    if not mac in self.recentlyfound:
+                                        self.add_recently_found(mac) # Add it to the recently found list
+                                        # Emit the result message to the output signal
+                                        self.update_output_text_signal.emit(result_message)
 
-                                    # Write to file with a single blank line after each output
-                                    self.output_file.write(result_message + "\n")
-                                    self.output_file.flush()
+                                        # Write to file with a single blank line after each output
+                                        self.output_file.write(result_message + "\n")
+                                        self.output_file.flush()
 
-                                    if self.successsound_checkbox.isChecked():
-                                        sound_thread = threading.Thread(
-                                            target=self.play_success_sound
-                                        )
-                                        sound_thread.start()  # Start the background thread
+                                        if self.successsound_checkbox.isChecked():
+                                            sound_thread = threading.Thread(
+                                                target=self.play_success_sound
+                                            )
+                                            sound_thread.start()  # Start the background thread
 
-                                    if self.autostop_checkbox.isChecked():
-                                        logging.debug(
-                                            "autostop_checkbox is checked, stopping..."
-                                        )
-                                        self.stop_button.click()
+                                        if self.autostop_checkbox.isChecked():
+                                            logging.debug(
+                                                "autostop_checkbox is checked, stopping..."
+                                            )
+                                            self.stop_button.click()
                                 else:
-                                    self.update_error_text_signal.emit(
-                                        f"MAC: {mac} connects, but has 0 channels. Bummer."
-                                    )
+                                    print(f"MAC: {mac} connects, but has 0 channels. Bummer.")
                             else:
                                 # self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
                                 logging.info(f"No JSON response for MAC {mac}")
@@ -3259,17 +3301,18 @@ class MacAttack(QMainWindow):
                         logging.debug(f"Raw Response Content:\n{mac}\n", res.text)
                     # self.error_count += 1
     def remove_custom_mac(self, mac):
-        print(f"removing {mac}")
-        # Remove mac from the list
-        current_text = self.custom_macs_textbox.toPlainText()
-        new_text = "\n".join(
-            line for line in current_text.splitlines() if line.strip() != mac
-        )
-        self.macattack_update_mac_textbox_signal.emit(new_text)
-        # Notify user
-        self.update_error_text_signal.emit(
-            f"{mac} removed"
-        )
+        if self.running == True: # Don't remove if I've clicked stop
+            logging.info(f"removing {mac}")
+            # Remove mac from the list
+            current_text = self.custom_macs_textbox.toPlainText()
+            new_text = "\n".join(
+                line for line in current_text.splitlines() if line.strip() != mac
+            )
+            self.macattack_update_mac_textbox_signal.emit(new_text)
+            # Notify user
+            self.update_error_text_signal.emit(
+                f"{mac} removed"
+            )
 
     
     def remove_proxy(self, proxy, proxy_error_counts):
@@ -3363,16 +3406,46 @@ class MacAttack(QMainWindow):
             filename = f"{sanitized_url}_{current_time}.txt"
             return filename
 
+    def restore_custom_macs(self):
+        try:
+            # Define file path
+            user_dir = os.path.expanduser("~")
+            file_path = os.path.join(user_dir, "evilvir.us", "MacAttack.ini")
+
+            # Check if the file exists
+            if not os.path.exists(file_path):
+                logging.info(f"Configuration file not found: {file_path}")
+                return
+
+            # Load configuration
+            config = configparser.ConfigParser()
+            config.read(file_path)
+
+            self.custom_macs_textbox.setPlainText(
+                config.get("Settings", "custom_macs_text")
+            )
+            logging.info("Configuration loaded successfully.")
+
+        except Exception as e:
+            logging.info(f"An error occurred while loading the configuration: {e}")
+
     def GiveUp(self):
+        self.running = False
+        if self.restore_custom_macs_checkbox.isChecked():
+            # Reload the custom macs, after a delay
+            QTimer.singleShot(1000, self.restore_custom_macs)
+        
         self.killthreads()
         QTimer.singleShot(
-            10000, lambda: self.start_button.setDisabled(False)
+            15000, lambda: self.start_button.setDisabled(False)
         )  # stop waiting after a time
+        
         # Disable further user input immediately
-        logging.debug("GiveUp initiated: Preparing to stop threads.")
-        self.running = False
+        logging.info("GiveUp initiated: Preparing to stop threads.")
+        
         # Disable buttons while stopping threads
         self.stop_button.setDisabled(True)
+        
         # Set a delay for updating the brute_mac_label
         if self.proxy_enabled_checkbox.isChecked():
             QTimer.singleShot(
@@ -3381,6 +3454,7 @@ class MacAttack(QMainWindow):
                     "Please Wait...\nThere are proxies in the background finishing their tasks."
                 ),
             )
+        
         # Start a thread to handle thread cleanup
         cleanup_thread = threading.Thread(target=self._wait_for_threads)
         cleanup_thread.start()
@@ -4118,7 +4192,7 @@ class MacAttack(QMainWindow):
             # Get mouse position
             pos = event.pos()
             # Check if within the top 30 pixels but excluding the corners (left 20, right 20, top 20)
-            if 0 < pos.x() < self.width() - 30 and 0 < pos.y() < 30:
+            if 0 < pos.x() < self.width() - 30 and 0 < pos.y() < 50:
                 self.moving = True
                 self.move_start_pos = event.globalPos()  # Global position for moving
             # Check if near the borders (left, right, bottom) for resizing
@@ -4309,7 +4383,7 @@ class MacAttack(QMainWindow):
     def closeEvent(self, event):
         self.videoPlayer.stop()
         self.SaveTheDay()
-        self.GiveUp()
+        #self.GiveUp()
         os._exit(0)
         event.accept()
 
