@@ -1,5 +1,3 @@
-#TODO: add a global custom_macs and set it on start, then retore the global list when stop is clicked (if the checkbox is selected)
-# also add checkboxes to ini file and defaults        
 VERSION = "4.4.1"
 import semver
 import webbrowser
@@ -733,16 +731,12 @@ class MacAttack(QMainWindow):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
         self.running = False
         self.threads = []
-        # Initialize recentlyfound as an empty list
         self.recentlyfound = []
         self.output_file = None
-        self.video_worker = None  # Initialize to None
-        self.current_request_thread = None  # Initialize
-        self.last_trim_time = 0  # Initialize the time of the last trim (in seconds)
-        self.last_error_trim_time = (
-            0  # Initialize the time of the last trim (in seconds)
-        )
-        # Initialize ProxyFetcher thread
+        self.video_worker = None
+        self.current_request_thread = None 
+        self.last_trim_time = 0 
+        self.last_error_trim_time = (0)
         self.proxy_fetcher = ProxyFetcher()
         # Connect signals from ProxyFetcher to update the UI
         self.proxy_fetcher.update_proxy_output_signal.connect(self.update_proxy_output)
@@ -812,21 +806,21 @@ class MacAttack(QMainWindow):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
         # Top bar layout
-        self.topbar_layout = QHBoxLayout()  # Create a horizontal layout
+        self.topbar_layout = QHBoxLayout()  # horizontal layout
         self.topbar_layout.setContentsMargins(30, 5, 0, 0)
         self.topbar_layout.setSpacing(0)
-        # Create the tabs (Top-level tabs)
+        # Top-level tabs
         self.tabs = QTabWidget(
             self
         )  # This is for the "Mac Attack" and "Mac VideoPlayer" tabs
         self.topbar_layout.addWidget(self.tabs)
-        # Create a minimize button with a "-" label
+        # Minimize button with a "-" label
         self.topbar_minimize_button = QPushButton("-")
         self.topbar_minimize_button.setFixedSize(20, 20)  # size adjustment
         self.topbar_minimize_button.clicked.connect(
             self.showMinimized
         )  # Connect to minimize the app
-        # Create a close button with "X"
+        # Close button with "X"
         self.topbar_close_button = QPushButton("X")
         self.topbar_close_button.setFixedSize(20, 20)  # size adjustment
         self.topbar_close_button.clicked.connect(self.close)  # Connect to close the app
@@ -853,7 +847,7 @@ class MacAttack(QMainWindow):
         self.build_Settings_gui(self.Settings_frame)
         self.tabs.addTab(self.Settings_frame, "Settings")
         # Bottom bar layout
-        self.bottombar_layout = QHBoxLayout()  # Create a horizontal layout
+        self.bottombar_layout = QHBoxLayout()  # horizontal layout
         self.bottombar_layout.setContentsMargins(0, 30, 0, 0)
         self.bottombar_layout.setSpacing(0)
         # Add bottom bar layout to the main layout
@@ -898,7 +892,7 @@ class MacAttack(QMainWindow):
         self.left_layout.setSpacing(10)
         self.left_layout.addSpacing(15)  # Adds space
         # Hostname label and input horizontally aligned
-        self.hostname_layout = QHBoxLayout()  # Create a horizontal layout
+        self.hostname_layout = QHBoxLayout()  # horizontal layout
         self.hostname_layout.setContentsMargins(0, 0, 0, 0)
         self.hostname_layout.setSpacing(0)
         self.hostname_label = QLabel("Host:")
@@ -946,7 +940,7 @@ class MacAttack(QMainWindow):
         )  # Connect to the filtering function        
         self.left_layout.addWidget(self.search_input, alignment=Qt.AlignLeft)
         """
-        # Create a QTabWidget (for "Live", "Movies", "Series")
+        # QTabWidget (for "Live", "Movies", "Series")
         self.tab_widget = QTabWidget()
         self.left_layout.addWidget(self.tab_widget)
         # Dictionary to hold tab data
@@ -1181,7 +1175,7 @@ class MacAttack(QMainWindow):
         ]
 
     def _create_list_item(self, data, name, item_type):
-        # Helper function to create a list item with attached data.
+        # Helper function to list item with attached data.
         list_item = QStandardItem(name)
         list_item.setData(data, Qt.UserRole)
         list_item.setData(item_type, Qt.UserRole + 1)
@@ -1246,7 +1240,7 @@ class MacAttack(QMainWindow):
             if not self.instance:
                 raise Exception("Failed to initialize VLC instance.")
 
-            # Create a new media player
+            # new media player
             self.videoPlayer = self.instance.media_player_new()
             if not self.videoPlayer:
                 raise Exception("Failed to create VLC media player.")
@@ -1334,7 +1328,7 @@ class MacAttack(QMainWindow):
         )
         self.proxy_textbox.setFont(monospace_font)
         proxy_layout.addWidget(self.proxy_textbox)
-        # Create a horizontal layout for the button and speed input
+        # horizontal layout for the button and speed input
         generate_proxy_layout = QHBoxLayout()
         # Add spacer to the left of the generate button
         left_spacer_button = QSpacerItem(15, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
@@ -1474,7 +1468,7 @@ class MacAttack(QMainWindow):
         self.proxy_textbox.setText("\n".join(combined_proxies))
 
     def build_Settings_gui(self, Settings_frame):
-        # Create a QVBoxLayout for the Settings_frame
+        # QVBoxLayout for the Settings_frame
         layout = QVBoxLayout(Settings_frame)
 
         # Add a line above the tabs
@@ -1483,7 +1477,7 @@ class MacAttack(QMainWindow):
         top_line.setFrameShadow(QFrame.Sunken)
         layout.addWidget(top_line)  # Add the line above the tabs
 
-        # Create a tab widget for the settings frame
+        # tab widget for the settings frame
         tab_widget = QTabWidget(Settings_frame)
 
         # Set a custom style to remove the rounded corners
@@ -1533,12 +1527,12 @@ class MacAttack(QMainWindow):
         line1.setFrameShadow(QFrame.Sunken)
         general_layout.addWidget(line1)
 
-        # Create a label above the checkboxes
+        # label above the checkboxes
         macfound_label = QLabel("When a MAC is found:")
         macfound_label.setAlignment(Qt.AlignTop)
         general_layout.addWidget(macfound_label)
 
-        # Create a horizontal layout for the checkboxes
+        # horizontal layout for the checkboxes
         macfound_checkboxes = QHBoxLayout()
 
         self.successsound_checkbox = QCheckBox("Play a sound.")
@@ -1587,21 +1581,23 @@ class MacAttack(QMainWindow):
         self.custom_macs_textbox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         # Restore the list when I click Stop checkbox
-        self.restore_custom_macs_checkbox = QCheckBox("Restore the list when I click Stop")
+        self.restore_custom_macs_checkbox = QCheckBox("Restore the list after attack")
         self.restore_custom_macs_checkbox.setVisible(False)  # Hide the checkbox initially
         general_layout.addWidget(self.restore_custom_macs_checkbox)
 
-        # Create a label above the checkboxes
+        # label above the checkboxes
         system_settings_label = QLabel("System settings:")
         system_settings_label.setAlignment(Qt.AlignTop)
         general_layout.addWidget(system_settings_label)
 
-        # Create a horizontal layout for the checkboxes
+        # horizontal layout for the checkboxes
         system_settings_checkboxes = QHBoxLayout()
 
         # Ludicrous Speed checkbox
         self.ludicrous_speed_checkbox = QCheckBox("Enable Ludicrous Speed!")
         system_settings_checkboxes.addWidget(self.ludicrous_speed_checkbox)
+        self.ludicrous_speed_checkbox.stateChanged.connect(self.enable_ludicrous_speed)
+
 
         # Don't check for updates checkbox
         self.dont_update_checkbox = QCheckBox("Don't check for updates.")
@@ -1634,7 +1630,7 @@ class MacAttack(QMainWindow):
             Qt.AlignLeft
         )  # Align the layout contents to the left
 
-        # Create a widget to apply background color
+        # widget to apply background color
         buffer_widget = QWidget()
         buffer_widget.setLayout(buffer_layout)
         buffer_widget.setStyleSheet("background-color: green;")
@@ -1715,13 +1711,13 @@ class MacAttack(QMainWindow):
         self.proxy_used_output_checkbox.setFixedWidth(output_checkbox_width)
 
         
-        # Create a checkbox for something later, next to proxy info
+        # checkbox for something later, next to proxy info
         self.proxy_location_output_checkbox = QCheckBox(
             "Proxy Location (Proxy Used Req'd)"
         )
         self.proxy_location_output_checkbox.setFixedWidth(output_checkbox_width)
 
-        # Create a horizontal layout to add both checkboxes side by side
+        # horizontal layout to add both checkboxes side by side
         proxy_layout = QHBoxLayout()
         proxy_layout.addWidget(self.proxy_used_output_checkbox)
         proxy_layout.addWidget(self.proxy_location_output_checkbox)
@@ -1800,10 +1796,10 @@ class MacAttack(QMainWindow):
         # Set the main layout
         Settings_frame.setLayout(layout)
 
-        # Create a horizontal layout for the Defaults button and version label
+        # horizontal layout for the Defaults button and version label
         bottom_layout = QHBoxLayout()
 
-        # Create a "Defaults" button and align it to the left
+        # "Defaults" button and align it to the left
         defaults_button = QPushButton("Defaults")
         defaults_button.setFixedSize(80, 25)  # Adjust size as needed
         defaults_button.clicked.connect(
@@ -1811,7 +1807,7 @@ class MacAttack(QMainWindow):
         )  # Connect the button to the factory_reset function
         bottom_layout.addWidget(defaults_button, alignment=Qt.AlignLeft)
 
-        # Create a label for the version and align it to the right
+        # label for the version and align it to the right
         version_label = QLabel(f"MacAttack v{VERSION}")
         version_label.setAlignment(Qt.AlignBottom | Qt.AlignRight)
         version_label.setStyleSheet("font-size: 10px; color: gray;")
@@ -1830,14 +1826,22 @@ class MacAttack(QMainWindow):
 
     def enable_ludicrous_speed(self):
         if self.ludicrous_speed_checkbox.isChecked():
+            # Update text and styling for checked state
             self.ludicrous_speed_checkbox.setText(
                 "     🚨Ludicrous Speed Activated!🚨 \nRunning at high speeds can crash the app."
+            )
+            self.ludicrous_speed_checkbox.setStyleSheet(
+                "QCheckBox { background-color: black; color: red; }"
             )
             self.concurrent_tests.setRange(1, 1000)
             self.proxy_concurrent_tests.setRange(1, 1000)
         else:
+            # Reset text and styling for unchecked state
             self.ludicrous_speed_checkbox.setText(
                 "Enable Ludicrous Speed!"
+            )
+            self.ludicrous_speed_checkbox.setStyleSheet(
+                "QCheckBox { background-color: #666666; color: white; }"
             )
             self.concurrent_tests.setRange(1, 100)  # Default range
             self.proxy_concurrent_tests.setRange(1, 100)
@@ -2088,7 +2092,7 @@ class MacAttack(QMainWindow):
             #self.tabs.setCurrentIndex(0)
             self.dont_update_checkbox.setChecked(False)
             self.use_custom_macs_checkbox.setChecked(False)
-            self.restore_custom_macs_checkbox.setChecked(False)
+            self.restore_custom_macs_checkbox.setChecked(True)
             
             #self.resize(1138, 522)
             #self.move(200, 200)
@@ -2146,7 +2150,7 @@ class MacAttack(QMainWindow):
         }
         with open(file_path, "w") as configfile:
             config.write(configfile)
-        print("Settings saved.")
+        logging.debug("Settings saved.")
 
     def load_settings(self):
         """Load user settings from the configuration file and apply them to the UI elements, including the active tab."""
@@ -2272,7 +2276,7 @@ class MacAttack(QMainWindow):
         base64_image_data = "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"
         # Decode the base64 string
         image_data = base64.b64decode(base64_image_data)
-        # Create a QPixmap from the decoded data
+        # QPixmap from the decoded data
         pixmap = QPixmap()
         byte_array = QByteArray(image_data)
         buffer = QBuffer(byte_array)
@@ -2405,7 +2409,7 @@ class MacAttack(QMainWindow):
                 )
             try:
                 with no_proxy_environment():  # Bypass the enviroment proxy set in the video player tab
-                    s = requests.Session()  # Create a session
+                    s = requests.Session()  # session
                     # Disable the use of environment proxy settings
                     s.proxies.clear()  # Clears any environment proxies
                     s.cookies.update(
@@ -2436,7 +2440,7 @@ class MacAttack(QMainWindow):
                         
                     
                     res = s.get(url, timeout=25, allow_redirects=False)
-                    print(f"Status Code: {res.status_code}")
+                    logging.debug(f"Status Code: {res.status_code}")
                     if (res.status_code == 200 or res.status_code == 204) and not "REMOTE_ADDR" in res.text and not "Backend not available" in res.text:
                         custommacs = self.use_custom_macs_checkbox.isChecked()  # Check the state of the checkbox
                         if custommacs:
@@ -2890,7 +2894,7 @@ class MacAttack(QMainWindow):
                                             )
                                             self.stop_button.click()
                                 else:
-                                    print(f"MAC: {mac} connects, but has 0 channels. Bummer.")
+                                    logging.debug(f"MAC: {mac} connects, but has 0 channels. Bummer.")
                             else:
                                 # self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
                                 logging.info(f"No JSON response for MAC {mac}")
@@ -3309,10 +3313,8 @@ class MacAttack(QMainWindow):
                 line for line in current_text.splitlines() if line.strip() != mac
             )
             self.macattack_update_mac_textbox_signal.emit(new_text)
-            # Notify user
-            self.update_error_text_signal.emit(
-                f"{mac} removed"
-            )
+            
+            logging.debug(f"{mac} removed")
 
     
     def remove_proxy(self, proxy, proxy_error_counts):
@@ -4236,7 +4238,7 @@ class MacAttack(QMainWindow):
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
-            # Create a fake mouse event to simulate a double-click
+            # fake mouse event to simulate a double-click
             fake_mouse_event = QMouseEvent(
                 QEvent.MouseButtonDblClick,
                 self.rect().center(),
@@ -4330,11 +4332,11 @@ class MacAttack(QMainWindow):
             "Click the button below to view the release notes or download it:"
         )
 
-        # Create a button to view the update
+        # button to view the update
         button = QPushButton(f"Update v{latest_version}")
         button.clicked.connect(lambda: webbrowser.open(release_url))
 
-        # Create a cancel button
+        # cancel button
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(msg.reject)
 
