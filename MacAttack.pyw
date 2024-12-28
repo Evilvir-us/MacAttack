@@ -1,7 +1,7 @@
 # todo
 # add option for bad proxies, dont pop immediately when checked.
 
-VERSION = "4.4.3"
+VERSION = "4.5.0"
 import semver
 import webbrowser
 import base64
@@ -72,7 +72,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote, urlparse, urlunparse
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.CRITICAL + 1)
 
 
 @contextmanager
@@ -2022,8 +2022,7 @@ class MacAttack(QMainWindow):
         if state == Qt.Checked:
             self.use_custom_macs_checkbox.setText(
                 "Enable Custom MAC Addresses\n"
-                "Select a file with a list of MAC addresses or a MacAttackOutput file.\n"
-                "*Used MAC addresses will be removed from the pool."
+                "Select a file with a list of MAC addresses or a MacAttackOutput file."
             )
             self.prefer_speed_radio.setVisible(True)
             self.prefer_accuracy_radio.setVisible(True)
@@ -2035,6 +2034,7 @@ class MacAttack(QMainWindow):
 
         else:
             self.mac_file_label.setText("No file selected")
+            self.macs_in_mem_label.setText("0")
             self.mac_dict.clear()
             self.use_custom_macs_checkbox.setText("Enable Custom MAC Addresses")
             self.prefer_speed_radio.setVisible(False)
@@ -2701,7 +2701,7 @@ class MacAttack(QMainWindow):
     def macattack_update_mac_count(self):
         mac_count = len(self.mac_dict)
         if self.macs_in_mem_label:
-            self.macs_in_mem_label.setText(f"MACs in memory: {mac_count}")
+            self.macs_in_mem_label.setText(f"{mac_count}")
         else:
             logging.error("MAC count label is not initialized.")
 
