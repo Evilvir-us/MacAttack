@@ -1,7 +1,7 @@
 # todo
-# add option for bad proxies, dont pop immediately when checked.
+# use actual input for request, stripping the /c/ so portals in subdir worker
 
-VERSION = "4.5.0"
+VERSION = "4.5.2"
 import semver
 import webbrowser
 import base64
@@ -67,13 +67,14 @@ from PyQt5.QtWidgets import (
     QFileDialog,
     QRadioButton,
     QButtonGroup,
+    QComboBox,
 )
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote, urlparse, urlunparse
 
-logging.basicConfig(level=logging.CRITICAL + 1)
-
+logging.basicConfig(level=logging.DEBUG)
+portaltype = "portal.php"
 
 @contextmanager
 def no_proxy_environment():
@@ -98,7 +99,7 @@ def no_proxy_environment():
 
 def get_token(session, url, mac_address, timeout=30):
     handshake_url = (
-        f"{url}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
+        f"{url}/{portaltype}?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
     )
     try:
         serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
@@ -448,7 +449,7 @@ class RequestThread(QThread):
             try:
                 # First GET request: get_profile
                 profile_url = (
-                    f"{url}/portal.php?type=stb&action=get_profile&JsHttpRequest=1-xml"
+                    f"{url}/{portaltype}?type=stb&action=get_profile&JsHttpRequest=1-xml"
                 )
                 logging.debug(f"Fetching profile from {profile_url}")
                 response_profile = session.get(
@@ -463,7 +464,7 @@ class RequestThread(QThread):
 
             try:
                 # Second GET request: get_main_info
-                account_info_url = f"{url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
+                account_info_url = f"{url}/{portaltype}?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
                 logging.debug(f"Fetching account info from {account_info_url}")
                 response_account_info = session.get(
                     account_info_url,
@@ -572,7 +573,7 @@ class RequestThread(QThread):
     def get_genres(self, session, url, mac_address, token, cookies, headers):
         try:
             genres_url = (
-                f"{url}/portal.php?type=itv&action=get_genres&JsHttpRequest=1-xml"
+                f"{url}/{portaltype}?type=itv&action=get_genres&JsHttpRequest=1-xml"
             )
             response = session.get(
                 genres_url, cookies=cookies, headers=headers, timeout=10
@@ -603,7 +604,7 @@ class RequestThread(QThread):
     def get_vod_categories(self, session, url, mac_address, token, cookies, headers):
         try:
             vod_url = (
-                f"{url}/portal.php?type=vod&action=get_categories&JsHttpRequest=1-xml"
+                f"{url}/{portaltype}?type=vod&action=get_categories&JsHttpRequest=1-xml"
             )
             response = session.get(
                 vod_url, cookies=cookies, headers=headers, timeout=10
@@ -632,7 +633,7 @@ class RequestThread(QThread):
 
     def get_series_categories(self, session, url, mac_address, token, cookies, headers):
         try:
-            series_url = f"{url}/portal.php?type=series&action=get_categories&JsHttpRequest=1-xml"
+            series_url = f"{url}/{portaltype}?type=series&action=get_categories&JsHttpRequest=1-xml"
             response = session.get(
                 series_url, cookies=cookies, headers=headers, timeout=10
             )
@@ -679,11 +680,11 @@ class RequestThread(QThread):
             total_items = None
             initial_url = ""
             if category_type == "IPTV":
-                initial_url = f"{url}/portal.php?type=itv&action=get_ordered_list&genre={category_id}&JsHttpRequest=1-xml&p=0"
+                initial_url = f"{url}/{portaltype}?type=itv&action=get_ordered_list&genre={category_id}&JsHttpRequest=1-xml&p=0"
             elif category_type == "VOD":
-                initial_url = f"{url}/portal.php?type=vod&action=get_ordered_list&category={category_id}&JsHttpRequest=1-xml&p=0"
+                initial_url = f"{url}/{portaltype}?type=vod&action=get_ordered_list&category={category_id}&JsHttpRequest=1-xml&p=0"
             elif category_type == "Series":
-                initial_url = f"{url}/portal.php?type=series&action=get_ordered_list&category={category_id}&p=0&JsHttpRequest=1-xml"
+                initial_url = f"{url}/{portaltype}?type=series&action=get_ordered_list&category={category_id}&p=0&JsHttpRequest=1-xml"
 
             response = session.get(
                 initial_url, cookies=cookies, headers=headers, timeout=10
@@ -722,11 +723,11 @@ class RequestThread(QThread):
                 progress = 1  # Already fetched page 0
                 for p in page_numbers:
                     if category_type == "IPTV":
-                        channels_url = f"{url}/portal.php?type=itv&action=get_ordered_list&genre={category_id}&JsHttpRequest=1-xml&p={p}"
+                        channels_url = f"{url}/{portaltype}?type=itv&action=get_ordered_list&genre={category_id}&JsHttpRequest=1-xml&p={p}"
                     elif category_type == "VOD":
-                        channels_url = f"{url}/portal.php?type=vod&action=get_ordered_list&category={category_id}&JsHttpRequest=1-xml&p={p}"
+                        channels_url = f"{url}/{portaltype}?type=vod&action=get_ordered_list&category={category_id}&JsHttpRequest=1-xml&p={p}"
                     elif category_type == "Series":
-                        channels_url = f"{url}/portal.php?type=series&action=get_ordered_list&category={category_id}&p={p}&JsHttpRequest=1-xml"
+                        channels_url = f"{url}/{portaltype}?type=series&action=get_ordered_list&category={category_id}&p={p}&JsHttpRequest=1-xml"
                     else:
                         logging.error(f"Unknown category_type: {category_type}")
                         continue
@@ -1438,7 +1439,7 @@ class MacAttack(QMainWindow):
         proxy_layout.addLayout(proxy_checkbox_layout)
         # Label above the text box with 15px left margin
         proxybox_label = QLabel(
-            "your proxies in this box, or use the button below to retrieve a list of proxies."
+            "Add your proxies in this box, or use the button below to retrieve a list of proxies."
         )
         proxybox_label.setContentsMargins(15, 0, 0, 0)  # 15px space on the left side
         proxy_layout.addWidget(proxybox_label)
@@ -2266,19 +2267,23 @@ class MacAttack(QMainWindow):
         layout = QVBoxLayout(parent)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+
         # Combined layout for IPTV link, Speed, and Start/Stop buttons
         combined_layout = QHBoxLayout()
         combined_layout.setContentsMargins(0, 0, 0, 0)
         combined_layout.setSpacing(10)
-        # spacer to the left of IPTV link label
+
+        # Spacer to the left of IPTV link label
         left_spacer = QSpacerItem(10, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
         combined_layout.addItem(left_spacer)
         layout.addSpacing(15)  # Adds space
+
         # IPTV link input
         self.iptv_link_label = QLabel("IPTV link:")
         self.iptv_link_entry = QLineEdit("http://evilvir.us.streamtv.to:8080/c/")
         combined_layout.addWidget(self.iptv_link_label)
         combined_layout.addWidget(self.iptv_link_entry)
+
         # Speed input (Slider)
         self.speed_label = QLabel("Speed:")
         self.concurrent_tests = QSlider(Qt.Horizontal)
@@ -2288,13 +2293,16 @@ class MacAttack(QMainWindow):
         self.concurrent_tests.setTickInterval(1)
         combined_layout.addWidget(self.speed_label)
         combined_layout.addWidget(self.concurrent_tests)
+
         # Dynamic label to show current speed value
         self.speed_value_label = QLabel(str(self.concurrent_tests.value()))
         combined_layout.addWidget(self.speed_value_label)
+
         # Connect slider value change to update the dynamic label
         self.concurrent_tests.valueChanged.connect(
             lambda value: self.speed_value_label.setText(str(value))
         )
+
         # Start/Stop buttons
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(self.TestDrive)
@@ -2304,6 +2312,7 @@ class MacAttack(QMainWindow):
         combined_layout.addWidget(self.stop_button)
         self.start_button.setDisabled(False)
         self.stop_button.setDisabled(True)
+
         # Button styles
         self.stop_button.setStyleSheet(
             """
@@ -2325,16 +2334,51 @@ class MacAttack(QMainWindow):
             }
         """
         )
-        # spacer to the right of the Stop button
+
+        # Spacer to the right of the Stop button
         right_spacer = QSpacerItem(10, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
         combined_layout.addItem(right_spacer)
-        # the combined layout to the main layout
+
+        # Add the combined layout to the main layout
         layout.addLayout(combined_layout)
         layout.addSpacing(15)  # Adds space
+
+        # Dropdown and MAC label layout
+        dropdown_label_layout = QHBoxLayout()
+        dropdown_label_layout.setContentsMargins(0, 0, 0, 0)
+        dropdown_label_layout.setSpacing(10)
+
+        # Spacer to the left of IPTV type label
+        #left_spacer = QSpacerItem(10, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
+        dropdown_label_layout.addItem(left_spacer)
+        dropdown_label_layout.addSpacing(20)  # Adds space
+
+        # IPTV type input
+        self.iptv_type_label = QLabel("Type:")
+        dropdown_label_layout.addWidget(self.iptv_type_label)
+
+
+        # Dropdown box
+        self.dropdown_box = QComboBox()
+        self.dropdown_box.addItems(["Portal", "Stalker_Portal", "Portalstb"])
+        self.dropdown_box.currentIndexChanged.connect(self.set_portal_type)  # Connect signal to function
+        dropdown_label_layout.addWidget(self.dropdown_box, alignment=Qt.AlignLeft)
+
+        # Center spacer for label alignment
+        center_spacer = QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        dropdown_label_layout.addItem(center_spacer)
+
         # MAC address label
-        self.brute_mac_label = QLabel("Testing MAC address will appear here.")
-        layout.addWidget(self.brute_mac_label, alignment=Qt.AlignCenter)
+        self.brute_mac_label = QLabel("")
+        dropdown_label_layout.addWidget(self.brute_mac_label, alignment=Qt.AlignCenter)
+
+        # Right spacer to balance the layout
+        right_spacer = QSpacerItem(20, 0, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        dropdown_label_layout.addItem(right_spacer)
+
+        layout.addLayout(dropdown_label_layout)
         layout.addSpacing(15)  # Adds space
+
         # Output Text Area
         self.output_text = QTextEdit()
         self.output_text.setStyleSheet(
@@ -2351,8 +2395,8 @@ class MacAttack(QMainWindow):
         layout.addWidget(self.output_text)
 
         # Keep the output log to a maximum of output_history_buffer lines
-
         self.output_text.textChanged.connect(self.trim_output_log)
+
         # Error Log Area
         self.error_text = QTextEdit()
         self.error_text.setStyleSheet(
@@ -2391,6 +2435,27 @@ class MacAttack(QMainWindow):
         self.error_text.setFont(monospace_font)
         layout.addWidget(self.error_text)
         layout.addSpacing(15)  # Adds space
+
+    def set_portal_type(self, index):
+        global portaltype
+        # Get the text of the selected item
+        selected_item = self.dropdown_box.currentText()
+
+        # Log or process the selected portal type
+        if selected_item == "Portal":
+            logging.info("Portal type selected: Portal")
+            portaltype = "portal.php"
+            # Add any logic specific to Portal here
+        elif selected_item == "Stalker_Portal":
+            logging.info("Portal type selected: Stalker Portal")
+            portaltype = "stalker_portal/server/load.php"
+            # Add any logic specific to Stalker Portal here
+        elif selected_item == "Portalstb":
+            logging.info("Portal type selected: Portalstb")
+            portaltype = "portalstb/portal.php"
+            # Add any logic specific to Custom here
+        else:
+            logging.info(f"Unknown portal type selected: {selected_item}")
 
     def trim_output_log(self):
         """Trims the output log to retain only the last 'output_history_buffer' lines. Runs no more than once per second to avoid deleting too many lines."""
@@ -2826,6 +2891,7 @@ class MacAttack(QMainWindow):
 
     def BigMacAttack(self):
         global mac_count
+        global portaltype
         # BigMacAttack: Two all-beef patties, special sauce, lettuce, cheese, pickles, onions, on a sesame seed bun.
         timeout = 60
         proxies = {}
@@ -2928,8 +2994,9 @@ class MacAttack(QMainWindow):
                         }
                     )
                     # random_number = random.randint(100000, 999999)
-                    url = f"{self.base_url}/portal.php?action=handshake&type=stb&JsHttpRequest=1-xml"
-                    logging.debug(f"{self.base_url}")
+                    url = f"{self.base_url}/{portaltype}?action=handshake&type=stb&JsHttpRequest=1-xml"
+                    logging.info(f"{url}")
+                    
                     # If proxy is enabled, the proxy to the session
                     if proxies:
                         macattacksess.proxies.update(proxies)
@@ -2965,7 +3032,7 @@ class MacAttack(QMainWindow):
                         logging.info(
                             f"TOKEN: {token} MAC: {mac} BASEURL: {self.base_url}"
                         )
-                        url2 = f"{self.base_url}/portal.php?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
+                        url2 = f"{self.base_url}/{portaltype}?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
 
                         macattacksess.cookies.update(
                             {
@@ -2997,7 +3064,7 @@ class MacAttack(QMainWindow):
                             ):
                                 mac = data["js"]["mac"]
                                 expiry = data["js"]["phone"]
-                                url3 = f"{self.base_url}/portal.php?type=itv&action=get_all_channels&JsHttpRequest=1-xml"
+                                url3 = f"{self.base_url}/{portaltype}?type=itv&action=get_all_channels&JsHttpRequest=1-xml"
                                 res3 = macattacksess.get(
                                     url3,
                                     timeout=timeout,
@@ -3006,7 +3073,7 @@ class MacAttack(QMainWindow):
                                 count = 0
                                 if res3.status_code == 200:
 
-                                    url4 = f"{self.base_url}/portal.php?type=itv&action=create_link&cmd=http://localhost/ch/10000_&series=&forced_storage=undefined&disable_ad=0&download=0&JsHttpRequest=1-xml"
+                                    url4 = f"{self.base_url}/{portaltype}?type=itv&action=create_link&cmd=http://localhost/ch/10000_&series=&forced_storage=undefined&disable_ad=0&download=0&JsHttpRequest=1-xml"
                                     res4 = macattacksess.get(
                                         url4,
                                         timeout=timeout,
@@ -4330,7 +4397,7 @@ class MacAttack(QMainWindow):
                 all_seasons = []
                 page_number = 0
                 while True:
-                    seasons_url = f"{url}/portal.php?type=series&action=get_ordered_list&movie_id={series_id}&season_id=0&episode_id=0&JsHttpRequest=1-xml&p={page_number}"
+                    seasons_url = f"{url}/{portaltype}?type=series&action=get_ordered_list&movie_id={series_id}&season_id=0&episode_id=0&JsHttpRequest=1-xml&p={page_number}"
                     logging.debug(
                         f"Fetching seasons URL: {seasons_url}, headers: {headers}, cookies: {cookies}"
                     )
@@ -4547,7 +4614,7 @@ class MacAttack(QMainWindow):
                         "MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                         "Authorization": f"Bearer {token}",
                     }
-                    create_link_url = f"{url}/portal.php?type=itv&action=create_link&cmd={cmd_encoded}&JsHttpRequest=1-xml"
+                    create_link_url = f"{url}/{portaltype}?type=itv&action=create_link&cmd={cmd_encoded}&JsHttpRequest=1-xml"
                     logging.debug(f"Create link URL: {create_link_url}")
                     response = session.get(
                         create_link_url,
@@ -4630,9 +4697,9 @@ class MacAttack(QMainWindow):
                             self, "Error", "Episode number is missing."
                         )
                         return
-                    create_link_url = f"{url}/portal.php?type=vod&action=create_link&cmd={cmd_encoded}&series={episode_number}&JsHttpRequest=1-xml"
+                    create_link_url = f"{url}/{portaltype}?type=vod&action=create_link&cmd={cmd_encoded}&series={episode_number}&JsHttpRequest=1-xml"
                 else:
-                    create_link_url = f"{url}/portal.php?type=vod&action=create_link&cmd={cmd_encoded}&JsHttpRequest=1-xml"
+                    create_link_url = f"{url}/{portaltype}?type=vod&action=create_link&cmd={cmd_encoded}&JsHttpRequest=1-xml"
                 logging.debug(f"Create link URL: {create_link_url}")
                 response = session.get(
                     create_link_url,
