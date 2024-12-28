@@ -288,6 +288,104 @@ class ProxyFetcher(QThread):
         return proxy, False
 
 
+class ProxyTester(QThread):
+    update_proxy_output_signal = pyqtSignal(str)
+    update_proxy_textbox_signal = pyqtSignal(str)
+    clear_textbox_signal = pyqtSignal()
+
+    def __init__(self, proxy_textbox):
+        super().__init__()
+        self.proxy_textbox = proxy_textbox
+
+    def run(self):
+        self.test_proxies()
+
+    def test_proxies(self):
+        # Extract proxies from the text box
+        proxies = self.proxy_textbox.toPlainText().splitlines()
+
+        # Ensure that we don't have empty proxies
+        proxies = [proxy.strip() for proxy in proxies if proxy.strip()]
+
+        if not proxies:
+            self.update_proxy_output_signal.emit("No proxies in the text box.")
+            return
+
+        self.update_proxy_output_signal.emit("Testing proxies...")
+
+        working_proxies = []
+
+        with ThreadPoolExecutor(max_workers=200) as executor:
+            future_to_proxy = {
+                executor.submit(self.test_proxy, proxy): proxy for proxy in proxies
+            }
+            for future in as_completed(future_to_proxy):
+                proxy = future_to_proxy[future]
+                try:
+                    proxy, is_working = future.result()
+                    if is_working:
+                        self.update_proxy_output_signal.emit(
+                            f"Proxy {proxy} is working."
+                        )
+                        working_proxies.append(proxy)
+                    else:
+                        self.update_proxy_output_signal.emit(f"Proxy {proxy} failed.")
+                except Exception as e:
+                    logging.debug(f"Error testing proxy {proxy}: {str(e)}")
+
+        # Debugging: Log all proxies that passed the test
+        logging.debug(f"Working proxies: {working_proxies}")
+        self.clear_textbox_signal.emit()  # Clear the textbox before starting
+        # Ensure no duplicates in the list of working proxies
+        working_proxies = list(set(working_proxies))
+
+        # Debugging: Log the final list of working proxies
+        logging.debug(f"Unique working proxies: {working_proxies}")
+
+        # Emit signal to clear the text box (done in the main thread)
+        self.clear_textbox_signal.emit()  # Clear the textbox before adding new proxies
+
+        if working_proxies:
+            # Emit the list of working proxies to the main thread
+            self.update_proxy_textbox_signal.emit("\n".join(working_proxies))
+            self.update_proxy_output_signal.emit("Done!")
+        else:
+            self.update_proxy_output_signal.emit("No working proxies found.")
+
+    def test_proxy(self, proxy):
+        url = "http://httpbin.org/anything?user=Evilvirus&application=MacAttack"
+        proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
+
+        # Extract the IP address from the proxy, ignoring the port
+        proxy_ip = urlparse(f"http://{proxy}").hostname
+
+        try:
+            with no_proxy_environment():  # Bypass the environment proxy set in the video player tab
+                response = requests.get(url, proxies=proxies, timeout=30)
+
+                # Check for a successful response and if the returned JSON contains the user value
+                if response.status_code == 200:
+                    json_response = response.json()
+                    user = json_response.get("args", {}).get("user")
+                    origin = json_response.get("origin")
+
+                    # Log the proxy and origin values
+                    logging.info(f"Proxy: {proxy}, Origin: {origin}")
+
+                    # Check if the user is 'Evilvirus' and the origin matches the proxy IP (ignoring the port)
+                    if user == "Evilvirus" and origin == proxy_ip:
+                        logging.debug(f"Proxy {proxy} passed the test")
+                        return proxy, True
+                    else:
+                        logging.debug(f"Proxy {proxy} failed the test")
+                        return proxy, False
+        except requests.RequestException as e:
+            logging.debug(f"Error testing proxy {proxy}: {str(e)}")
+
+        logging.debug(f"Proxy {proxy} failed due to exception")
+        return proxy, False
+
+
 class RequestThread(QThread):
     request_complete = pyqtSignal(dict)  # Signal to emit when request is complete
     update_progress = pyqtSignal(int)  # Signal to emit progress updates
@@ -736,6 +834,10 @@ class MacAttack(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        self.proxy_textbox = QTextEdit(self)
+        self.proxy_tester = ProxyTester(self.proxy_textbox)
+        self.proxy_tester.clear_textbox_signal.connect(self.clear_proxy_textbox)
+        self.proxy_tester.update_proxy_textbox_signal.connect(self.update_proxy_textbox)
         self.mac_dict = deque()  # Initialize a deque to store MAC addresses
         self.proxy_error_counts = {}
         # self.lock = Lock()  # For synchronizing file writes
@@ -1521,10 +1623,27 @@ class MacAttack(QMainWindow):
             self.start_hourly_update()  # Restart the timer
 
     def test_proxies(self):
-        # Extract proxies from the text box
-        proxies = self.proxy_textbox.toPlainText().splitlines()
+        self.setup_proxy_tester()
 
-        self.proxy_output.append(f"Feature not yet available... Coming SOON!")
+    def setup_proxy_tester(self):
+        # Create ProxyTester instance
+        self.proxy_tester = ProxyTester(self.proxy_textbox)
+
+        # Connect signals to slots
+        self.proxy_tester.update_proxy_output_signal.connect(self.update_proxy_output)
+        self.proxy_tester.update_proxy_textbox_signal.connect(self.update_proxy_textbox)
+        self.proxy_tester.clear_textbox_signal.connect(self.clear_proxy_textbox)
+
+        # Start testing proxies
+        self.proxy_tester.start()
+
+    def clear_proxy_textbox(self):
+        """This method will be called in the main thread to clear the text box."""
+        self.proxy_textbox.clear()
+
+    def update_proxy_textbox(self, proxies):
+        """This method will be called in the main thread to update the text box."""
+        self.proxy_textbox.setPlainText(proxies)
 
     def trim_proxy_output(self):
         """Trim the proxy output log to keep only the last 4 lines."""
