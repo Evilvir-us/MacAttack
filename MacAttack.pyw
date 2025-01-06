@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.6.1"
+VERSION = "4.6.2"
 import semver
 import urllib.parse
 import webbrowser
@@ -22,9 +22,10 @@ import time
 from datetime import datetime, timezone
 from contextlib import contextmanager
 from collections import deque
+
 # Add the directory containing libvlc.dll to the PATH
 script_dir = os.path.dirname(os.path.abspath(__file__))
-os.environ['PATH'] = script_dir + os.pathsep + os.environ.get('PATH', '')
+os.environ["PATH"] = script_dir + os.pathsep + os.environ.get("PATH", "")
 import vlc
 from PyQt5.QtCore import (
     QBuffer,
@@ -267,8 +268,7 @@ def get_token(session, url, mac, timeout=30):
 
                 url1_a = f"{url}/{player_portaltype}?type=stb&action=get_profile&hd=1&ver=ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: {portal_version}; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c&num_banks=2&sn={sn}&stb_type=MAG250&client_type=STB&image_version=218&video_out=hdmi&device_id={device_id2}&device_id2={device_id2}&sig={sig}&auth_second_step=1&hw_version=1.7-BD-00&not_valid_token=0&metrics={metrics}&hw_version_2={hw_version_2}&timestamp={round(time.time())}&api_sig=262&prehash=0"
                 res1_a = session.get(url1_a)
-                
-                
+
                 logging.debug(res1_a.text)
 
             else:
@@ -283,6 +283,39 @@ def get_token(session, url, mac, timeout=30):
         logging.error(f"Error getting token: {e}")
         logging.error(f"Error getting token: {e}")
         return None, None
+
+
+class UpdateWorker(QThread):
+    update_checked = pyqtSignal(str, str, str)
+
+    def run(self):
+        self.get_update()
+
+    def get_update(self):
+        url = "https://api.github.com/repos/Evilvir-us/MacAttack/releases/latest"
+
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            latest_release = response.json()
+            latest_version = latest_release["tag_name"]
+            release_url = latest_release["html_url"]
+            logging.info(f"Latest version on GitHub: {latest_version}")
+            if latest_version.startswith("v"):
+                latest_version = latest_version[1:]
+            if semver.compare(VERSION, latest_version) < 0:
+                logging.info(
+                    f"Update available! Current version: {VERSION}, Latest version: {latest_version}"
+                )
+                self.update_checked.emit(VERSION, latest_version, release_url)
+            else:
+                logging.info(
+                    f"You are up to date! Current version: {VERSION}, Latest version: {latest_version}"
+                )
+
+        except requests.RequestException as e:
+            logging.error(f"Error fetching update info: {e}")
+            self.update_checked.emit("", "", "")  # If Error, return nothing
 
 
 class ProxyFetcher(QThread):
@@ -402,7 +435,11 @@ class ProxyFetcher(QThread):
                         regex = r"[0-9]+(?:\.[0-9]+){3}:[0-9]+"
                         matches = re.finditer(regex, response.text, re.MULTILINE)
                         proxies.extend([match.group() for match in matches])
-                    elif "free-proxy-list.net" in url or "us-proxy.org" in url or "sslproxies.org" in url:
+                    elif (
+                        "free-proxy-list.net" in url
+                        or "us-proxy.org" in url
+                        or "sslproxies.org" in url
+                    ):
                         html_content = response.text
                         ip_port_pattern = re.compile(
                             r"<td>(\d+\.\d+\.\d+\.\d+)</td><td>(\d+)</td>"
@@ -445,10 +482,10 @@ class ProxyFetcher(QThread):
                 logging.debug(f"Error testing proxy {proxy}: {str(e)}")
             return False
 
-        # Try testing the proxy twice
+        # Try testing the proxy twice (currently disabled)
         if try_proxy():
             return proxy, True
-        #elif try_proxy():  # Retry once more if the first attempt fails
+        # elif try_proxy():  # Retry once more if the first attempt fails
         #    return proxy, True
 
         return proxy, False
@@ -470,7 +507,7 @@ class ProxyTester(QThread):
         # Extract proxies from the text box
         proxies = self.proxy_textbox.toPlainText().splitlines()
 
-        # Ensure that we don't have empty lines
+        # Strip empty lines
         proxies = [proxy.strip() for proxy in proxies if proxy.strip()]
 
         if not proxies:
@@ -498,8 +535,6 @@ class ProxyTester(QThread):
                         self.update_proxy_output_signal.emit(f"Proxy {proxy} failed.")
                 except Exception as e:
                     logging.debug(f"Error testing proxy {proxy}: {str(e)}")
-
-        # Debugging: Log all proxies that passed the test
         logging.debug(f"Working proxies: {working_proxies}")
         self.clear_textbox_signal.emit()  # Clear the textbox
         # Remove Dupes
@@ -953,9 +988,7 @@ class RequestThread(QThread):
 
 
 class VideoPlayerWorker(QThread):
-    # Signal to emit stream URL when the request is successful
     stream_url_ready = pyqtSignal(str)
-    # Signal to emit error message if the request fails
     error_occurred = pyqtSignal(str)
 
     def __init__(self, stream_url):
@@ -965,7 +998,6 @@ class VideoPlayerWorker(QThread):
 
     def run(self):
         try:
-            # Set a timeout to prevent hanging requests
             timeout = 30  # seconds
             response = self.session.get(self.stream_url, timeout=timeout)
             if response.status_code == 200:
@@ -1000,12 +1032,11 @@ class MacAttack(QMainWindow):
         self.proxy_tester = ProxyTester(self.proxy_textbox)
         self.proxy_tester.clear_textbox_signal.connect(self.clear_proxy_textbox)
         self.proxy_tester.update_proxy_textbox_signal.connect(self.update_proxy_textbox)
-        self.mac_dict = deque()  # Initialize a deque to store MAC addresses
-        self.generated_count = 0  # Track generated MAC count
-        self.max_macs = 50  # Limit to 50 sequential MAC addresses
+        self.mac_dict = deque()
+        self.generated_count = 0
         self.proxy_error_counts = {}
         self.proxy_error_connect_counts = {}
-        self.threads = []  # To track background threads
+        self.threads = []
         self.cleaningup = 0
         # Initial VLC instance
         if getattr(sys, "frozen", False):
@@ -1014,12 +1045,12 @@ class MacAttack(QMainWindow):
             base_path = os.path.abspath(".")
         self.instance = vlc.Instance(
             [
-                f"--config={base_path}\\include\\vlcrc",  # Config file holding the proxy info
-                "--repeat",  # Keep connected if kicked off
-                "--no-xlib",  # Keep it quiet in X11 environments.
-                "--vout=directx",  # DirectX for the win (Windows specific).
-                "--no-plugins-cache",  # Cache is for the weak.
-                "--log-verbose=1",  # We like it chatty in the logs.
+                f"--config={base_path}\\include\\vlcrc",
+                "--repeat",
+                "--no-xlib",
+                "--vout=directx",
+                "--no-plugins-cache",
+                "--log-verbose=1",
             ]
         )
         self.videoPlayer = self.instance.media_player_new()
@@ -1037,9 +1068,7 @@ class MacAttack(QMainWindow):
         self.last_error_trim_time = 0
         self.proxy_fetcher = ProxyFetcher()
         self.hourly_timer = None
-        self.remaining_time = 3600  # Time in seconds (3600 = 1 hour)
-
-        # Connect signals from ProxyFetcher to update the UI
+        self.remaining_time = 3600
         self.proxy_fetcher.update_proxy_output_signal.connect(self.update_proxy_output)
         self.proxy_fetcher.update_proxy_textbox_signal.connect(
             self.update_proxy_textbox
@@ -1382,7 +1411,6 @@ class MacAttack(QMainWindow):
         logging.debug("Started RequestThread for playlist.")
 
     def update_proxy(self):
-        # Set or remove the environment variables for the proxy
         proxy_address = self.proxy_input.text()
         if proxy_address:
             os.environ["http_proxy"] = proxy_address
@@ -1417,7 +1445,7 @@ class MacAttack(QMainWindow):
             logging.error(f"VLC config file not found: {config_path}")
             return
 
-        # Initialize VLC with valid options
+        # Initialize VLC
         try:
             logging.debug("Initializing VLC instance.")
             self.instance = vlc.Instance(
@@ -1441,12 +1469,10 @@ class MacAttack(QMainWindow):
             if not self.instance:
                 raise Exception("Failed to initialize VLC instance.")
 
-            # new media player
             self.videoPlayer = self.instance.media_player_new()
             if not self.videoPlayer:
                 raise Exception("Failed to create VLC media player.")
 
-            # Configure video frame for platform
             if sys.platform.startswith("linux"):
                 self.videoPlayer.set_xwindow(self.video_frame.winId())
             elif sys.platform == "win32":
@@ -1479,7 +1505,7 @@ class MacAttack(QMainWindow):
 
         # Error count spinbox
         self.proxy_remove_errorcount = QSpinBox()
-        self.proxy_remove_errorcount.setRange(0, 9)  
+        self.proxy_remove_errorcount.setRange(0, 9)
         self.proxy_remove_errorcount.setFixedWidth(30)
         self.proxy_remove_errorcount.setValue(5)  # Default value
         self.proxy_remove_errorcount.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
@@ -1493,7 +1519,6 @@ class MacAttack(QMainWindow):
         # 15px spacer
         spacer_after_errors = QSpacerItem(15, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
         proxy_checkbox_layout.addItem(spacer_after_errors)
-
         # Align to right
         proxy_checkbox_layout.setSpacing(0)  # Remove spacing between widgets
         proxy_checkbox_layout.setAlignment(Qt.AlignRight)
@@ -1505,8 +1530,6 @@ class MacAttack(QMainWindow):
         # Add the checkbox layout
         proxy_layout.addLayout(proxy_checkbox_layout)
 
-
-
         # Horizontal layout for proxy ratelimit timeout
         remove_rate_limit_layout = QHBoxLayout()
 
@@ -1517,7 +1540,9 @@ class MacAttack(QMainWindow):
 
         # Spinbox for timeout
         self.remove_for_seconds_spinbox = QSpinBox()
-        self.remove_for_seconds_spinbox.setRange(0, 99)  # Limit to range from 1 second to 1 hour
+        self.remove_for_seconds_spinbox.setRange(
+            0, 99
+        )  # Limit to range from 1 second to 1 hour
         self.remove_for_seconds_spinbox.setValue(60)
         self.remove_for_seconds_spinbox.setFixedWidth(40)
         remove_rate_limit_layout.addWidget(self.remove_for_seconds_spinbox)
@@ -1527,28 +1552,27 @@ class MacAttack(QMainWindow):
         self.seconds_label.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
         remove_rate_limit_layout.addWidget(self.seconds_label)
 
-
         # 15px spacer
-        spacer_after_timeoutseconds = QSpacerItem(15, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
+        spacer_after_timeoutseconds = QSpacerItem(
+            15, 0, QSizePolicy.Fixed, QSizePolicy.Minimum
+        )
         remove_rate_limit_layout.addItem(spacer_after_timeoutseconds)
 
-
-        # Add the layout for the timeout stuff
-        remove_rate_limit_layout.setAlignment(Qt.AlignRight)  # Align all elements to the right
+        # Layout for the timeout stuff
+        remove_rate_limit_layout.setAlignment(
+            Qt.AlignRight
+        )  # Align all elements to the right
         remove_rate_limit_layout.setSpacing(0)  # Set spacing to 0 for elements to touch
-        proxy_layout.addLayout(remove_rate_limit_layout)  # Add below proxy_checkbox_layout
+        proxy_layout.addLayout(
+            remove_rate_limit_layout
+        )  # Add below proxy_checkbox_layout
 
-
-
-
-        # Add your proxies label
+        # Add your proxies proxies label
         proxybox_label = QLabel(
             "Add your proxies in this box, or use the button below to retrieve a list of proxies."
         )
         proxybox_label.setContentsMargins(15, 0, 0, 0)  # 15px space on the left side
         proxy_layout.addWidget(proxybox_label)
-
-
 
         # Output Text Area
         self.proxy_textbox = QTextEdit()
@@ -1606,7 +1630,9 @@ class MacAttack(QMainWindow):
         generate_proxy_layout.addWidget(self.update_hourly_checkbox)
 
         # Spacer to push the proxy count label to the right
-        generate_proxy_layout.addStretch(1)  # This will push everything else to the left
+        generate_proxy_layout.addStretch(
+            1
+        )  # This will push everything else to the left
 
         # Proxy count label that will be updated
         self.proxy_count_label = QLabel("Proxies: 0")
@@ -1641,15 +1667,11 @@ class MacAttack(QMainWindow):
         self.proxy_output.setHtml("Proxy testing will output here...\n")
         self.proxy_output.setReadOnly(True)
         self.proxy_output.setFont(monospace_font)
-        # Set the maximum height to 60px
         self.proxy_output.setMaximumHeight(86)
-        # the proxy output area to the layout
         proxy_layout.addWidget(self.proxy_output)
-        # Connect the textChanged signal to update the proxy count
         self.proxy_textbox.textChanged.connect(self.update_proxy_count)
-        # Set a buffer for the proxy testing console
         self.proxy_output.textChanged.connect(self.trim_proxy_output)
-    
+
     def proxy_auto_updater(self):
         if self.update_hourly_checkbox.isChecked():
             logging.info("Update Hourly is checked.")
@@ -1658,7 +1680,6 @@ class MacAttack(QMainWindow):
             logging.info("Update Hourly is unchecked.")
             self.stop_hourly_update()
 
-    # Start the hourly update timer
     def start_hourly_update(self):
         self.remaining_time = 3600  # Reset to 1 hour (3600 seconds)
         self.hourly_timer = QTimer(self)  # Create the timer
@@ -1671,12 +1692,11 @@ class MacAttack(QMainWindow):
     # Stop the hourly update timer
     def stop_hourly_update(self):
         if self.hourly_timer:
-            self.hourly_timer.stop()  # Stop the timer
-            self.hourly_timer = None  # Clear the timer reference
+            self.hourly_timer.stop()
+            self.hourly_timer = None
         self.update_hourly_checkbox.setText(f"Get Proxies Hourly")
         logging.info("Stopped hourly update timer.")
 
-    # Update the countdown timer and execute get_proxies when it reaches 0
     def update_timer(self):
         if self.remaining_time > 0:
             self.remaining_time -= 1
@@ -1697,39 +1717,25 @@ class MacAttack(QMainWindow):
         self.setup_proxy_tester()
 
     def setup_proxy_tester(self):
-        # Create ProxyTester instance
         self.proxy_tester = ProxyTester(self.proxy_textbox)
-
-        # Connect signals to slots
         self.proxy_tester.update_proxy_output_signal.connect(self.update_proxy_output)
         self.proxy_tester.update_proxy_textbox_signal.connect(self.update_proxy_textbox)
         self.proxy_tester.clear_textbox_signal.connect(self.clear_proxy_textbox)
-
-        # Start testing proxies
         self.proxy_tester.start()
 
     def clear_proxy_textbox(self):
-        """This method will be called in the main thread to clear the text box."""
         self.proxy_textbox.clear()
 
     def update_proxy_textbox(self, proxies):
-        """This method will be called in the main thread to update the text box."""
         self.proxy_textbox.setPlainText(proxies)
 
     def trim_proxy_output(self):
-        """Trim the proxy output log to keep only the last 4 lines."""
         max_lines = 6
-
-        # Get the current text and split it into lines
         current_text = self.proxy_output.toPlainText()
         lines = current_text.splitlines()
-
-        # If the number of lines exceeds the max_lines, trim the content
         if len(lines) > max_lines:
             # Keep only the last `max_lines` lines
             lines = lines[-max_lines:]
-
-            # Update the text area with the last `max_lines` lines
             self.proxy_output.setPlainText("\n".join(lines))
 
     def update_proxy_count(self):
@@ -2224,7 +2230,6 @@ class MacAttack(QMainWindow):
             self.macs_in_mem_label.setVisible(False)
             self.custom_random_mac_checkbox.setVisible(False)
 
-
     def select_file(self):
         file_dialog = QFileDialog()
         file_path, _ = file_dialog.getOpenFileName(
@@ -2295,10 +2300,8 @@ class MacAttack(QMainWindow):
             self.ludicrous_speed_checkbox.setText(
                 "     🚨Ludicrous Speed Activated!🚨 \nRunning at high speeds can crash the app."
             )
-            #add a line to stretch the check for updates box
-            self.dont_update_checkbox.setText(
-                "Don't check for updates.\n"
-            )            
+            # add a line to stretch the check for updates box
+            self.dont_update_checkbox.setText("Don't check for updates.\n")
             self.ludicrous_speed_checkbox.setStyleSheet(
                 "QCheckBox { background-color: black; color: red; }"
             )
@@ -2310,10 +2313,8 @@ class MacAttack(QMainWindow):
             self.ludicrous_speed_checkbox.setStyleSheet(
                 "QCheckBox { background-color: #666666; color: white; }"
             )
-            #add a line to stretch the check for updates box
-            self.dont_update_checkbox.setText(
-                "Don't check for updates."
-            )            
+            # add a line to stretch the check for updates box
+            self.dont_update_checkbox.setText("Don't check for updates.")
             self.concurrent_tests.setRange(1, 100)  # Default range
             # self.proxy_concurrent_tests.setRange(1, 100)
 
@@ -2691,9 +2692,7 @@ class MacAttack(QMainWindow):
             "proxy_location_output": str(
                 self.proxy_location_output_checkbox.isChecked()
             ),
-            "use_custom_macs": str(
-                self.use_custom_macs_checkbox.isChecked()
-            ),
+            "use_custom_macs": str(self.use_custom_macs_checkbox.isChecked()),
             "ratelimit_timeout": str(self.remove_for_seconds_spinbox.value()),
         }
         config["Window"] = {
@@ -2818,8 +2817,10 @@ class MacAttack(QMainWindow):
             self.use_custom_macs_checkbox.setChecked(
                 config.get("Settings", "use_custom_macs", fallback="False") == "True"
             )
-            self.remove_for_seconds_spinbox.setValue(config.getint("Settings", "ratelimit_timeout", fallback=60))
-            
+            self.remove_for_seconds_spinbox.setValue(
+                config.getint("Settings", "ratelimit_timeout", fallback=60)
+            )
+
             #            self.custom_macs_textbox.setPlainText(
             #                config.get("Settings", "custom_macs_text", fallback="")
             #            )
@@ -2849,8 +2850,10 @@ class MacAttack(QMainWindow):
         else:
             logging.debug("No settings file found.")
         if not self.dont_update_checkbox.isChecked():
-
-            self.get_update()
+            logging.info("Checking for update")
+            self.update_worker = UpdateWorker()
+            self.update_worker.update_checked.connect(self.show_update_popup)
+            self.update_worker.start()
 
     def set_window_icon(self):
         # Base64 encoded image string (replace with your own base64 string)
@@ -2878,7 +2881,7 @@ class MacAttack(QMainWindow):
             "██║░╚═╝░██║██║░░██║╚█████╔╝██║░░██║░░░██║░░░░░░██║░░░██║░░██║╚█████╔╝██║░╚██╗██╗\n"
             "╚═╝░░░░░╚═╝╚═╝░░╚═╝░╚════╝░╚═╝░░╚═╝░░░╚═╝░░░░░░╚═╝░░░╚═╝░░╚═╝░╚════╝░╚═╝░░╚═╝╚═╝\n\n"
             "It's normal for errors to appear down here.\n"
-        )                
+        )
         self.SaveTheDay()
         # Update button states immediately
         self.running = True
@@ -2897,50 +2900,48 @@ class MacAttack(QMainWindow):
         creation_thread.daemon = True
         creation_thread.start()
 
-
     def is_valid_url(self, url):
         print("checking iptv_link")
-        self.update_error_text_signal.emit("Checking if url is valid")  
+        self.update_error_text_signal.emit("Checking if url is valid")
         try:
             # Parse the URL
             parsed_url = urlparse(url)
             # Check scheme and hostname
             if parsed_url.scheme not in ("http", "https"):
-                self.update_error_text_signal.emit("Error: Not HTTP or HTTPS.")  
+                self.update_error_text_signal.emit("Error: Not HTTP or HTTPS.")
                 return False
             if not parsed_url.hostname:
-                self.update_error_text_signal.emit("Error: No Hostname")  
+                self.update_error_text_signal.emit("Error: No Hostname")
                 return False
 
             # Make a HEAD request to check if the URL is reachable
             response = requests.get(url, timeout=15)
             print(response.text)
             if response.status_code in (200, 404):
-                self.update_error_text_signal.emit("Recieved valid response from the link, proceeding...")
+                self.update_error_text_signal.emit(
+                    "Recieved valid response from the link, proceeding..."
+                )
                 return True
             else:
                 print(f"Status Code: {response.status_code}")
                 return False
 
-
         except Exception as e:
             print(str(e))
             return False
 
-
     def _create_threads(self):
         global portaltype
         portal_type_detected = True
-        
-        
-          
 
         # Get and parse the IPTV link
         self.iptv_link = self.iptv_link_entry.text()
         # Check if the url is valid
         if not self.is_valid_url(self.iptv_link):
             print(f"Invalid URL {self.iptv_link}")
-            self.update_error_text_signal.emit("ERROR: The URL IS NOT VALID. CANNOT PROCEED")
+            self.update_error_text_signal.emit(
+                "ERROR: The URL IS NOT VALID. CANNOT PROCEED"
+            )
             self.brute_mac_label.setText("ERROR: INVALID URL")
             self.start_button.setDisabled(False)
             self.stop_button.setDisabled(True)
@@ -2964,15 +2965,15 @@ class MacAttack(QMainWindow):
             "Connection": "keep-alive",
         }
 
-
         if self.dropdown_box.currentText() == "Autodetect":
-            self.update_error_text_signal.emit("Autodetect enabled, autodetecting Portaltype.")
+            self.update_error_text_signal.emit(
+                "Autodetect enabled, autodetecting Portaltype."
+            )
             portal_type_detected = False  # Skip autodetect if user set
             logging.debug("Skipping Autodetect")
             portaltype = None
         else:
-            self.update_error_text_signal.emit("User set Portaltype, not autodetecting") 
-
+            self.update_error_text_signal.emit("User set Portaltype, not autodetecting")
 
         if not portal_type_detected:  # Check for type portal
             version_url = f"{self.base_url}/c/version.js"
@@ -2991,7 +2992,9 @@ class MacAttack(QMainWindow):
                         f"\n\n\nPortal type: PORTAL version: {self.portal_version}\n\n\n"
                     )
                     portal_type_detected = "portal"
-                    self.update_error_text_signal.emit(f"Portal type detected: Portal Version: {self.portal_version}\n")
+                    self.update_error_text_signal.emit(
+                        f"Portal type detected: Portal Version: {self.portal_version}\n"
+                    )
                     portaltype = "portal.php"
                 else:
                     logging.debug("Version declaration not found in the file.")
@@ -3011,7 +3014,9 @@ class MacAttack(QMainWindow):
                 if match:
                     self.portal_version = match.group(1)  # Extracted version string
                     logging.debug(version_url)
-                    self.update_error_text_signal.emit(f"Portal type detected: stalker_portal Version: {self.portal_version}\n")
+                    self.update_error_text_signal.emit(
+                        f"Portal type detected: stalker_portal Version: {self.portal_version}\n"
+                    )
                     portal_type_detected = "stalker_portal"
                     portaltype = "stalker_portal/server/load.php"
                 else:
@@ -3027,8 +3032,6 @@ class MacAttack(QMainWindow):
                 f"<b>WARNING:</b> No Portal detected! using default value {portaltype} {self.portal_version}<br>"
                 "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;If this is not a valid portal you will not get any results.<br>"
             )
-        
-
 
         self.base_url = f"http://{self.host}:{self.port}{self.parsed_path}"
 
@@ -3059,7 +3062,6 @@ class MacAttack(QMainWindow):
             thread.start()
             # Track threads
             self.threads.append(thread)
-            
 
         # self.SaveTheDay()
 
@@ -3169,9 +3171,7 @@ class MacAttack(QMainWindow):
             mac = self.RandomMacGenerator()  # Generate a random MAC
             if mac == "":
                 # Show error message
-                self.update_error_text_signal.emit(
-                    "<b>Custom MACs list is empty</b>"
-                )
+                self.update_error_text_signal.emit("<b>Custom MACs list is empty</b>")
                 self.nomacs = 1
                 self.brute_mac_label.setText("")
                 self.stop_button.click()
@@ -3244,8 +3244,12 @@ class MacAttack(QMainWindow):
                         ):
                             if self.mac_dict:  # Check if the deque is not empty
                                 if self.prefer_accuracy_radio.isChecked():
-                                    if mac in self.mac_dict:  # Check if the mac is in the deque
-                                        self.mac_dict.remove(mac)  # Remove the specific MAC address
+                                    if (
+                                        mac in self.mac_dict
+                                    ):  # Check if the mac is in the deque
+                                        self.mac_dict.remove(
+                                            mac
+                                        )  # Remove the specific MAC address
                                         logging.debug(f"removeing {mac} from deque")
 
                             else:
@@ -3337,19 +3341,11 @@ class MacAttack(QMainWindow):
                         exp_billing = None
                         if res1_a.text:
                             data = json.loads(res1_a.text)
-                            if (
-                                "js" in data
-                                and "ip" in data["js"]
-                            ):
-                                client_ip = data["js"]["ip"]   
+                            if "js" in data and "ip" in data["js"]:
+                                client_ip = data["js"]["ip"]
 
-                            if (
-                                "js" in data
-                                and "expire_billing_date" in data["js"]
-                            ):
-                                exp_billing = data["js"]["expire_billing_date"]     
-
-
+                            if "js" in data and "expire_billing_date" in data["js"]:
+                                exp_billing = data["js"]["expire_billing_date"]
 
                         url2 = f"{self.base_url}{portaltype}?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
 
@@ -3374,8 +3370,12 @@ class MacAttack(QMainWindow):
                                     expiry = "Unknown"
                                     if exp_billing:
                                         # Convert the exp date format
-                                        dt_object = datetime.strptime(exp_billing, "%Y-%m-%d %H:%M:%S")
-                                        exp_billing = dt_object.strftime("%B %d, %Y, %I:%M %p")
+                                        dt_object = datetime.strptime(
+                                            exp_billing, "%Y-%m-%d %H:%M:%S"
+                                        )
+                                        exp_billing = dt_object.strftime(
+                                            "%B %d, %Y, %I:%M %p"
+                                        )
                                         expiry = exp_billing
 
                                 try:
@@ -3631,19 +3631,14 @@ class MacAttack(QMainWindow):
                                         middleware_timezone = middleware_location.get(
                                             "Timezone", "Unknown"
                                         )
- 
+
                                         # Get the location details for the client IP address
-                                        client_location = get_location(
-                                            client_ip
-                                        )
+                                        client_location = get_location(client_ip)
                                         client_city = client_location.get(
                                             "City", "Unknown"
                                         )
                                         client_country = client_location.get(
                                             "Country", "Unknown"
-                                        )
-                                        client_timezone = client_location.get(
-                                            "Timezone", "Unknown"
                                         )
 
                                     if (
@@ -3776,9 +3771,6 @@ class MacAttack(QMainWindow):
                                         )
                                     elif include_ip_addresses and client_ip:
                                         result_message += "\n"
-
-
-
 
                                     if (
                                         include_proxy_used
@@ -4259,7 +4251,7 @@ class MacAttack(QMainWindow):
                             del self.proxy_error_connect_counts[selected_proxy]
                         logging.debug(f"Raw Response Content:\n{mac}\n{res.text}")
                     # self.error_count += 1
-                #elif "Failed to parse" in str(e):
+                # elif "Failed to parse" in str(e):
                 #    self.update_error_text_signal.emit("ERROR: error parsing the url")
                 elif "target machine actively refused it" in str(e):
                     # Track connection error counts
@@ -4267,10 +4259,13 @@ class MacAttack(QMainWindow):
                         self.proxy_error_connect_counts[selected_proxy] = 1
                     else:
                         self.proxy_error_connect_counts[selected_proxy] += 1
-                    if self.proxy_error_connect_counts[selected_proxy] > 5: # Track error count for the proxy every # consecutive connection errors.
-                        self.update_error_text_signal.emit(f"Error for portal: <b>The target machine refused connection</b> {selected_proxy} Ratelimited?")
-                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy                   
-               
+                    if (
+                        self.proxy_error_connect_counts[selected_proxy] > 5
+                    ):  # Track error count for the proxy every # consecutive connection errors.
+                        self.update_error_text_signal.emit(
+                            f"Error for portal: <b>The target machine refused connection</b> {selected_proxy} Ratelimited?"
+                        )
+                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
 
                 elif "Read timed out" in str(e):
                     logging.debug(f"{selected_proxy} did not respond")
@@ -4280,9 +4275,13 @@ class MacAttack(QMainWindow):
                         self.proxy_error_connect_counts[selected_proxy] = 1
                     else:
                         self.proxy_error_connect_counts[selected_proxy] += 1
-                    if self.proxy_error_connect_counts[selected_proxy] > 5: # Track error count for the proxy every # consecutive connection errors.
-                        self.update_error_text_signal.emit(f"Error for Proxy: <b>Read timed out</b> {selected_proxy} Overloaded proxy?")
-                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy   
+                    if (
+                        self.proxy_error_connect_counts[selected_proxy] > 5
+                    ):  # Track error count for the proxy every # consecutive connection errors.
+                        self.update_error_text_signal.emit(
+                            f"Error for Proxy: <b>Read timed out</b> {selected_proxy} Overloaded proxy?"
+                        )
+                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
 
                 elif "Unable to connect to proxy" in str(e):
                     logging.debug(f"Unable to connect to {selected_proxy}")
@@ -4293,22 +4292,23 @@ class MacAttack(QMainWindow):
                         self.proxy_error_connect_counts[selected_proxy] = 1
                     else:
                         self.proxy_error_connect_counts[selected_proxy] += 1
-                    if self.proxy_error_connect_counts[selected_proxy] > 5: # Track error count for the proxy every # consecutive connection errors.
-                        self.update_error_text_signal.emit(f"Error for Proxy: <b>Proxy Timing out</b> {selected_proxy} Ratelimited?")                        
-                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy                        
+                    if (
+                        self.proxy_error_connect_counts[selected_proxy] > 5
+                    ):  # Track error count for the proxy every # consecutive connection errors.
+                        self.update_error_text_signal.emit(
+                            f"Error for Proxy: <b>Proxy Timing out</b> {selected_proxy} Ratelimited?"
+                        )
+                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
 
                     self.remove_proxy(
                         selected_proxy, self.proxy_error_counts
                     )  # remove the proxy if it exceeds the allowed error count
 
-                else: # Remove errorcounts
+                else:  # Remove errorcounts
                     if selected_proxy in self.proxy_error_counts:
                         del self.proxy_error_counts[selected_proxy]
                     if selected_proxy in self.proxy_error_connect_counts:
                         del self.proxy_error_connect_counts[selected_proxy]
-
-                    
-
 
     def remove_proxy(self, proxy, proxy_error_counts):
         """Remove a proxy after exceeding error count and update UI."""
@@ -4341,7 +4341,9 @@ class MacAttack(QMainWindow):
                 )
                 self.macattack_update_proxy_textbox_signal.emit(new_text)
                 # Notify user of temporary removal
-                self.update_error_text_signal.emit(f"Proxy {proxy} temporarily removed.")
+                self.update_error_text_signal.emit(
+                    f"Proxy {proxy} temporarily removed."
+                )
 
                 # Define a function to re-the proxy after 10 seconds
                 def re_add_proxy():
@@ -4401,29 +4403,6 @@ class MacAttack(QMainWindow):
             filename = f"{sanitized_url}_{current_time}.txt"
             return filename
 
-    #    def restore_custom_macs(self):
-    #        try:
-    #            # Define file path
-    #            user_dir = os.path.expanduser("~")
-    #            file_path = os.path.join(user_dir, "evilvir.us", "MacAttack.ini")
-    #
-    #            # Check if the file exists
-    #            if not os.path.exists(file_path):
-    #                logging.info(f"Configuration file not found: {file_path}")
-    #                return
-    #
-    #            # Load configuration
-    #            config = configparser.ConfigParser()
-    #            config.read(file_path)
-    #
-    #            self.custom_macs_textbox.setPlainText(
-    #                config.get("Settings", "custom_macs_text")
-    #            )
-    #            logging.info("Configuration loaded successfully.")
-    #
-    #        except Exception as e:#
-    #            logging.info(f"An error occurred while loading the configuration: {e}")
-
     def GiveUp(self):
         global portaltype
         self.running = False
@@ -4435,9 +4414,9 @@ class MacAttack(QMainWindow):
                 "░╚═══██╗░░░██║░░░██║░░██║██╔═══╝░██╔═══╝░██║██║╚████║██║░░╚██╗╚═╝\n"
                 "██████╔╝░░░██║░░░╚█████╔╝██║░░░░░██║░░░░░██║██║░╚███║╚██████╔╝██╗\n"
                 "╚═════╝░░░░╚═╝░░░░╚════╝░╚═╝░░░░░╚═╝░░░░░╚═╝╚═╝░░╚══╝░╚═════╝░╚═╝\n"
-                    "Please wait for background tasks to complete.\n Results may still appear in the next few minutes.\n"
+                "Please wait for background tasks to complete.\n Results may still appear in the next few minutes.\n"
             )
-        #portaltype = None
+        # portaltype = None
         #        if self.restore_custom_macs_checkbox.isChecked():
         # Reload the custom macs, after a delay
         #            QTimer.singleShot(1000, self.restore_custom_macs)
@@ -4475,7 +4454,7 @@ class MacAttack(QMainWindow):
         cleanup_thread.start()
 
     def _wait_for_threads(self):
-        if self.cleaningup == 0: # One cleanup at a time
+        if self.cleaningup == 0:  # One cleanup at a time
             self.cleaningup = 1
             logging.debug("Waiting for threads to finish...")
             # Wait for all threads to complete
@@ -5384,29 +5363,27 @@ class MacAttack(QMainWindow):
         joiner_thread.start()
 
     def show_update_popup(self, VERSION, latest_version, release_url):
-        # Create the update popup
-        msg = QMessageBox()
-        msg.setIcon(QMessageBox.Information)
-        msg.setWindowTitle(f"MacAttack v{VERSION} Update Available!")
-        msg.setText(f"A new version v{latest_version} is available!")
-        msg.setInformativeText(
-            "Click the button below to view the release notes or download it:"
-        )
+        """Show the update popup in the main thread."""
+        if latest_version:  # Only proceed if a new version is available
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Information)
+            msg.setWindowTitle(f"MacAttack v{VERSION} Update Available!")
+            msg.setText(f"A new version v{latest_version} is available!")
+            msg.setInformativeText(
+                "Click the button below to view the release notes or download it:"
+            )
 
-        # button to view the update
-        button = QPushButton(f"Update v{latest_version}")
-        button.clicked.connect(lambda: webbrowser.open(release_url))
+            # Add buttons to the message box
+            button = QPushButton(f"Update v{latest_version}")
+            button.clicked.connect(lambda: webbrowser.open(release_url))
+            cancel_button = QPushButton("Cancel")
+            cancel_button.clicked.connect(msg.reject)
 
-        # cancel button
-        cancel_button = QPushButton("Cancel")
-        cancel_button.clicked.connect(msg.reject)
+            msg.addButton(button, QMessageBox.AcceptRole)
+            msg.addButton(cancel_button, QMessageBox.RejectRole)
 
-        # buttons to the message box
-        msg.addButton(button, QMessageBox.AcceptRole)
-        msg.addButton(cancel_button, QMessageBox.RejectRole)
-
-        # Show the message box
-        msg.exec_()
+            # Display the popup
+            msg.exec_()
 
     def get_update(self):
 
