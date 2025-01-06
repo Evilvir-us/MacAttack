@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.5.3"
+VERSION = "4.5.5"
 import semver
 import urllib.parse
 import webbrowser
@@ -22,6 +22,9 @@ import time
 from datetime import datetime, timezone
 from contextlib import contextmanager
 from collections import deque
+# Add the directory containing libvlc.dll to the PATH
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.environ['PATH'] = script_dir + os.pathsep + os.environ.get('PATH', '')
 import vlc
 from PyQt5.QtCore import (
     QBuffer,
@@ -73,7 +76,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote, urlparse, urlunparse
 
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.DEBUG)
 portaltype = None
 player_portaltype = None
 
@@ -288,8 +291,8 @@ class ProxyFetcher(QThread):
 
     def __init__(self):
         super().__init__()
-        self.proxy_fetching_speed = 150
-        self.proxy_testing_speed = 150
+        self.proxy_fetching_speed = 10
+        self.proxy_testing_speed = 100
 
     def run(self):
         self.fetch_and_test_proxies()
@@ -311,6 +314,10 @@ class ProxyFetcher(QThread):
         self.update_proxy_output_signal.emit(
             f"Duplicates removed: {duplicates_removed}\n"
         )
+
+        # Start tracking time for testing proxies
+        start_time = time.time()
+
         # Test proxies
         working_proxies = []
         self.update_proxy_output_signal.emit("Testing proxies...")
@@ -331,9 +338,28 @@ class ProxyFetcher(QThread):
                         self.update_proxy_output_signal.emit(f"Proxy {proxy} failed.")
                 except Exception as e:
                     logging.debug(f"Error testing proxy {proxy}: {str(e)}")
+
+        # End tracking time for testing proxies
+        end_time = time.time()
+        testing_time = end_time - start_time  # Time in seconds
+
+        # Convert seconds to minutes and seconds
+        minutes = int(testing_time // 60)
+        seconds = int(testing_time % 60)
+
+        # Format testing time as "X Minutes Y Seconds"
+        formatted_testing_time = f"{minutes} Minutes {seconds} Seconds"
+
         if working_proxies:
             self.update_proxy_textbox_signal.emit("\n".join(working_proxies))
-            self.update_proxy_output_signal.emit("Done!")
+            self.update_proxy_output_signal.emit(
+                f"██████╗░░█████╗░███╗░░██╗███████╗\n"
+                f"██╔══██╗██╔══██╗████╗░██║██╔════╝\n"
+                f"██║░░██║██║░░██║██╔██╗██║█████╗░░\n"
+                f"██║░░██║██║░░██║██║╚████║██╔══╝░░\n"
+                f"██████╔╝╚█████╔╝██║░╚███║███████╗\n"
+                f"╚═════╝░░╚════╝░╚═╝░░╚══╝╚══════╝  Testing took {formatted_testing_time}\n"
+            )
         else:
             self.update_proxy_output_signal.emit("No working proxies found.")
 
@@ -342,8 +368,14 @@ class ProxyFetcher(QThread):
         sources = [
             "https://spys.me/proxy.txt",
             "https://free-proxy-list.net/",
+            "https://www.us-proxy.org/",
             "https://www.sslproxies.org/",
-            "https://www.freeproxy.world/?type=http&anonymity=&country=&speed=&port=&page=1",
+            "https://free-proxy-list.net/anonymous-proxy.html",
+            "https://www.freeproxy.world/?type=http&anonymity=4&country=&speed=400&port=&page=1",
+            "https://www.freeproxy.world/?type=http&anonymity=4&country=&speed=400&port=&page=2",
+            "https://www.freeproxy.world/?type=http&anonymity=4&country=&speed=400&port=&page=3",
+            "https://www.freeproxy.world/?type=http&anonymity=4&country=&speed=400&port=&page=4",
+            "https://www.freeproxy.world/?type=http&anonymity=4&country=&speed=400&port=&page=5",
         ]
         with ThreadPoolExecutor(max_workers=self.proxy_fetching_speed) as executor:
             futures = {
@@ -370,14 +402,7 @@ class ProxyFetcher(QThread):
                         regex = r"[0-9]+(?:\.[0-9]+){3}:[0-9]+"
                         matches = re.finditer(regex, response.text, re.MULTILINE)
                         proxies.extend([match.group() for match in matches])
-                    elif "free-proxy-list.net" in url:
-                        html_content = response.text
-                        ip_port_pattern = re.compile(
-                            r"<td>(\d+\.\d+\.\d+\.\d+)</td><td>(\d+)</td>"
-                        )
-                        matches = ip_port_pattern.findall(html_content)
-                        proxies.extend([f"{ip}:{port}" for ip, port in matches])
-                    elif "sslproxies.org" in url:
+                    elif "free-proxy-list.net" in url or "us-proxy.org" in url or "sslproxies.org" in url:
                         html_content = response.text
                         ip_port_pattern = re.compile(
                             r"<td>(\d+\.\d+\.\d+\.\d+)</td><td>(\d+)</td>"
@@ -402,22 +427,30 @@ class ProxyFetcher(QThread):
         proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
         proxy_ip = urlparse(f"http://{proxy}").hostname
 
-        try:
-            with no_proxy_environment():  # Bypass the environment proxy set in the video player tab
-                response = requests.get(url, proxies=proxies, timeout=30)
+        def try_proxy():
+            try:
+                with no_proxy_environment():  # Bypass the environment proxy set in the video player tab
+                    response = requests.get(url, proxies=proxies, timeout=30)
 
-                # Check for a successful response and get the values
-                if response.status_code == 200:
-                    json_response = response.json()
-                    user = json_response.get("args", {}).get("user")
-                    origin = json_response.get("origin")
-                    logging.info(f"Proxy: {proxy}, Origin: {origin}")
+                    if response.status_code == 200:
+                        json_response = response.json()
+                        user = json_response.get("args", {}).get("user")
+                        origin = json_response.get("origin")
+                        logging.info(f"Proxy: {proxy}, Origin: {origin}")
 
-                    # Check if the user is 'Evilvirus' and the origin matches the proxy IP (ignoring the port)
-                    if user == "Evilvirus" and origin == proxy_ip:
-                        return proxy, True
-        except requests.RequestException as e:
-            logging.debug(f"Error testing proxy {proxy}: {str(e)}")
+                        # Check if the user is 'Evilvirus' and the origin matches the proxy IP
+                        if user == "Evilvirus" and origin == proxy_ip:
+                            return True
+            except requests.RequestException as e:
+                logging.debug(f"Error testing proxy {proxy}: {str(e)}")
+            return False
+
+        # Try testing the proxy twice
+        if try_proxy():
+            return proxy, True
+        #elif try_proxy():  # Retry once more if the first attempt fails
+        #    return proxy, True
+
         return proxy, False
 
 
@@ -968,6 +1001,8 @@ class MacAttack(QMainWindow):
         self.proxy_tester.clear_textbox_signal.connect(self.clear_proxy_textbox)
         self.proxy_tester.update_proxy_textbox_signal.connect(self.update_proxy_textbox)
         self.mac_dict = deque()  # Initialize a deque to store MAC addresses
+        self.generated_count = 0  # Track generated MAC count
+        self.max_macs = 50  # Limit to 50 sequential MAC addresses
         self.proxy_error_counts = {}
         self.proxy_error_connect_counts = {}
         self.threads = []  # To track background threads
@@ -1562,7 +1597,7 @@ class MacAttack(QMainWindow):
         self.proxy_output.setReadOnly(True)
         self.proxy_output.setFont(monospace_font)
         # Set the maximum height to 60px
-        self.proxy_output.setMaximumHeight(60)
+        self.proxy_output.setMaximumHeight(86)
         # the proxy output area to the layout
         proxy_layout.addWidget(self.proxy_output)
         # Connect the textChanged signal to update the proxy count
@@ -1638,7 +1673,7 @@ class MacAttack(QMainWindow):
 
     def trim_proxy_output(self):
         """Trim the proxy output log to keep only the last 4 lines."""
-        max_lines = 4
+        max_lines = 6
 
         # Get the current text and split it into lines
         current_text = self.proxy_output.toPlainText()
@@ -1835,7 +1870,7 @@ class MacAttack(QMainWindow):
 
         inline_layout.setAlignment(Qt.AlignLeft)
 
-        # Add the layout to the general layout
+        # Add the inline layout to the general layout
         general_layout.addLayout(inline_layout)
 
         # Connect the checkbox state change to the function
@@ -2786,6 +2821,7 @@ class MacAttack(QMainWindow):
         self.setWindowIcon(QIcon(pixmap))
 
     def TestDrive(self):
+        self.nomacs = 1
         self.update_error_text_signal.emit("clearall")
         self.update_error_text_signal.emit(
             "███╗░░░███╗░█████╗░░█████╗░░█████╗░████████╗████████╗░█████╗░░█████╗░██╗░░██╗██╗\n"
@@ -2793,7 +2829,7 @@ class MacAttack(QMainWindow):
             "██╔████╔██║███████║██║░░╚═╝███████║░░░██║░░░░░░██║░░░███████║██║░░╚═╝█████═╝░██║\n"
             "██║╚██╔╝██║██╔══██║██║░░██╗██╔══██║░░░██║░░░░░░██║░░░██╔══██║██║░░██╗██╔═██╗░╚═╝\n"
             "██║░╚═╝░██║██║░░██║╚█████╔╝██║░░██║░░░██║░░░░░░██║░░░██║░░██║╚█████╔╝██║░╚██╗██╗\n"
-            "╚═╝░░░░░╚═╝╚═╝░░╚═╝░╚════╝░╚═╝░░╚═╝░░░╚═╝░░░░░░╚═╝░░░╚═╝░░╚═╝░╚════╝░╚═╝░░╚═╝╚═╝\n"
+            "╚═╝░░░░░╚═╝╚═╝░░╚═╝░╚════╝░╚═╝░░╚═╝░░░╚═╝░░░░░░╚═╝░░░╚═╝░░╚═╝░╚════╝░╚═╝░░╚═╝╚═╝\n\n"
             "It's normal for errors to appear down here.\n"
         )                
         self.SaveTheDay()
@@ -2814,17 +2850,53 @@ class MacAttack(QMainWindow):
         creation_thread.daemon = True
         creation_thread.start()
 
+
+    def is_valid_url(self, url):
+        print("checking iptv_link")
+        self.update_error_text_signal.emit("Checking if url is valid")  
+        try:
+            # Parse the URL
+            parsed_url = urlparse(url)
+            # Check scheme and hostname
+            if parsed_url.scheme not in ("http", "https"):
+                self.update_error_text_signal.emit("Error: Not HTTP or HTTPS.")  
+                return False
+            if not parsed_url.hostname:
+                self.update_error_text_signal.emit("Error: No Hostname")  
+                return False
+
+            # Make a HEAD request to check if the URL is reachable
+            response = requests.get(url, timeout=15)
+            print(response.text)
+            if response.status_code in (200, 404):
+                self.update_error_text_signal.emit("Recieved valid response from the link, proceeding...")
+                return True
+            else:
+                print(f"Status Code: {response.status_code}")
+                return False
+
+
+        except Exception as e:
+            print(str(e))
+            return False
+
+
     def _create_threads(self):
         global portaltype
-        portal_type_detected = False
-        if portaltype is not None:
-            portal_type_detected = True  # Skip autodetect if user set
-            logging.debug("Skipping Autodetect")
-        else:
-            logging.debug("NEEDS AUTODETECT")
+        portal_type_detected = True
+        
+          
 
         # Get and parse the IPTV link
         self.iptv_link = self.iptv_link_entry.text()
+        # Check if the url is valid
+        if not self.is_valid_url(self.iptv_link):
+            print(f"Invalid URL {self.iptv_link}")
+            self.update_error_text_signal.emit("ERROR: The URL IS NOT VALID. CANNOT PROCEED")
+            self.brute_mac_label.setText("ERROR: INVALID URL")
+            self.start_button.setDisabled(False)
+            self.stop_button.setDisabled(True)
+            return
         self.parsed_url = urlparse(self.iptv_link)
         self.parsed_path = self.parsed_url.path
         logging.debug(self.parsed_path)
@@ -2844,6 +2916,16 @@ class MacAttack(QMainWindow):
             "Connection": "keep-alive",
         }
 
+
+        if self.dropdown_box.currentText() == "Autodetect":
+            self.update_error_text_signal.emit("Autodetect enabled, autodetecting Portaltype.")
+            portal_type_detected = False  # Skip autodetect if user set
+            logging.debug("Skipping Autodetect")
+            portaltype = None
+        else:
+            self.update_error_text_signal.emit("User set Portaltype, not autodetecting") 
+
+
         if not portal_type_detected:  # Check for type portal
             version_url = f"{self.base_url}/c/version.js"
             try:
@@ -2861,7 +2943,7 @@ class MacAttack(QMainWindow):
                         f"\n\n\nPortal type: PORTAL version: {self.portal_version}\n\n\n"
                     )
                     portal_type_detected = "portal"
-                    logging.info("Portal type selected: Portal")
+                    self.update_error_text_signal.emit(f"Portal type detected: Portal Version: {self.portal_version}\n")
                     portaltype = "portal.php"
                 else:
                     logging.debug("Version declaration not found in the file.")
@@ -2881,9 +2963,7 @@ class MacAttack(QMainWindow):
                 if match:
                     self.portal_version = match.group(1)  # Extracted version string
                     logging.debug(version_url)
-                    logging.info(
-                        f"\n\n\nPortal type: STALKER_PORTAL version: {self.portal_version}\n\n\n"
-                    )
+                    self.update_error_text_signal.emit(f"Portal type detected: stalker_portal Version: {self.portal_version}\n")
                     portal_type_detected = "stalker_portal"
                     portaltype = "stalker_portal/server/load.php"
                 else:
@@ -2894,6 +2974,13 @@ class MacAttack(QMainWindow):
         if not portal_type_detected:  # Others failed, default to "portal"
             portaltype = "portal.php"
             self.portal_version = "5.3.1"
+
+            self.update_error_text_signal.emit(
+                f"<b>WARNING:</b> No Portal detected! using default value {portaltype} {self.portal_version}<br>"
+                "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;If this is not a valid portal you will not get any results.<br>"
+            )
+        
+
 
         self.base_url = f"http://{self.host}:{self.port}{self.parsed_path}"
 
@@ -2906,19 +2993,15 @@ class MacAttack(QMainWindow):
         # Calculate the number of threads to start
         num_tests = self.concurrent_tests.value()
         if self.proxy_enabled_checkbox.isChecked() and num_tests > 1:
-            max_value = 300
-            if max_value < 5:
-                max_value = 5
+            max_value = 100
             num_tests = 1 + (num_tests - 1) * (max_value - 1) / (100 - 1)
             num_tests = int(num_tests)
             if self.ludicrous_speed_checkbox.isChecked() and num_tests > 1:
-                max_value = 3000
-                if max_value < 5:
-                    max_value = 5
+                max_value = 1000
                 num_tests = 1 + (num_tests - 1) * (max_value - 1) / (1800 - 1)
                 num_tests = int(num_tests)
         else:
-            max_value = 300
+            max_value = 100
             num_tests = 1 + (num_tests - 1) * (max_value - 1) / (100 - 1)
             num_tests = int(num_tests)
         # Start threads to test MACs
@@ -2936,23 +3019,25 @@ class MacAttack(QMainWindow):
         custommacs = self.use_custom_macs_checkbox.isChecked()
 
         if not custommacs:
-            # Generate a random MAC address using the given prefix
+            # Generate a random MAC
             return f"{prefix}{random.randint(0, 255):02X}:{random.randint(0, 255):02X}:{random.randint(0, 255):02X}"
         else:
             if not self.mac_dict:
                 logging.info("MAC deque is empty!")
                 return ""
 
-            # Get and remove the first MAC address efficiently
-            if self.prefer_speed_radio.isChecked():
-                first_mac = (
-                    self.mac_dict.popleft()
-                )  # O(1) operation to pop from the front of deque
-            else:
-                first_mac = self.mac_dict[
-                    0
-                ]  # Access the first element, but don't remove it
-            return first_mac
+            # The current size of the deque
+            current_size = len(self.mac_dict)
+            if current_size == 0:
+                logging.info("MAC deque is empty!")
+                return ""
+
+            # Get the next MAC address in the sequence
+            index = self.generated_count % current_size
+            mac = self.mac_dict[index]
+
+            self.generated_count += 1  # Up the count by 1 for the next use
+            return mac
 
     def macattack_update_proxy_textbox(self, new_text):
         """
@@ -2989,7 +3074,6 @@ class MacAttack(QMainWindow):
         backend_host = None
         backend_ip_address = None
         self.recentlyfound = []  # Erase recently found list
-        self.nomacs = 1
 
         while self.running:  # Loop will continue as long as self.running is True
 
@@ -3011,6 +3095,7 @@ class MacAttack(QMainWindow):
 
             if custommacs:
                 self.macattack_update_mac_count_signal.emit()
+                self.nomacs = 0
 
             created_at = None
             max_connections = None
@@ -3036,12 +3121,12 @@ class MacAttack(QMainWindow):
             mac = self.RandomMacGenerator()  # Generate a random MAC
             if mac == "":
                 # Show error message
-                self.stop_button.click()
                 self.update_error_text_signal.emit(
                     "<b>Custom MACs list is empty</b>"
                 )
                 self.nomacs = 1
                 self.brute_mac_label.setText("")
+                self.stop_button.click()
 
                 return  # Stop the process if no MACs are available
             serialnumber = hashlib.md5(mac.encode()).hexdigest().upper()
@@ -3104,15 +3189,17 @@ class MacAttack(QMainWindow):
                                 res.status_code == 200
                                 or res.status_code == 204
                                 or res.status_code == 404
+                                or res.status_code == 512
                             )
                             and not "REMOTE_ADDR" in res.text
                             and not "Backend not available" in res.text
                         ):
-                            if self.mac_dict:  # This checks if the deque is not empty
+                            if self.mac_dict:  # Check if the deque is not empty
                                 if self.prefer_accuracy_radio.isChecked():
-                                    if mac == self.mac_dict[0]:
-                                        # If the mac is first in the pool, pop it.
-                                        self.mac_dict.popleft()  # Pop the first element
+                                    if mac in self.mac_dict:  # Check if the mac is in the deque
+                                        self.mac_dict.remove(mac)  # Remove the specific MAC address
+                                        logging.debug(f"removeing {mac} from deque")
+
                             else:
                                 # Handle the case when the deque is empty
                                 logging.info("Pool is empty, cannot pop anything.")
@@ -3770,6 +3857,7 @@ class MacAttack(QMainWindow):
                         or "An error occurred." in res.text
                         or "Zscaler" in res.text
                         or "The server is not responding" in res.text
+                        or "remote server did not respond to the proxy" in res.text
                     ):
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4062,21 +4150,6 @@ class MacAttack(QMainWindow):
                         )
                         # Attempt to remove the proxy if it exceeds the allowed error count
                         self.remove_proxy(selected_proxy, self.proxy_error_counts)
-                    elif "Read timed out" in res.text:
-                        # Track error count for the proxy
-                        if selected_proxy not in self.proxy_error_counts:
-                            self.proxy_error_counts[selected_proxy] = 1
-                        else:
-                            self.proxy_error_counts[selected_proxy] += 1
-                        self.update_error_text_signal.emit(
-                            f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Timed out</b>"
-                        )
-                        # Attempt to remove the proxy if it exceeds the allowed error count
-                        self.remove_proxy(selected_proxy, self.proxy_error_counts)
-                        self.update_error_text_signal.emit(
-                            f"Error for Proxy: {selected_proxy} : <b>Portal not found</b> couldnt find the portal."
-                            # Not removing this to prevent proxy removal in case of a connection error.
-                        )
                     elif "banned your IP" in res.text or "403: Forbidden" in res.text:
                         self.update_error_text_signal.emit(
                             f"Error for Portal: <b>Banned</b> {selected_proxy}"
@@ -4131,11 +4204,39 @@ class MacAttack(QMainWindow):
                             selected_proxy, self.proxy_error_counts
                         )  # remove the proxy if it exceeds the allowed error count
                     else:
-                        # self.update_error_text_signal.emit(f"Error for MAC {mac}: {str(e)}")
-                        # logging.debug(f"{str(e)}")
+                        # Remove errorcounts
+                        if selected_proxy in self.proxy_error_counts:
+                            del self.proxy_error_counts[selected_proxy]
+                        if selected_proxy in self.proxy_error_connect_counts:
+                            del self.proxy_error_connect_counts[selected_proxy]
                         logging.debug(f"Raw Response Content:\n{mac}\n{res.text}")
                     # self.error_count += 1
-                if "Unable to connect to proxy" in str(e):
+                #elif "Failed to parse" in str(e):
+                #    self.update_error_text_signal.emit("ERROR: error parsing the url")
+                elif "target machine actively refused it" in str(e):
+                    # Track connection error counts
+                    if selected_proxy not in self.proxy_error_connect_counts:
+                        self.proxy_error_connect_counts[selected_proxy] = 1
+                    else:
+                        self.proxy_error_connect_counts[selected_proxy] += 1
+                    if self.proxy_error_connect_counts[selected_proxy] > 2: # Track error count for the proxy every # consecutive connection errors.
+                        self.update_error_text_signal.emit(f"Error for portal: <b>No connection to portal</b> {selected_proxy} The target machine refused it. rate limited?")
+                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy                   
+               
+
+                elif "Read timed out" in str(e):
+                    logging.debug(f"{selected_proxy} did not respond")
+
+                    # Track connection error counts
+                    if selected_proxy not in self.proxy_error_connect_counts:
+                        self.proxy_error_connect_counts[selected_proxy] = 1
+                    else:
+                        self.proxy_error_connect_counts[selected_proxy] += 1
+                    if self.proxy_error_connect_counts[selected_proxy] > 2: # Track error count for the proxy every # consecutive connection errors.
+                        self.update_error_text_signal.emit(f"Error for Proxy: <b>Read timed out</b> {selected_proxy}")
+                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy   
+
+                elif "Unable to connect to proxy" in str(e):
                     logging.debug(f"Unable to connect to {selected_proxy}")
 
                     # Could be bad internet, the proxy ratelimiting, or the proxy not connecting
@@ -4144,26 +4245,15 @@ class MacAttack(QMainWindow):
                         self.proxy_error_connect_counts[selected_proxy] = 1
                     else:
                         self.proxy_error_connect_counts[selected_proxy] += 1
-                    if self.proxy_error_connect_counts[selected_proxy] > 20: # Track error count for the proxy every 20 consecutive connection errors.
-                        
-                        
-
-                        if selected_proxy not in self.proxy_error_counts:
-                            self.proxy_error_counts[selected_proxy] = 1
-                        else:
-                            self.proxy_error_counts[selected_proxy] += 1
-                        self.update_error_text_signal.emit(
-                            f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Unable to connect to proxy</b>"
-                        )
-                        #reset the connection error counts
-                        self.proxy_error_connect_counts[selected_proxy] = 0 if self.proxy_error_connect_counts[selected_proxy] != 1 else self.proxy_error_connect_counts[selected_proxy]
-                        
+                    if self.proxy_error_connect_counts[selected_proxy] > 2: # Track error count for the proxy every # consecutive connection errors.
+                        self.update_error_text_signal.emit(f"Error for Proxy: <b>Proxy Timing out</b> {selected_proxy} Proxy likely rate limiting connections")                        
+                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy                        
 
                     self.remove_proxy(
                         selected_proxy, self.proxy_error_counts
                     )  # remove the proxy if it exceeds the allowed error count
 
-                else:
+                else: # Remove errorcounts
                     if selected_proxy in self.proxy_error_counts:
                         del self.proxy_error_counts[selected_proxy]
                     if selected_proxy in self.proxy_error_connect_counts:
@@ -4296,7 +4386,7 @@ class MacAttack(QMainWindow):
                 "░╚═══██╗░░░██║░░░██║░░██║██╔═══╝░██╔═══╝░██║██║╚████║██║░░╚██╗╚═╝\n"
                 "██████╔╝░░░██║░░░╚█████╔╝██║░░░░░██║░░░░░██║██║░╚███║╚██████╔╝██╗\n"
                 "╚═════╝░░░░╚═╝░░░░╚════╝░╚═╝░░░░░╚═╝░░░░░╚═╝╚═╝░░╚══╝░╚═════╝░╚═╝\n"
-                    "Please wait for background tasks to complete.\n"
+                    "Please wait for background tasks to complete.\n Results may still appear in the next few minutes.\n"
             )
         #portaltype = None
         #        if self.restore_custom_macs_checkbox.isChecked():
@@ -4344,16 +4434,15 @@ class MacAttack(QMainWindow):
                     thread.join()  # Wait for the thread to complete
         # Once all threads are done, reset the GUI on the main thread
         QTimer.singleShot(0, self._reset_gui_after_cleanup)
-        if self.proxy_enabled_checkbox.isChecked():
-            self.update_error_text_signal.emit(
-                "███████╗██╗███╗░░██╗██╗░██████╗██╗░░██╗███████╗██████╗░██╗\n"
-                "██╔════╝██║████╗░██║██║██╔════╝██║░░██║██╔════╝██╔══██╗██║\n"
-                "█████╗░░██║██╔██╗██║██║╚█████╗░███████║█████╗░░██║░░██║██║\n"
-                "██╔══╝░░██║██║╚████║██║░╚═══██╗██╔══██║██╔══╝░░██║░░██║╚═╝\n"
-                "██║░░░░░██║██║░╚███║██║██████╔╝██║░░██║███████╗██████╔╝██╗\n"
-                "╚═╝░░░░░╚═╝╚═╝░░╚══╝╚═╝╚═════╝░╚═╝░░╚═╝╚══════╝╚═════╝░╚═╝\n"
-                "All Tasks have completed."
-            )
+        self.update_error_text_signal.emit(
+            "███████╗██╗███╗░░██╗██╗░██████╗██╗░░██╗███████╗██████╗░██╗\n"
+            "██╔════╝██║████╗░██║██║██╔════╝██║░░██║██╔════╝██╔══██╗██║\n"
+            "█████╗░░██║██╔██╗██║██║╚█████╗░███████║█████╗░░██║░░██║██║\n"
+            "██╔══╝░░██║██║╚████║██║░╚═══██╗██╔══██║██╔══╝░░██║░░██║╚═╝\n"
+            "██║░░░░░██║██║░╚███║██║██████╔╝██║░░██║███████╗██████╔╝██╗\n"
+            "╚═╝░░░░░╚═╝╚═╝░░╚══╝╚═╝╚═════╝░╚═╝░░╚═╝╚══════╝╚═════╝░╚═╝\n"
+            "All Tasks have completed."
+        )
 
     def _reset_gui_after_cleanup(self):
         # Safely reset GUI elements on the main thread
