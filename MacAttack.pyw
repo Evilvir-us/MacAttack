@@ -3057,24 +3057,25 @@ class MacAttack(QMainWindow):
         if not portal_type_detected:  # Check for type portal
             version_url = f"{self.base_url}/c/version.js"
             try:
-                response = requests.get(
-                    version_url, headers=headers
-                )  # Add headers here
-                response.raise_for_status()  # Raise an exception for HTTP errors
+                with no_proxy_environment():  # Bypass the enviroment proxy set in the video player tab
+                    response = requests.get(
+                        version_url, headers=headers
+                    )  # Add headers here
+                    response.raise_for_status()  # Raise an exception for HTTP errors
 
-                # Extract the version using a regex
-                match = re.search(r"var ver = ['\"](.*?)['\"];", response.text)
-                if match:
-                    self.portal_version = match.group(1)  # Extracted version string
-                    logging.debug(version_url)
-                    logging.info(
-                        f"\n\n\nPortal type: PORTAL version: {self.portal_version}\n\n\n"
-                    )
-                    portal_type_detected = "portal"
-                    self.update_error_text_signal.emit(
-                        f"Portal type detected: Portal Version: {self.portal_version}\n"
-                    )
-                    portaltype = "portal.php"
+                    # Extract the version using a regex
+                    match = re.search(r"var ver = ['\"](.*?)['\"];", response.text)
+                    if match:
+                        self.portal_version = match.group(1)  # Extracted version string
+                        logging.debug(version_url)
+                        logging.info(
+                            f"\n\n\nPortal type: PORTAL version: {self.portal_version}\n\n\n"
+                        )
+                        portal_type_detected = "portal"
+                        self.update_error_text_signal.emit(
+                            f"Portal type detected: Portal Version: {self.portal_version}\n"
+                        )
+                        portaltype = "portal.php"
                 else:
                     logging.debug("Version declaration not found in the file.")
             except requests.RequestException as e:
