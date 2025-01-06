@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.6.3"
+VERSION = "4.6.4"
 import semver
 import urllib.parse
 import webbrowser
@@ -3035,8 +3035,9 @@ class MacAttack(QMainWindow):
             self.parsed_path = self.parsed_path[:-2]
         logging.debug(self.parsed_path)
         self.host = self.parsed_url.hostname
+        self.protocol = self.parsed_url.scheme
         self.port = self.parsed_url.port or 80
-        self.base_url = f"http://{self.host}:{self.port}"
+        self.base_url = f"{self.protocol}://{self.host}:{self.port}"
         headers = {
             "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
             "Accept-Encoding": "identity",
@@ -3113,10 +3114,19 @@ class MacAttack(QMainWindow):
                 "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;If this is not a valid portal you will not get any results.<br>"
             )
 
-        if not self.parsed_path.startswith('/') and not self.port.endswith('/'):
+        # Make sure that there is exactly one slash between the port and the path
+        if self.parsed_path and not self.parsed_path.startswith('/'):
             self.parsed_path = '/' + self.parsed_path
+        elif not self.parsed_path:  # If there's no parsed path add a slash
+            self.parsed_path = '/'
 
-        self.base_url = f"http://{self.host}:{self.port}{self.parsed_path}"
+        self.base_url = f"{self.protocol}://{self.host}:{self.port}{self.parsed_path}"
+
+
+
+
+
+
 
         # if both url and method contain "stalker_portal/" then remove it from the url
         if "stalker_portal/" in self.base_url and "stalker_portal/" in portaltype:
@@ -3207,6 +3217,7 @@ class MacAttack(QMainWindow):
         backend_host = None
         backend_ip_address = None
         self.recentlyfound = []  # Erase recently found list
+        iptv_url = self.iptv_link
 
         while self.running:  # Loop will continue as long as self.running is True
 
@@ -3655,7 +3666,7 @@ class MacAttack(QMainWindow):
                                     logging.info("Mac found")
 
                                     if self.autoloadmac_checkbox.isChecked():
-                                        self.hostname_input.setText(self.iptv_link)
+                                        self.hostname_input.setText(iptv_url)
                                         self.mac_input.setText(mac)
                                     if self.output_file is None:
                                         output_filename = self.OutputMastermind()
@@ -3792,7 +3803,7 @@ class MacAttack(QMainWindow):
                                         )
 
                                     result_message = (
-                                        f"{'Portal  :':<10} {self.iptv_link}\n"
+                                        f"{'Portal  :':<10} {iptv_url}\n"
                                     )
                                     result_message += f"{'MAC Addr:':<10} {mac}\n"
 
