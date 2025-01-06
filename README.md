@@ -65,11 +65,17 @@ It's a bit outdated now, but still relevant.
 ---
 
 ## Screenshots
-![Screenshot 1](https://evilvir.us/application/files/9717/3615/4029/Screenshot_2025-01-06_005431.png)  
+The Main Tab
+![Screenshot 1](https://evilvir.us/application/files/9717/3615/4029/Screenshot_2025-01-06_005431.png)
+The Videoplayer Tab (Primal is an awesome show, I highly recommend it!)
 ![Screenshot 2](https://evilvir.us/application/files/7517/3615/4038/Screenshot_2025-01-06_005558.png)
+The Proxies Tab
 ![Screenshot 3](https://evilvir.us/application/files/3217/3615/4037/Screenshot_2025-01-06_005609.png)
+General Settings
 ![Screenshot 4](https://evilvir.us/application/files/7417/3615/4036/Screenshot_2025-01-06_005632.png)
+Output Settings
 ![Screenshot 5](https://evilvir.us/application/files/4817/3615/4035/Screenshot_2025-01-06_005650.png)
+Videoplayer Settings
 ![Screenshot 6](https://evilvir.us/application/files/3717/3615/4033/Screenshot_2025-01-06_005659.png)
 
 ---
