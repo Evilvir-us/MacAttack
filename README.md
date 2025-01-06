@@ -43,8 +43,6 @@ For testing portal security:
 
 3. Click **Start** to begin the test.
 
-> **Note:** It is not recommended to use a VPN and proxies simultaneously. The VPN may interfere with proxy sessions, preventing the expected results. Choose one or the other: either enable the VPN and disable proxies, or enable proxies and disable the VPN.
-
 ---
 
 ### **Mac VideoPlayer Tab**
@@ -60,14 +58,25 @@ For accessing and testing playlists:
 
 ## Tutorial Video
 
-For a detailed walkthrough, watch this [video tutorial](https://www.youtube.com/watch?v=90joS8qgbrQ).  
+For a detailed walkthrough, watch this [video tutorial](https://www.youtube.com/watch?v=90joS8qgbrQ).
+It's a bit outdated now, but still relevant.
 [![MacAttack Tutorial](https://img.youtube.com/vi/90joS8qgbrQ/0.jpg)](https://www.youtube.com/watch?v=90joS8qgbrQ)
 
 ---
 
 ## Screenshots
-![Screenshot 1](https://evilvir.us/application/files/5817/3190/3286/Macattack1.png)  
-![Screenshot 2](https://evilvir.us/application/files/6717/3190/3290/Macattack2.png)
+The Main Tab
+![Screenshot 1](https://evilvir.us/application/files/9717/3615/4029/Screenshot_2025-01-06_005431.png)
+The Videoplayer Tab (Primal is an awesome show, I highly recommend it!)
+![Screenshot 2](https://evilvir.us/application/files/7517/3615/4038/Screenshot_2025-01-06_005558.png)
+The Proxies Tab
+![Screenshot 3](https://evilvir.us/application/files/3217/3615/4037/Screenshot_2025-01-06_005609.png)
+General Settings
+![Screenshot 4](https://evilvir.us/application/files/7417/3615/4036/Screenshot_2025-01-06_005632.png)
+Output Settings
+![Screenshot 5](https://evilvir.us/application/files/4817/3615/4035/Screenshot_2025-01-06_005650.png)
+Videoplayer Settings
+![Screenshot 6](https://evilvir.us/application/files/3717/3615/4033/Screenshot_2025-01-06_005659.png)
 
 ---
 
