@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.5.5"
+VERSION = "4.6.1"
 import semver
 import urllib.parse
 import webbrowser
@@ -1006,6 +1006,7 @@ class MacAttack(QMainWindow):
         self.proxy_error_counts = {}
         self.proxy_error_connect_counts = {}
         self.threads = []  # To track background threads
+        self.cleaningup = 0
         # Initial VLC instance
         if getattr(sys, "frozen", False):
             base_path = sys._MEIPASS
@@ -1464,30 +1465,36 @@ class MacAttack(QMainWindow):
         proxy_layout = QVBoxLayout(parent)
         proxy_checkbox_layout = QHBoxLayout()
         proxy_checkbox_layout.addSpacing(15)
+
         # Checkbox for enabling proxies
         self.proxy_enabled_checkbox = QCheckBox("Enable Proxies")
         self.proxy_enabled_checkbox.setFixedWidth(120)
         proxy_checkbox_layout.addWidget(self.proxy_enabled_checkbox)
         proxy_checkbox_layout.addStretch(1)
+
         # Remove proxy after
         self.proxy_label = QLabel("Remove proxies after")
         self.proxy_label.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
         proxy_checkbox_layout.addWidget(self.proxy_label)
+
         # Error count spinbox
         self.proxy_remove_errorcount = QSpinBox()
-        self.proxy_remove_errorcount.setRange(0, 9)  # Restrict to 2-digit range
-        self.proxy_remove_errorcount.setFixedWidth(30)  # Set width for 2 digits
+        self.proxy_remove_errorcount.setRange(0, 9)  
+        self.proxy_remove_errorcount.setFixedWidth(30)
         self.proxy_remove_errorcount.setValue(5)  # Default value
         self.proxy_remove_errorcount.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
         proxy_checkbox_layout.addWidget(self.proxy_remove_errorcount)
+
         # Consecutive errors
         self.connection_errors_label = QLabel("consecutive errors. (0 to disable)")
         self.connection_errors_label.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
         proxy_checkbox_layout.addWidget(self.connection_errors_label)
-        # a 15px space after the "connection errors" label
+
+        # 15px spacer
         spacer_after_errors = QSpacerItem(15, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
         proxy_checkbox_layout.addItem(spacer_after_errors)
-        # Ensure all elements are aligned to the right
+
+        # Align to right
         proxy_checkbox_layout.setSpacing(0)  # Remove spacing between widgets
         proxy_checkbox_layout.setAlignment(Qt.AlignRight)
         # Align the checkbox layout components
@@ -1495,14 +1502,54 @@ class MacAttack(QMainWindow):
         proxy_checkbox_layout.setAlignment(self.proxy_label, Qt.AlignLeft)
         proxy_checkbox_layout.setAlignment(self.proxy_remove_errorcount, Qt.AlignLeft)
         proxy_checkbox_layout.setAlignment(self.connection_errors_label, Qt.AlignLeft)
-        # the checkbox layout to the main layout
+        # Add the checkbox layout
         proxy_layout.addLayout(proxy_checkbox_layout)
-        # Label above the text box with 15px left margin
+
+
+
+        # Horizontal layout for proxy ratelimit timeout
+        remove_rate_limit_layout = QHBoxLayout()
+
+        # Remove ratelimited proxies for Label
+        self.rate_limit_label = QLabel("Remove ratelimited proxies for")
+        self.rate_limit_label.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
+        remove_rate_limit_layout.addWidget(self.rate_limit_label)
+
+        # Spinbox for timeout
+        self.remove_for_seconds_spinbox = QSpinBox()
+        self.remove_for_seconds_spinbox.setRange(0, 99)  # Limit to range from 1 second to 1 hour
+        self.remove_for_seconds_spinbox.setValue(60)
+        self.remove_for_seconds_spinbox.setFixedWidth(40)
+        remove_rate_limit_layout.addWidget(self.remove_for_seconds_spinbox)
+
+        # Label for "seconds"
+        self.seconds_label = QLabel("seconds. (0 to disable)")
+        self.seconds_label.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
+        remove_rate_limit_layout.addWidget(self.seconds_label)
+
+
+        # 15px spacer
+        spacer_after_timeoutseconds = QSpacerItem(15, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
+        remove_rate_limit_layout.addItem(spacer_after_timeoutseconds)
+
+
+        # Add the layout for the timeout stuff
+        remove_rate_limit_layout.setAlignment(Qt.AlignRight)  # Align all elements to the right
+        remove_rate_limit_layout.setSpacing(0)  # Set spacing to 0 for elements to touch
+        proxy_layout.addLayout(remove_rate_limit_layout)  # Add below proxy_checkbox_layout
+
+
+
+
+        # Add your proxies label
         proxybox_label = QLabel(
             "Add your proxies in this box, or use the button below to retrieve a list of proxies."
         )
         proxybox_label.setContentsMargins(15, 0, 0, 0)  # 15px space on the left side
         proxy_layout.addWidget(proxybox_label)
+
+
+
         # Output Text Area
         self.proxy_textbox = QTextEdit()
         self.proxy_textbox.setStyleSheet(
@@ -1559,9 +1606,7 @@ class MacAttack(QMainWindow):
         generate_proxy_layout.addWidget(self.update_hourly_checkbox)
 
         # Spacer to push the proxy count label to the right
-        generate_proxy_layout.addStretch(
-            1
-        )  # This will push everything else to the left
+        generate_proxy_layout.addStretch(1)  # This will push everything else to the left
 
         # Proxy count label that will be updated
         self.proxy_count_label = QLabel("Proxies: 0")
@@ -1604,7 +1649,7 @@ class MacAttack(QMainWindow):
         self.proxy_textbox.textChanged.connect(self.update_proxy_count)
         # Set a buffer for the proxy testing console
         self.proxy_output.textChanged.connect(self.trim_proxy_output)
-
+    
     def proxy_auto_updater(self):
         if self.update_hourly_checkbox.isChecked():
             logging.info("Update Hourly is checked.")
@@ -1954,9 +1999,9 @@ class MacAttack(QMainWindow):
             QSpacerItem(0, 20, QSizePolicy.Minimum, QSizePolicy.Fixed)
         )  # 20px spacer
 
-        # label for "to output:"
+        # label for "Add to output:"
         output_checkbox_width = 250  # Set width of checkboxes
-        add_to_output_label = QLabel("to output:")
+        add_to_output_label = QLabel("Add to output:")
         output_layout.addWidget(add_to_output_label)
 
         # Create horizontal layout for side-by-side checkboxes
@@ -2179,7 +2224,6 @@ class MacAttack(QMainWindow):
             self.macs_in_mem_label.setVisible(False)
             self.custom_random_mac_checkbox.setVisible(False)
 
-    # File selection function
 
     def select_file(self):
         file_dialog = QFileDialog()
@@ -2192,7 +2236,7 @@ class MacAttack(QMainWindow):
             self.load_mac_file(file_path)
 
     def load_mac_file(self, file_path):
-        self.mac_dict.clear()  # Clears all the MAC addresses in the deque
+        self.mac_dict.clear()  # Empty the Pool
         unique_macs = set()  # A set to store unique MAC addresses
 
         try:
@@ -2587,6 +2631,7 @@ class MacAttack(QMainWindow):
             self.dont_update_checkbox.setChecked(False)
             self.use_custom_macs_checkbox.setChecked(False)
             self.update_hourly_checkbox.setChecked(False)
+            self.remove_for_seconds_spinbox.setValue(60)
 
             logging.debug("UI reset to default values.")
         except Exception as e:
@@ -2648,9 +2693,8 @@ class MacAttack(QMainWindow):
             ),
             "use_custom_macs": str(
                 self.use_custom_macs_checkbox.isChecked()
-            ),  # Save checkbox state
-            #            "custom_macs_text": self.custom_macs_textbox.toPlainText(),  # Save text box content
-            #            "restore_custom_macs": str(self.restore_custom_macs_checkbox.isChecked())  # Save restore checkbox state
+            ),
+            "ratelimit_timeout": str(self.remove_for_seconds_spinbox.value()),
         }
         config["Window"] = {
             "width": self.width(),
@@ -2774,6 +2818,8 @@ class MacAttack(QMainWindow):
             self.use_custom_macs_checkbox.setChecked(
                 config.get("Settings", "use_custom_macs", fallback="False") == "True"
             )
+            self.remove_for_seconds_spinbox.setValue(config.getint("Settings", "ratelimit_timeout", fallback=60))
+            
             #            self.custom_macs_textbox.setPlainText(
             #                config.get("Settings", "custom_macs_text", fallback="")
             #            )
@@ -2821,6 +2867,7 @@ class MacAttack(QMainWindow):
         self.setWindowIcon(QIcon(pixmap))
 
     def TestDrive(self):
+        self.cleaningup = 0
         self.nomacs = 1
         self.update_error_text_signal.emit("clearall")
         self.update_error_text_signal.emit(
@@ -2884,6 +2931,7 @@ class MacAttack(QMainWindow):
     def _create_threads(self):
         global portaltype
         portal_type_detected = True
+        
         
           
 
@@ -4233,7 +4281,7 @@ class MacAttack(QMainWindow):
                     else:
                         self.proxy_error_connect_counts[selected_proxy] += 1
                     if self.proxy_error_connect_counts[selected_proxy] > 5: # Track error count for the proxy every # consecutive connection errors.
-                        self.update_error_text_signal.emit(f"Error for Proxy: <b>Read timed out</b> {selected_proxy} Ratelimited?")
+                        self.update_error_text_signal.emit(f"Error for Proxy: <b>Read timed out</b> {selected_proxy} Overloaded proxy?")
                         self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy   
 
                 elif "Unable to connect to proxy" in str(e):
@@ -4281,38 +4329,39 @@ class MacAttack(QMainWindow):
 
     def temp_remove_proxy(self, proxy):
         """Temporarily remove a proxy for ratelimit_timeout seconds, then re-it."""
-        ratelimit_timeout = 60
-        # Get the current text in the proxy_textbox
-        current_text = self.proxy_textbox.toPlainText()
-        # Check if the proxy exists before attempting to remove it
-        if proxy in current_text.splitlines():
-            # Remove proxy from the list temporarily
-            new_text = "\n".join(
-                line for line in current_text.splitlines() if line.strip() != proxy
-            )
-            self.macattack_update_proxy_textbox_signal.emit(new_text)
-            # Notify user of temporary removal
-            self.update_error_text_signal.emit(f"Proxy {proxy} temporarily removed.")
+        ratelimit_timeout = self.remove_for_seconds_spinbox.value()
+        if ratelimit_timeout > 0:
+            # Get the current text in the proxy_textbox
+            current_text = self.proxy_textbox.toPlainText()
+            # Check if the proxy exists before attempting to remove it
+            if proxy in current_text.splitlines():
+                # Remove proxy from the list temporarily
+                new_text = "\n".join(
+                    line for line in current_text.splitlines() if line.strip() != proxy
+                )
+                self.macattack_update_proxy_textbox_signal.emit(new_text)
+                # Notify user of temporary removal
+                self.update_error_text_signal.emit(f"Proxy {proxy} temporarily removed.")
 
-            # Define a function to re-the proxy after 10 seconds
-            def re_add_proxy():
-                # Get the updated state of proxy_textbox
-                updated_text = self.proxy_textbox.toPlainText()
-                # Check if the proxy already exists in the updated text
-                if proxy not in updated_text.splitlines():
-                    # Append the proxy to the end
-                    new_text = f"{updated_text}\n{proxy}".strip()
-                    self.macattack_update_proxy_textbox_signal.emit(new_text)
-                    # Notify user of re-addition
-                    self.update_error_text_signal.emit(
-                        f"Proxy {proxy} re-added after {ratelimit_timeout} seconds."
-                    )
-                # else:
-                # Notify user that the proxy already exists
-                # self.update_error_text_signal.emit(f"Proxy {proxy} already exists, not re-added.")
+                # Define a function to re-the proxy after 10 seconds
+                def re_add_proxy():
+                    # Get the updated state of proxy_textbox
+                    updated_text = self.proxy_textbox.toPlainText()
+                    # Check if the proxy already exists in the updated text
+                    if proxy not in updated_text.splitlines():
+                        # Append the proxy to the end
+                        new_text = f"{updated_text}\n{proxy}".strip()
+                        self.macattack_update_proxy_textbox_signal.emit(new_text)
+                        # Notify user of re-addition
+                        self.update_error_text_signal.emit(
+                            f"Proxy {proxy} re-added after {ratelimit_timeout} seconds."
+                        )
+                    # else:
+                    # Notify user that the proxy already exists
+                    # self.update_error_text_signal.emit(f"Proxy {proxy} already exists, not re-added.")
 
-            # Start a thread to handle the delayed re-addition
-            threading.Timer(ratelimit_timeout, re_add_proxy).start()
+                # Start a thread to handle the delayed re-addition
+                threading.Timer(ratelimit_timeout, re_add_proxy).start()
 
     def play_success_sound(self):
         # Determine the base path for the sound file
@@ -4426,23 +4475,26 @@ class MacAttack(QMainWindow):
         cleanup_thread.start()
 
     def _wait_for_threads(self):
-        logging.debug("Waiting for threads to finish...")
-        # Wait for all threads to complete
-        if hasattr(self, "threads"):
-            for thread in self.threads:
-                if thread.is_alive():
-                    thread.join()  # Wait for the thread to complete
-        # Once all threads are done, reset the GUI on the main thread
-        QTimer.singleShot(0, self._reset_gui_after_cleanup)
-        self.update_error_text_signal.emit(
-            "███████╗██╗███╗░░██╗██╗░██████╗██╗░░██╗███████╗██████╗░██╗\n"
-            "██╔════╝██║████╗░██║██║██╔════╝██║░░██║██╔════╝██╔══██╗██║\n"
-            "█████╗░░██║██╔██╗██║██║╚█████╗░███████║█████╗░░██║░░██║██║\n"
-            "██╔══╝░░██║██║╚████║██║░╚═══██╗██╔══██║██╔══╝░░██║░░██║╚═╝\n"
-            "██║░░░░░██║██║░╚███║██║██████╔╝██║░░██║███████╗██████╔╝██╗\n"
-            "╚═╝░░░░░╚═╝╚═╝░░╚══╝╚═╝╚═════╝░╚═╝░░╚═╝╚══════╝╚═════╝░╚═╝\n"
-            "All Tasks have completed."
-        )
+        if self.cleaningup == 0: # One cleanup at a time
+            self.cleaningup = 1
+            logging.debug("Waiting for threads to finish...")
+            # Wait for all threads to complete
+            if hasattr(self, "threads"):
+                for thread in self.threads:
+                    if thread.is_alive():
+                        thread.join()  # Wait for the thread to complete
+            # Once all threads are done, reset the GUI on the main thread
+            QTimer.singleShot(0, self._reset_gui_after_cleanup)
+            self.update_error_text_signal.emit(
+                "███████╗██╗███╗░░██╗██╗░██████╗██╗░░██╗███████╗██████╗░██╗\n"
+                "██╔════╝██║████╗░██║██║██╔════╝██║░░██║██╔════╝██╔══██╗██║\n"
+                "█████╗░░██║██╔██╗██║██║╚█████╗░███████║█████╗░░██║░░██║██║\n"
+                "██╔══╝░░██║██║╚████║██║░╚═══██╗██╔══██║██╔══╝░░██║░░██║╚═╝\n"
+                "██║░░░░░██║██║░╚███║██║██████╔╝██║░░██║███████╗██████╔╝██╗\n"
+                "╚═╝░░░░░╚═╝╚═╝░░╚══╝╚═╝╚═════╝░╚═╝░░╚═╝╚══════╝╚═════╝░╚═╝\n"
+                "All Tasks have completed."
+            )
+            self.cleaningup = 0
 
     def _reset_gui_after_cleanup(self):
         # Safely reset GUI elements on the main thread
