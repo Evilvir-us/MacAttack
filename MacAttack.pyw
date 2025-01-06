@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.6.2"
+VERSION = "4.6.3"
 import semver
 import urllib.parse
 import webbrowser
@@ -283,6 +283,24 @@ def get_token(session, url, mac, timeout=30):
         logging.error(f"Error getting token: {e}")
         logging.error(f"Error getting token: {e}")
         return None, None
+
+
+class SavePoolWorker(QThread):
+    save_complete = pyqtSignal()
+
+    def __init__(self, mac_dict, file_name):
+        super().__init__()
+        self.mac_dict = mac_dict
+        self.file_name = file_name
+
+    def run(self):
+        mac_list = list(self.mac_dict)
+
+        with open(self.file_name, "w") as file:
+            for mac in mac_list:
+                file.write(mac + "\n")  # Write each MAC address followed by a newline
+
+        self.save_complete.emit()
 
 
 class UpdateWorker(QThread):
@@ -1542,8 +1560,8 @@ class MacAttack(QMainWindow):
         self.remove_for_seconds_spinbox = QSpinBox()
         self.remove_for_seconds_spinbox.setRange(
             0, 99
-        )  # Limit to range from 1 second to 1 hour
-        self.remove_for_seconds_spinbox.setValue(60)
+        )  # Limit to range from 0 second to 1 hour
+        self.remove_for_seconds_spinbox.setValue(30)
         self.remove_for_seconds_spinbox.setFixedWidth(40)
         remove_rate_limit_layout.addWidget(self.remove_for_seconds_spinbox)
 
@@ -1888,7 +1906,6 @@ class MacAttack(QMainWindow):
         self.custom_random_mac_checkbox = QCheckBox("Randomize Mac addresses")
         self.custom_random_mac_checkbox.setVisible(False)  # Initially hidden
         self.custom_random_mac_checkbox.setFixedWidth(200)  # Set width to 200
-        # self.custom_random_mac_checkbox.setAlignment(Qt.AlignLeft)  # Align left
 
         # Create radio buttons for "Prefer Speed" and "Prefer Accuracy"
         self.prefer_speed_radio = QRadioButton("Prefer Speed")
@@ -1908,20 +1925,39 @@ class MacAttack(QMainWindow):
         self.radio_group.addButton(self.prefer_accuracy_radio)
 
         # Set the initial state for the radio buttons (optional)
-        self.prefer_speed_radio.setChecked(True)
-        self.prefer_accuracy_radio.setChecked(False)
+        self.prefer_speed_radio.setChecked(False)
+        self.prefer_accuracy_radio.setChecked(True)
         self.prefer_speed_radio.setVisible(False)
         self.prefer_accuracy_radio.setVisible(False)
 
-        # Create a layout for these three items inline
+        # Save Pool to a file button
+        self.save_pool_button = QPushButton("Save Pool to a file")
+
+        self.save_pool_button.setFixedWidth(120)
+        self.save_pool_button.setVisible(False)
+
+        # Connect the button to a function to handle saving
+        self.save_pool_button.clicked.connect(self.on_save_pool_clicked)
+
+        # Create a layout for the checkbox and radio buttons (left-aligned)
+        left_layout = QHBoxLayout()
+        left_layout.addWidget(self.custom_random_mac_checkbox)
+        left_layout.addWidget(self.prefer_speed_radio)
+        left_layout.addWidget(self.prefer_accuracy_radio)
+
+        left_layout.setAlignment(Qt.AlignLeft)
+
+        # Create a layout for the save button (right-aligned)
+        right_layout = QHBoxLayout()
+        right_layout.addWidget(self.save_pool_button)
+        right_layout.setAlignment(Qt.AlignRight)
+
+        # Combine the left and right layouts into a single layout
         inline_layout = QHBoxLayout()
-        inline_layout.addWidget(self.custom_random_mac_checkbox)
-        inline_layout.addWidget(self.prefer_speed_radio)
-        inline_layout.addWidget(self.prefer_accuracy_radio)
+        inline_layout.addLayout(left_layout)
+        inline_layout.addLayout(right_layout)
 
-        inline_layout.setAlignment(Qt.AlignLeft)
-
-        # Add the inline layout to the general layout
+        # Add the combined layout to the general layout
         general_layout.addLayout(inline_layout)
 
         # Connect the checkbox state change to the function
@@ -2168,6 +2204,20 @@ class MacAttack(QMainWindow):
         # the horizontal layout to the Settings_frame layout
         layout.addLayout(bottom_layout)
 
+    def on_save_pool_clicked(self):
+        file_name, _ = QFileDialog.getSaveFileName(
+            self, "Save Pool", "MacAddresses.txt", "Text Files (*.txt);;All Files (*)"
+        )
+
+        if file_name:
+            self.worker = SavePoolWorker(self.mac_dict, file_name)
+            self.worker.save_complete.connect(self.on_save_complete)
+            self.save_pool_button.setText("Saving File...")
+            self.worker.start()
+
+    def on_save_complete(self):
+        self.save_pool_button.setText("Save Pool to a file")
+
     def custommac_random_checkbox_func(self, state):
         # When the checkbox is checked
         if state == Qt.Checked:
@@ -2216,6 +2266,7 @@ class MacAttack(QMainWindow):
             self.pool_label.setVisible(True)
             self.macs_in_mem_label.setVisible(True)
             self.custom_random_mac_checkbox.setVisible(True)
+            self.save_pool_button.setVisible(True)
 
         else:
             self.mac_file_label.setText("No file selected")
@@ -2229,6 +2280,7 @@ class MacAttack(QMainWindow):
             self.pool_label.setVisible(False)
             self.macs_in_mem_label.setVisible(False)
             self.custom_random_mac_checkbox.setVisible(False)
+            self.save_pool_button.setVisible(False)
 
     def select_file(self):
         file_dialog = QFileDialog()
@@ -2242,57 +2294,84 @@ class MacAttack(QMainWindow):
 
     def load_mac_file(self, file_path):
         self.mac_dict.clear()  # Empty the Pool
-        unique_macs = set()  # A set to store unique MAC addresses
+        unique_macs = set()
 
         try:
-            with open(file_path, "r") as file:
+            with open(file_path, "r", encoding="utf-8") as file:
                 lines = file.readlines()
-                contains_mac_addr_phrase = any("MAC Addr: " in line for line in lines)
+
+                # Check for "MAC Addr:" lines
+                contains_mac_addr_phrase = any("MAC Addr:" in line for line in lines)
 
                 for line in lines:
-                    mac = line.strip()
+                    line = line.strip()
+                    if contains_mac_addr_phrase:
+                        if line.startswith("MAC Addr:"):
+                            mac = line.replace("MAC Addr:", "").strip()
+                            if mac:  # Ensure the MAC address isn't empty
+                                unique_macs.add(mac)
+                    else:  # Each line is assumed a mac address
+                        if line:  # Ignore empty lines
+                            unique_macs.add(line)
 
-                    if mac:  # Ignore empty lines
-                        if contains_mac_addr_phrase:
-                            # Only consider lines containing "MAC Addr: "
-                            if "MAC Addr: " in mac:
-                                mac = mac.replace(
-                                    "MAC Addr: ", ""
-                                ).strip()  # Remove the prefix
-                                if mac:  # Ensure it's not empty after stripping
-                                    unique_macs.add(
-                                        mac
-                                    )  # Add to set (automatically handles duplicates)
-                        else:
-                            # If the phrase "MAC Addr: " is not present in any line, consider the line as a MAC address
-                            unique_macs.add(
-                                mac
-                            )  # Add to set (automatically handles duplicates)
+                # Update mac_dict with the MAC addresses
+                self.mac_dict = deque(unique_macs)
 
-            # Now update mac_dict with unique MAC addresses
-            self.mac_dict = deque(unique_macs)
+                logging.info("MAC addresses loaded successfully.")
 
-            logging.info("MAC addresses loaded successfully.")
+                # Update the macs_in_mem label
+                self.macattack_update_mac_count()
 
-            # Update the "macs_in_mem" label with the number of MAC addresses in memory
-            self.macattack_update_mac_count()
+                if self.custom_random_mac_checkbox.checkState() == Qt.Checked:
+                    if self.mac_dict:  # If mac_dict isn't empty
+                        self.custom_random_mac_checkbox.setText(
+                            "Please wait... Shuffling list."
+                        )
+                        QApplication.processEvents()
+                        # Shuffle the mac_dict
+                        mac_list = list(self.mac_dict)
+                        random.shuffle(mac_list)  # Shuffle the MAC list
+                        self.mac_dict = deque(
+                            mac_list
+                        )  # Update mac_dict with the shuffled list
+                        self.custom_random_mac_checkbox.setText(
+                            "Randomize Mac addresses"
+                        )
 
-            if self.custom_random_mac_checkbox.checkState() == Qt.Checked:
-                if self.mac_dict:  # If mac_dict isn't empty
-                    self.custom_random_mac_checkbox.setText(
-                        "Please wait... Shuffling list."
+        except UnicodeDecodeError as e:
+            logging.error(f"Encoding error occurred: {e}. Trying with 'latin-1'.")
+            try:
+                with open(file_path, "r", encoding="latin-1") as file:
+                    lines = file.readlines()
+                    # Same processing logic here as above
+                    contains_mac_addr_phrase = any(
+                        "MAC Addr:" in line for line in lines
                     )
-                    QApplication.processEvents()
-                    # Shuffle the mac_dict
-                    mac_list = list(self.mac_dict)
-                    random.shuffle(mac_list)  # Shuffle the MAC list
-                    self.mac_dict = deque(
-                        mac_list
-                    )  # Update mac_dict with the shuffled list
-                    self.custom_random_mac_checkbox.setText("Randomize Mac addresses")
-
+                    for line in lines:
+                        line = line.strip()
+                        if contains_mac_addr_phrase:
+                            if line.startswith("MAC Addr:"):
+                                mac = line.replace("MAC Addr:", "").strip()
+                                if mac:
+                                    unique_macs.add(mac)
+                        else:
+                            if line:
+                                unique_macs.add(line)
+                    self.mac_dict = deque(unique_macs)
+                    logging.info(
+                        "MAC addresses loaded successfully with 'latin-1' encoding."
+                    )
+                    self.macattack_update_mac_count()
+            except Exception as e:
+                logging.error(
+                    f"An error occurred while loading MAC addresses with fallback encoding: {e}"
+                )
+        except FileNotFoundError:
+            logging.error(f"File not found: {file_path}")
         except Exception as e:
-            logging.error(f"Error loading MAC file: {e}")
+            logging.error(
+                f"An unexpected error occurred while loading MAC addresses: {e}"
+            )
 
     def enable_ludicrous_speed(self):
         if self.ludicrous_speed_checkbox.isChecked():
@@ -2632,7 +2711,7 @@ class MacAttack(QMainWindow):
             self.dont_update_checkbox.setChecked(False)
             self.use_custom_macs_checkbox.setChecked(False)
             self.update_hourly_checkbox.setChecked(False)
-            self.remove_for_seconds_spinbox.setValue(60)
+            self.remove_for_seconds_spinbox.setValue(30)
 
             logging.debug("UI reset to default values.")
         except Exception as e:
@@ -2818,7 +2897,7 @@ class MacAttack(QMainWindow):
                 config.get("Settings", "use_custom_macs", fallback="False") == "True"
             )
             self.remove_for_seconds_spinbox.setValue(
-                config.getint("Settings", "ratelimit_timeout", fallback=60)
+                config.getint("Settings", "ratelimit_timeout", fallback=30)
             )
 
             #            self.custom_macs_textbox.setPlainText(
@@ -4416,10 +4495,6 @@ class MacAttack(QMainWindow):
                 "╚═════╝░░░░╚═╝░░░░╚════╝░╚═╝░░░░░╚═╝░░░░░╚═╝╚═╝░░╚══╝░╚═════╝░╚═╝\n"
                 "Please wait for background tasks to complete.\n Results may still appear in the next few minutes.\n"
             )
-        # portaltype = None
-        #        if self.restore_custom_macs_checkbox.isChecked():
-        # Reload the custom macs, after a delay
-        #            QTimer.singleShot(1000, self.restore_custom_macs)
 
         self.killthreads()
         QTimer.singleShot(
