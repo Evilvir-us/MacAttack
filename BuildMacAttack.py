@@ -68,7 +68,7 @@ def run_pyinstaller():
                 "--add-data=include;include",  # Add include directory to the build
                 "--add-binary=libvlc.dll;.",  # Add libvlc.dll to the build
                 "--add-binary=libvlccore.dll;.",  # Add libvlccore.dll to the build
-                "--add-data=vlc-plugins;plugins",  # Add VLC plugins directory
+                "--add-data=plugins;plugins",  # Add VLC plugins directory
                 "--hidden-import=charset_normalizer.md__mypyc",
                 "--icon=icon.ico",
                 "MacAttack.pyw",
