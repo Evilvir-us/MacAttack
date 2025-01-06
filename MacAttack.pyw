@@ -3967,10 +3967,11 @@ class MacAttack(QMainWindow):
                         or "521: Web server is down" in res.text
                         or "temporarily unavailable" in res.text
                     ):
-                        self.update_error_text_signal.emit(
-                            f"Error for Portal: <b>503 Rate Limited</b> {selected_proxy}"
-                        )
-                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                        if ratelimit_timeout > 0:                        
+                            self.update_error_text_signal.emit(
+                                f"Error for Portal: <b>503 Rate Limited</b> {selected_proxy}"
+                            )
+                            self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
 
                     elif "ERR_ACCESS_DENIED" in res.text:
                         # Track error count for the proxy
@@ -4292,15 +4293,17 @@ class MacAttack(QMainWindow):
                         # Attempt to remove the proxy if it exceeds the allowed error count
                         self.remove_proxy(selected_proxy, self.proxy_error_counts)
                     elif "banned your IP" in res.text or "403: Forbidden" in res.text:
-                        self.update_error_text_signal.emit(
-                            f"Error for Portal: <b>Banned</b> {selected_proxy}"
-                        )
-                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                        if ratelimit_timeout > 0: 
+                            self.update_error_text_signal.emit(
+                                f"Error for Portal: <b>Banned</b> {selected_proxy}"
+                            )
+                            self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
                     elif "403 Forbidden" in res.text or "403: Forbidden" in res.text:
-                        self.update_error_text_signal.emit(
-                            f"Error for Portal: <b>403 Forbidden</b> {selected_proxy} <b>Blacklisted</b> or <b>ratelimited</b>"
-                        )
-                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                        if ratelimit_timeout > 0: 
+                            self.update_error_text_signal.emit(
+                                f"Error for Portal: <b>403 Forbidden</b> {selected_proxy} <b>Blacklisted</b> or <b>ratelimited</b>"
+                            )
+                            self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
                     elif "Connection to server failed" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4355,54 +4358,55 @@ class MacAttack(QMainWindow):
                 # elif "Failed to parse" in str(e):
                 #    self.update_error_text_signal.emit("ERROR: error parsing the url")
                 elif "target machine actively refused it" in str(e):
-                    # Track connection error counts
-                    if selected_proxy not in self.proxy_error_connect_counts:
-                        self.proxy_error_connect_counts[selected_proxy] = 1
-                    else:
-                        self.proxy_error_connect_counts[selected_proxy] += 1
-                    if (
-                        self.proxy_error_connect_counts[selected_proxy] > 20
-                    ):  # Track error count for the proxy every # consecutive connection errors.
-                        self.update_error_text_signal.emit(
-                            f"Error for portal: <b>The target machine refused connection</b> {selected_proxy} Ratelimited?"
-                        )
-                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
-                        del self.proxy_error_connect_counts[selected_proxy]
+                    if ratelimit_timeout > 0:                     
+                        # Track connection error counts
+                        if selected_proxy not in self.proxy_error_connect_counts:
+                            self.proxy_error_connect_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_connect_counts[selected_proxy] += 1
+                        if (
+                            self.proxy_error_connect_counts[selected_proxy] > 20
+                        ):  # Track error count for the proxy every # consecutive connection errors.
+                            self.update_error_text_signal.emit(
+                                f"Error for portal: <b>The target machine refused connection</b> {selected_proxy} Ratelimited?"
+                            )
+                            self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                            del self.proxy_error_connect_counts[selected_proxy]
 
                 elif "Read timed out" in str(e):
                     logging.debug(f"{selected_proxy} did not respond")
-
-                    # Track connection error counts
-                    if selected_proxy not in self.proxy_error_connect_counts:
-                        self.proxy_error_connect_counts[selected_proxy] = 1
-                    else:
-                        self.proxy_error_connect_counts[selected_proxy] += 1
-                    if (
-                        self.proxy_error_connect_counts[selected_proxy] > 20
-                    ):  # Track error count for the proxy every # consecutive connection errors.
-                        self.update_error_text_signal.emit(
-                            f"Error for Proxy: <b>Read timed out</b> {selected_proxy} Overloaded proxy?"
-                        )
-                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
-                        del self.proxy_error_connect_counts[selected_proxy]
+                    if ratelimit_timeout > 0:       
+                        # Track connection error counts
+                        if selected_proxy not in self.proxy_error_connect_counts:
+                            self.proxy_error_connect_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_connect_counts[selected_proxy] += 1
+                        if (
+                            self.proxy_error_connect_counts[selected_proxy] > 20
+                        ):  # Track error count for the proxy every # consecutive connection errors.
+                            self.update_error_text_signal.emit(
+                                f"Error for Proxy: <b>Read timed out</b> {selected_proxy} Overloaded proxy?"
+                            )
+                            self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                            del self.proxy_error_connect_counts[selected_proxy]
 
                 elif "Unable to connect to proxy" in str(e):
                     logging.debug(f"Unable to connect to {selected_proxy}")
-
-                    # Could be bad internet, the proxy ratelimiting, or the proxy not connecting
-                    # Track connection error counts
-                    if selected_proxy not in self.proxy_error_connect_counts:
-                        self.proxy_error_connect_counts[selected_proxy] = 1
-                    else:
-                        self.proxy_error_connect_counts[selected_proxy] += 1
-                    if (
-                        self.proxy_error_connect_counts[selected_proxy] > 20
-                    ):  # Track error count for the proxy every # consecutive connection errors.
-                        self.update_error_text_signal.emit(
-                            f"Error for Proxy: <b>Proxy Timing out</b> {selected_proxy} Ratelimited?"
-                        )
-                        self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
-                        del self.proxy_error_connect_counts[selected_proxy]
+                    if ratelimit_timeout > 0:       
+                        # Could be bad internet, the proxy ratelimiting, or the proxy not connecting
+                        # Track connection error counts
+                        if selected_proxy not in self.proxy_error_connect_counts:
+                            self.proxy_error_connect_counts[selected_proxy] = 1
+                        else:
+                            self.proxy_error_connect_counts[selected_proxy] += 1
+                        if (
+                            self.proxy_error_connect_counts[selected_proxy] > 20
+                        ):  # Track error count for the proxy every # consecutive connection errors.
+                            self.update_error_text_signal.emit(
+                                f"Error for Proxy: <b>Proxy Timing out</b> {selected_proxy} Ratelimited?"
+                            )
+                            self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                            del self.proxy_error_connect_counts[selected_proxy]
 
                 else:  # Remove errorcounts
                     if selected_proxy in self.proxy_error_counts:
