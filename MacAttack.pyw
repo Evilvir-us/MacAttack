@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.6.4"
+VERSION = "4.6.6"
 import semver
 import urllib.parse
 import webbrowser
@@ -2981,33 +2981,36 @@ class MacAttack(QMainWindow):
 
     def is_valid_url(self, url):
         logging.info("checking iptv_link")
-        self.update_error_text_signal.emit("Checking if url is valid")
-        try:
-            # Parse the URL
-            parsed_url = urlparse(url)
-            # Check scheme and hostname
-            if parsed_url.scheme not in ("http", "https"):
-                self.update_error_text_signal.emit("Error: Not HTTP or HTTPS.")
-                return False
-            if not parsed_url.hostname:
-                self.update_error_text_signal.emit("Error: No Hostname")
-                return False
+        self.update_error_text_signal.emit("Checking if URL is valid")
 
-            # Make a HEAD request to check if the URL is reachable
-            response = requests.get(url, timeout=15)
-            logging.debug(response.text)
-            if response.status_code in (200, 404):
+
+        parsed_url = urlparse(url)
+        if parsed_url.scheme not in ("http", "https"):
+            self.update_error_text_signal.emit("Error: Not HTTP or HTTPS.")
+            return False
+        if not parsed_url.hostname:
+            self.update_error_text_signal.emit("Error: No Hostname")
+            return False
+
+        # Check if its reachable
+        try:
+            with no_proxy_environment():  # Bypass the environment proxy set in the video player tab
+                response = requests.head(url, timeout=15)
+            if response.ok:  # Check if we get any response
                 self.update_error_text_signal.emit(
-                    "Recieved valid response from the link, proceeding..."
+                    "Received valid response from the link, proceeding..."
                 )
                 return True
             else:
                 logging.debug(f"Status Code: {response.status_code}")
+                self.update_error_text_signal.emit("Error: Invalid response from server.")
                 return False
 
-        except Exception as e:
-            logging.debug(str(e))
+        except requests.RequestException as e:
+            logging.debug(f"Request failed: {str(e)}")
+            self.update_error_text_signal.emit(f"Error: {str(e)}")
             return False
+
 
     def _create_threads(self):
         global portaltype
@@ -3015,16 +3018,7 @@ class MacAttack(QMainWindow):
 
         # Get and parse the IPTV link
         self.iptv_link = self.iptv_link_entry.text()
-        # Check if the url is valid
-        if not self.is_valid_url(self.iptv_link):
-            logging.debug(f"Invalid URL {self.iptv_link}")
-            self.update_error_text_signal.emit(
-                "ERROR: The URL IS NOT VALID. CANNOT PROCEED"
-            )
-            self.brute_mac_label.setText("ERROR: INVALID URL")
-            self.start_button.setDisabled(False)
-            self.stop_button.setDisabled(True)
-            return
+
         self.parsed_url = urlparse(self.iptv_link)
         self.parsed_path = self.parsed_url.path
         logging.debug(self.parsed_path)
@@ -3038,6 +3032,16 @@ class MacAttack(QMainWindow):
         self.protocol = self.parsed_url.scheme
         self.port = self.parsed_url.port or 80
         self.base_url = f"{self.protocol}://{self.host}:{self.port}"
+        # Check if the url is valid
+        if not self.is_valid_url(self.base_url):
+            logging.debug(f"Invalid URL {self.iptv_link}")
+            self.update_error_text_signal.emit(
+                "ERROR: The URL IS NOT VALID. CANNOT PROCEED"
+            )
+            self.brute_mac_label.setText("ERROR: INVALID URL")
+            self.start_button.setDisabled(False)
+            self.stop_button.setDisabled(True)
+            return
         headers = {
             "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
             "Accept-Encoding": "identity",
@@ -4357,12 +4361,13 @@ class MacAttack(QMainWindow):
                     else:
                         self.proxy_error_connect_counts[selected_proxy] += 1
                     if (
-                        self.proxy_error_connect_counts[selected_proxy] > 5
+                        self.proxy_error_connect_counts[selected_proxy] > 20
                     ):  # Track error count for the proxy every # consecutive connection errors.
                         self.update_error_text_signal.emit(
                             f"Error for portal: <b>The target machine refused connection</b> {selected_proxy} Ratelimited?"
                         )
                         self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                        del self.proxy_error_connect_counts[selected_proxy]
 
                 elif "Read timed out" in str(e):
                     logging.debug(f"{selected_proxy} did not respond")
@@ -4373,12 +4378,13 @@ class MacAttack(QMainWindow):
                     else:
                         self.proxy_error_connect_counts[selected_proxy] += 1
                     if (
-                        self.proxy_error_connect_counts[selected_proxy] > 5
+                        self.proxy_error_connect_counts[selected_proxy] > 20
                     ):  # Track error count for the proxy every # consecutive connection errors.
                         self.update_error_text_signal.emit(
                             f"Error for Proxy: <b>Read timed out</b> {selected_proxy} Overloaded proxy?"
                         )
                         self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                        del self.proxy_error_connect_counts[selected_proxy]
 
                 elif "Unable to connect to proxy" in str(e):
                     logging.debug(f"Unable to connect to {selected_proxy}")
@@ -4390,16 +4396,13 @@ class MacAttack(QMainWindow):
                     else:
                         self.proxy_error_connect_counts[selected_proxy] += 1
                     if (
-                        self.proxy_error_connect_counts[selected_proxy] > 5
+                        self.proxy_error_connect_counts[selected_proxy] > 20
                     ):  # Track error count for the proxy every # consecutive connection errors.
                         self.update_error_text_signal.emit(
                             f"Error for Proxy: <b>Proxy Timing out</b> {selected_proxy} Ratelimited?"
                         )
                         self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
-
-                    self.remove_proxy(
-                        selected_proxy, self.proxy_error_counts
-                    )  # remove the proxy if it exceeds the allowed error count
+                        del self.proxy_error_connect_counts[selected_proxy]
 
                 else:  # Remove errorcounts
                     if selected_proxy in self.proxy_error_counts:
