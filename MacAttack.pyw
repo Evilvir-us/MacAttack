@@ -2681,11 +2681,11 @@ class MacAttack(QMainWindow):
             self.custom_random_mac_checkbox.setChecked(
                 config.get("Settings", "custom_random_mac", fallback="False") == "True"
             )
-            self.prefer_speed_radio.setChecked(
-                config.get("Settings", "prefer_speed", fallback="True") == "True"
-            )
             self.prefer_accuracy_radio.setChecked(
-                config.get("Settings", "prefer_accuracy", fallback="False") == "True"
+                config.get("Settings", "prefer_accuracy", fallback="True") == "True"
+            )
+            self.prefer_speed_radio.setChecked(
+                config.get("Settings", "prefer_speed", fallback="False") == "True"
             )
             self.iptv_link_entry.setText(
                 config.get("Settings", "iptv_link", fallback="")
@@ -4219,8 +4219,8 @@ class MacAttack(QMainWindow):
                         self.proxy_error_connect_counts[selected_proxy] = 1
                     else:
                         self.proxy_error_connect_counts[selected_proxy] += 1
-                    if self.proxy_error_connect_counts[selected_proxy] > 2: # Track error count for the proxy every # consecutive connection errors.
-                        self.update_error_text_signal.emit(f"Error for portal: <b>No connection to portal</b> {selected_proxy} The target machine refused it. rate limited?")
+                    if self.proxy_error_connect_counts[selected_proxy] > 5: # Track error count for the proxy every # consecutive connection errors.
+                        self.update_error_text_signal.emit(f"Error for portal: <b>The target machine refused connection</b> {selected_proxy} Ratelimited?")
                         self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy                   
                
 
@@ -4232,8 +4232,8 @@ class MacAttack(QMainWindow):
                         self.proxy_error_connect_counts[selected_proxy] = 1
                     else:
                         self.proxy_error_connect_counts[selected_proxy] += 1
-                    if self.proxy_error_connect_counts[selected_proxy] > 2: # Track error count for the proxy every # consecutive connection errors.
-                        self.update_error_text_signal.emit(f"Error for Proxy: <b>Read timed out</b> {selected_proxy}")
+                    if self.proxy_error_connect_counts[selected_proxy] > 5: # Track error count for the proxy every # consecutive connection errors.
+                        self.update_error_text_signal.emit(f"Error for Proxy: <b>Read timed out</b> {selected_proxy} Ratelimited?")
                         self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy   
 
                 elif "Unable to connect to proxy" in str(e):
@@ -4245,8 +4245,8 @@ class MacAttack(QMainWindow):
                         self.proxy_error_connect_counts[selected_proxy] = 1
                     else:
                         self.proxy_error_connect_counts[selected_proxy] += 1
-                    if self.proxy_error_connect_counts[selected_proxy] > 2: # Track error count for the proxy every # consecutive connection errors.
-                        self.update_error_text_signal.emit(f"Error for Proxy: <b>Proxy Timing out</b> {selected_proxy} Proxy likely rate limiting connections")                        
+                    if self.proxy_error_connect_counts[selected_proxy] > 5: # Track error count for the proxy every # consecutive connection errors.
+                        self.update_error_text_signal.emit(f"Error for Proxy: <b>Proxy Timing out</b> {selected_proxy} Ratelimited?")                        
                         self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy                        
 
                     self.remove_proxy(
