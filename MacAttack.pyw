@@ -2980,7 +2980,7 @@ class MacAttack(QMainWindow):
         creation_thread.start()
 
     def is_valid_url(self, url):
-        print("checking iptv_link")
+        logging.info("checking iptv_link")
         self.update_error_text_signal.emit("Checking if url is valid")
         try:
             # Parse the URL
@@ -2995,18 +2995,18 @@ class MacAttack(QMainWindow):
 
             # Make a HEAD request to check if the URL is reachable
             response = requests.get(url, timeout=15)
-            print(response.text)
+            logging.debug(response.text)
             if response.status_code in (200, 404):
                 self.update_error_text_signal.emit(
                     "Recieved valid response from the link, proceeding..."
                 )
                 return True
             else:
-                print(f"Status Code: {response.status_code}")
+                logging.debug(f"Status Code: {response.status_code}")
                 return False
 
         except Exception as e:
-            print(str(e))
+            logging.debug(str(e))
             return False
 
     def _create_threads(self):
@@ -3017,7 +3017,7 @@ class MacAttack(QMainWindow):
         self.iptv_link = self.iptv_link_entry.text()
         # Check if the url is valid
         if not self.is_valid_url(self.iptv_link):
-            print(f"Invalid URL {self.iptv_link}")
+            logging.debug(f"Invalid URL {self.iptv_link}")
             self.update_error_text_signal.emit(
                 "ERROR: The URL IS NOT VALID. CANNOT PROCEED"
             )
@@ -3076,8 +3076,8 @@ class MacAttack(QMainWindow):
                             f"Portal type detected: Portal Version: {self.portal_version}\n"
                         )
                         portaltype = "portal.php"
-                else:
-                    logging.debug("Version declaration not found in the file.")
+                    else:
+                        logging.debug("Version declaration not found in the file.")
             except requests.RequestException as e:
                 logging.debug(f"Not type PORTAL: {e}")
 
@@ -3112,6 +3112,9 @@ class MacAttack(QMainWindow):
                 f"<b>WARNING:</b> No Portal detected! using default value {portaltype} {self.portal_version}<br>"
                 "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;If this is not a valid portal you will not get any results.<br>"
             )
+
+        if not self.parsed_path.startswith('/') and not self.port.endswith('/'):
+            self.parsed_path = '/' + self.parsed_path
 
         self.base_url = f"http://{self.host}:{self.port}{self.parsed_path}"
 
@@ -3311,6 +3314,9 @@ class MacAttack(QMainWindow):
                     res = macattacksess.get(url, timeout=timeout)
 
                     logging.debug(f"Status Code: {res.status_code}")
+                    if res.status_code == 404:
+                        logging.debug("404") # Nothing to do about this, as some portals return 404 on failed login.
+
                     if custommacs:
                         if (
                             (
