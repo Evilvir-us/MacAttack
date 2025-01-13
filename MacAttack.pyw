@@ -4710,8 +4710,6 @@ class MacAttack(QMainWindow):
                 )
                 if self.proxy_altspeed_checkbox.isChecked():
                     return True # Allow the sleep command to execute
-        else:
-            return False
 
                 # Define a function to re-the proxy after 10 seconds
                 def re_add_proxy():
@@ -4732,6 +4730,8 @@ class MacAttack(QMainWindow):
 
                 # Start a thread to handle the delayed re-addition
                 threading.Timer(ratelimit_timeout, re_add_proxy).start()
+        else:
+            return False                
 
     def play_success_sound(self):
         # Determine the base path for the sound file
