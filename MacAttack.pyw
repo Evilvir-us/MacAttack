@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.6.9"
+VERSION = "4.7.0"
 import semver
 import urllib.parse
 import webbrowser
@@ -2646,7 +2646,7 @@ class MacAttack(QMainWindow):
         self.error_text.setReadOnly(True)
         self.error_text.setFont(monospace_font)
         layout.addWidget(self.error_text)
-        layout.addSpacing(15)  # Adds space
+        layout.addSpacing(10)  # Adds space
 
 
     def update_customprefix(self):
@@ -4533,13 +4533,13 @@ class MacAttack(QMainWindow):
                             )
                             if self.temp_remove_proxy(selected_proxy):  # Temp remove the proxy
                                 time.sleep(self.remove_for_seconds_spinbox.value()) #sleep the thread if alt speed enabled
-                    elif "403 Forbidden" in res.text or "403: Forbidden" in res.text:
-                        if ratelimit_timeout > 0: 
-                            self.update_error_text_signal.emit(
-                                f"Error for Portal: <b>403 Forbidden</b> {selected_proxy} <b>Blacklisted</b> or <b>ratelimited</b>"
-                            )
-                            if self.temp_remove_proxy(selected_proxy):  # Temp remove the proxy
-                                time.sleep(self.remove_for_seconds_spinbox.value()) # Sleep the thread if alt speed enabled
+                    #elif "403 Forbidden" in res.text or "403: Forbidden" in res.text:
+                    #    if ratelimit_timeout > 0: 
+                    #        self.update_error_text_signal.emit(
+                    #            f"Error for Portal: <b>403 Forbidden</b> {selected_proxy} <b>Blacklisted</b> or <b>ratelimited</b>"
+                    #        )
+                    #        if self.temp_remove_proxy(selected_proxy):  # Temp remove the proxy
+                    #            time.sleep(self.remove_for_seconds_spinbox.value()) # Sleep the thread if alt speed enabled
                     elif "Connection to server failed" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4710,8 +4710,8 @@ class MacAttack(QMainWindow):
                 )
                 if self.proxy_altspeed_checkbox.isChecked():
                     return True # Allow the sleep command to execute
-                else:
-                    return False
+        else:
+            return False
 
                 # Define a function to re-the proxy after 10 seconds
                 def re_add_proxy():
