@@ -77,7 +77,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote, urlparse, urlunparse
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 portaltype = None
 player_portaltype = None
 
@@ -4219,6 +4219,7 @@ class MacAttack(QMainWindow):
                                 f"Error for Portal: <b>503 Rate Limited</b> {selected_proxy}"
                             )
                             if self.temp_remove_proxy(selected_proxy):  # Temp remove the proxy
+                                print("RATELIMITED ALT METHOD")
                                 time.sleep(self.remove_for_seconds_spinbox.value()) #sleep the thread if alt speed enabled
 
                     elif "ERR_ACCESS_DENIED" in res.text:
@@ -4699,11 +4700,12 @@ class MacAttack(QMainWindow):
             current_text = self.proxy_textbox.toPlainText()
             # Check if the proxy exists before attempting to remove it
             if proxy in current_text.splitlines():
-                # Remove proxy from the list temporarily
-                new_text = "\n".join(
-                    line for line in current_text.splitlines() if line.strip() != proxy
-                )
-                self.macattack_update_proxy_textbox_signal.emit(new_text)
+                if not self.proxy_altspeed_checkbox.isChecked():
+                    # Remove proxy from the list temporarily
+                    new_text = "\n".join(
+                        line for line in current_text.splitlines() if line.strip() != proxy
+                    )
+                    self.macattack_update_proxy_textbox_signal.emit(new_text)
                 # Notify user of temporary removal
                 self.update_error_text_signal.emit(
                     f"Proxy {proxy} temporarily removed."
