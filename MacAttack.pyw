@@ -785,6 +785,7 @@ class RequestThread(QThread):
             response = session.get(
                 genres_url, cookies=cookies, headers=headers, timeout=10
             )
+            logging.debug(response.text)
             response.raise_for_status()
             genre_data = response.json().get("js", [])
             if genre_data:
@@ -1507,6 +1508,7 @@ class MacAttack(QMainWindow):
             logging.error(f"Error during VLC instance restart: {e}")
 
     def build_Proxy_gui(self, parent):
+        # Proxies Tab
         proxy_layout = QVBoxLayout(parent)
         proxy_checkbox_layout = QHBoxLayout()
         proxy_checkbox_layout.addSpacing(15)
@@ -1515,6 +1517,7 @@ class MacAttack(QMainWindow):
         self.proxy_enabled_checkbox = QCheckBox("Enable Proxies")
         self.proxy_enabled_checkbox.setFixedWidth(120)
         proxy_checkbox_layout.addWidget(self.proxy_enabled_checkbox)
+        self.proxy_enabled_checkbox.stateChanged.connect(self.on_proxy_enabled_checkbox_toggled)
         proxy_checkbox_layout.addStretch(1)
 
         # Remove proxy after
@@ -1535,22 +1538,27 @@ class MacAttack(QMainWindow):
         self.connection_errors_label.setContentsMargins(0, 0, 0, 0)  # Set padding to 0
         proxy_checkbox_layout.addWidget(self.connection_errors_label)
 
-        # 15px spacer
         spacer_after_errors = QSpacerItem(15, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
         proxy_checkbox_layout.addItem(spacer_after_errors)
-        # Align to right
         proxy_checkbox_layout.setSpacing(0)  # Remove spacing between widgets
         proxy_checkbox_layout.setAlignment(Qt.AlignRight)
-        # Align the checkbox layout components
         proxy_checkbox_layout.setAlignment(self.proxy_enabled_checkbox, Qt.AlignLeft)
         proxy_checkbox_layout.setAlignment(self.proxy_label, Qt.AlignLeft)
         proxy_checkbox_layout.setAlignment(self.proxy_remove_errorcount, Qt.AlignLeft)
         proxy_checkbox_layout.setAlignment(self.connection_errors_label, Qt.AlignLeft)
-        # Add the checkbox layout
         proxy_layout.addLayout(proxy_checkbox_layout)
 
-        # Horizontal layout for proxy ratelimit timeout
         remove_rate_limit_layout = QHBoxLayout()
+        remove_rate_limit_layout.addSpacing(15)
+
+        # Checkbox for Alternate speed setting
+        self.proxy_altspeed_checkbox = QCheckBox("Alternate Speed Method. (1 thread per proxy)")
+        self.proxy_altspeed_checkbox.setFixedWidth(300)
+        remove_rate_limit_layout.addWidget(self.proxy_altspeed_checkbox)
+        remove_rate_limit_layout.addStretch(1)
+
+        # Connect the checkbox state change to a function
+        self.proxy_altspeed_checkbox.stateChanged.connect(self.on_altspeed_checkbox_toggled)
 
         # Remove ratelimited proxies for Label
         self.rate_limit_label = QLabel("Remove ratelimited proxies for")
@@ -1690,6 +1698,25 @@ class MacAttack(QMainWindow):
         proxy_layout.addWidget(self.proxy_output)
         self.proxy_textbox.textChanged.connect(self.update_proxy_count)
         self.proxy_output.textChanged.connect(self.trim_proxy_output)
+
+    def on_proxy_enabled_checkbox_toggled(self, state):
+        if state == Qt.Checked:
+            self.proxy_altspeed_checkbox.setDisabled(False)
+        else:
+            self.proxy_altspeed_checkbox.setChecked(False)
+            self.proxy_altspeed_checkbox.setDisabled(True)
+
+
+    def on_altspeed_checkbox_toggled(self, state):
+        if state == Qt.Checked:
+            self.concurrent_tests.setVisible(False)
+            self.speed_value_label.setText("")
+            self.speed_label.setText("")
+        else:
+            self.concurrent_tests.setVisible(True)
+            self.speed_value_label.setText("")
+            self.speed_label.setText("Speed:")
+
 
     def proxy_auto_updater(self):
         if self.update_hourly_checkbox.isChecked():
@@ -2430,7 +2457,6 @@ class MacAttack(QMainWindow):
         combined_layout.setContentsMargins(0, 0, 0, 0)
         combined_layout.setSpacing(10)
 
-        # Spacer to the left of IPTV link label
         left_spacer = QSpacerItem(10, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
         combined_layout.addItem(left_spacer)
         layout.addSpacing(15)  # Adds space
@@ -2492,11 +2518,9 @@ class MacAttack(QMainWindow):
         """
         )
 
-        # Spacer to the right of the Stop button
         right_spacer = QSpacerItem(10, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
         combined_layout.addItem(right_spacer)
 
-        # Add the combined layout to the main layout
         layout.addLayout(combined_layout)
         layout.addSpacing(15)  # Adds space
 
@@ -2757,6 +2781,7 @@ class MacAttack(QMainWindow):
             self.update_hourly_checkbox.setChecked(False)
             self.list_genres_checkbox.setChecked(False)
             self.vod_list_checkbox.setChecked(False)
+            self.proxy_altspeed_checkbox.setChecked(False)
             self.remove_for_seconds_spinbox.setValue(30)
 
             logging.debug("UI reset to default values.")
@@ -2821,6 +2846,7 @@ class MacAttack(QMainWindow):
             "ratelimit_timeout": str(self.remove_for_seconds_spinbox.value()),
             "list_genres": str(self.list_genres_checkbox.isChecked()),
             "list_vod": str(self.vod_list_checkbox.isChecked()),
+            "alt_proxy_speed": str(self.proxy_altspeed_checkbox.isChecked()),
         }
         config["Window"] = {
             "width": self.width(),
@@ -2951,6 +2977,9 @@ class MacAttack(QMainWindow):
             self.vod_list_checkbox.setChecked(
                 config.get("Settings", "list_vod", fallback="False") == "True"
             )
+            self.proxy_altspeed_checkbox.setChecked(
+                config.get("Settings", "alt_proxy_speed", fallback="False") == "True"
+            )
 
             # Load window geometry
             if config.has_section("Window"):
@@ -3058,7 +3087,18 @@ class MacAttack(QMainWindow):
         return True
 
 
-    def _create_threads(self):
+    def _create_threads(self):  
+        self.proxy_queue = deque()
+        if self.proxy_altspeed_checkbox.isChecked():
+            
+            if not self.proxy_queue:
+                # Create the deque if it doesn't exist
+                self.altspeedproxies = self.proxy_textbox.toPlainText().strip().splitlines()
+                self.proxy_queue = deque(self.altspeedproxies)            
+            
+            
+            
+            
         global portaltype
         portal_type_detected = True
 
@@ -3197,10 +3237,14 @@ class MacAttack(QMainWindow):
                 num_tests = 1 + (num_tests - 1) * (max_value - 1) / (1800 - 1)
                 num_tests = int(num_tests)
         else:
-            max_value = 300
+            max_value = 50
             num_tests = 1 + (num_tests - 1) * (max_value - 1) / (100 - 1)
             num_tests = int(num_tests)
         # Start threads to test MACs
+        
+        
+        if self.proxy_altspeed_checkbox.isChecked():
+            num_tests = len(self.proxy_queue)
         for _ in range(num_tests):
             thread = threading.Thread(target=self.BigMacAttack)
             thread.daemon = True
@@ -3235,10 +3279,6 @@ class MacAttack(QMainWindow):
             return mac
 
     def macattack_update_proxy_textbox(self, new_text):
-        """
-        Slot to update the text of the proxy textbox.
-        This is triggered by a signal, and it sets the textbox's content to `new_text`.
-        """
         if self.proxy_textbox:
             self.proxy_textbox.setText(
                 new_text
@@ -3272,11 +3312,16 @@ class MacAttack(QMainWindow):
         iptv_url = self.iptv_link
         base_url = self.base_url
 
-        while self.running:  # Loop will continue as long as self.running is True
+        alt_speed_enabled = self.proxy_altspeed_checkbox.isChecked()
 
+
+        selected_proxy = None
+
+        while self.running:
 
 
             # Checkbox states
+
             include_date_found = self.datefound_output_checkbox.isChecked()
             include_deviceids = self.deviceid_output_checkbox.isChecked()
             include_user_creds = self.username_output_checkbox.isChecked()
@@ -3290,14 +3335,11 @@ class MacAttack(QMainWindow):
             ratelimit_timeout = self.remove_for_seconds_spinbox.value()
             include_genres = self.list_genres_checkbox.isChecked()
             include_vod = self.vod_list_checkbox.isChecked()
-            custommacs = (
-                self.use_custom_macs_checkbox.isChecked()
-            )  # Check the state of the checkbox
+            custommacs = self.use_custom_macs_checkbox.isChecked()
             Ludicrous_speed = self.ludicrous_speed_checkbox.isChecked()
             if custommacs:
                 self.macattack_update_mac_count_signal.emit()
                 self.nomacs = 0
-
             created_at = None
             max_connections = None
             active_cons = None
@@ -3311,8 +3353,24 @@ class MacAttack(QMainWindow):
                     self.stop_button.click()
                     self.update_error_text_signal.emit("ERROR: Proxy list is empty")
                     return  # Stop the process if no proxies are available
+                    
                 # Choose a random proxy from the list
-                selected_proxy = random.choice(proxies)
+                if not alt_speed_enabled:
+                    selected_proxy = None
+                if not selected_proxy:  # Check only if no proxy is already set
+                    if alt_speed_enabled:
+                        print("No proxy assigned")
+                        if not self.proxy_queue:  # If the deque is empty
+                            print("All proxies are used up, exiting thread.")
+                            break  # Exit the thread if no proxies are left
+                        selected_proxy = self.proxy_queue.popleft()
+                        print(f"{selected_proxy} chosen from deque")
+                    else:
+                        # Only choose a random proxy if alt_speed_enabled is not checked
+                        selected_proxy = random.choice(proxies)
+                
+                
+                
                 logging.debug(f"Using proxy: {selected_proxy}")
                 # Ensure the proxy is set correctly as a dictionary
                 proxies = {"http": selected_proxy, "https": selected_proxy}
@@ -3405,7 +3463,7 @@ class MacAttack(QMainWindow):
                                         self.mac_dict.remove(
                                             mac
                                         )  # Remove the specific MAC address
-                                        logging.debug(f"removeing {mac} from deque")
+                                        logging.debug(f"removing {mac} from deque")
                             else:
                                 # Handle the case when the deque is empty
                                 logging.info("Pool is empty, cannot pop anything.")
@@ -4160,7 +4218,8 @@ class MacAttack(QMainWindow):
                             self.update_error_text_signal.emit(
                                 f"Error for Portal: <b>503 Rate Limited</b> {selected_proxy}"
                             )
-                            self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                            if self.temp_remove_proxy(selected_proxy):  # Temp remove the proxy
+                                time.sleep(self.remove_for_seconds_spinbox.value()) #sleep the thread if alt speed enabled
 
                     elif "ERR_ACCESS_DENIED" in res.text:
                         # Track error count for the proxy
@@ -4171,9 +4230,8 @@ class MacAttack(QMainWindow):
                             self.update_error_text_signal.emit(
                                 f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Access Denied</b> Proxy refused access."
                             )
-                            self.remove_proxy(
-                                selected_proxy, self.proxy_error_counts
-                            )  # remove the proxy if it exceeds the allowed error count
+                            if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                                break
                     elif (
                         "Could not connect" in res.text
                         or "Network is unreachable" in res.text
@@ -4198,9 +4256,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Could not connect</b> proxy Could not connect."
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif (
                         "Blocked" in res.text
                         or "Not authenticated" in res.text
@@ -4214,9 +4271,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Access Denied</b> blocked access"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "Access Denied" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4226,9 +4282,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Access Denied</b> blocked access"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "socket: " in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4238,9 +4293,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Socket Error</b> proxy socket error"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "Error code 520" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4250,9 +4304,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Error code 520</b> >Unknown error"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "502 Proxy Error" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4262,9 +4315,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>502 Proxy Error</b> proxy server issue"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif (
                         "500 Internal Server Error" in res.text
                         or "server misbehaving" in res.text
@@ -4279,9 +4331,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>500 Internal Server Error</b> proxy server issue"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "Host header port mismatch" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4291,9 +4342,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Host header port mismatch</b> proxy port does not match"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "connections reached" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4303,9 +4353,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Proxy Overloaded</b> Maximum number of open connections reached."
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "address already in use" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4315,9 +4364,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Address already in use</b> Proxy's port unavailable."
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif (
                         "DNS resolution error" in res.text
                         or "DNS lookup failed" in res.text
@@ -4331,9 +4379,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>DNS resolution error</b> DNS Issue with proxy"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "ERR_DNS_FAIL" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4343,9 +4390,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>DNS resolution error</b> DNS Issue with proxy"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "302 Found" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4355,9 +4401,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>302 Found</b> Proxy tried to redirect us"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif (
                         "504 Gateway" in res.text
                         or "Gateway Timeout" in res.text
@@ -4373,9 +4418,8 @@ class MacAttack(QMainWindow):
                             self.update_error_text_signal.emit(
                                 f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>504 Gateway Time-out</b> Proxy timed out"
                             )
-                            self.remove_proxy(
-                                selected_proxy, self.proxy_error_counts
-                            )  # remove the proxy if it exceeds the allowed error count
+                            if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                                break
                         else:
                             self.update_error_text_signal.emit(
                                 f"Error: <b>504 Gateway Time-out</b>"
@@ -4389,9 +4433,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>504 DNS look up failed</b> DNS Issue with proxy"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "502 Bad Gateway" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4401,9 +4444,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>502 Bad Gateway</b> Proxy communication issue"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "miner.start" in res.text:
                         self.update_error_text_signal.emit(
                             f"Error for Proxy: {selected_proxy} : <b>Fake Proxy</b> part of a bitcoin botnet"
@@ -4437,9 +4479,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>no such host</b> not connecting to portal"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "Royalty - Staffing" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4449,9 +4490,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Royalty - Staffing</b> WTF even is this?"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "<title>æ" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4461,21 +4501,19 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>æ æ³æ¾ç¤ºæ­¤é¡µ</b> WTF even is this?"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
-                    elif "404 Not Found" in res.text:
-                        # Track error count for the proxy
-                        if selected_proxy not in self.proxy_error_counts:
-                            self.proxy_error_counts[selected_proxy] = 1
-                        else:
-                            self.proxy_error_counts[selected_proxy] += 1
-                        self.update_error_text_signal.emit(
-                            f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>404 Not Found</b> proxy cannot find portal."
-                        )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
+                    #elif "404 Not Found" in res.text:
+                    #    # Track error count for the proxy
+                    #    if selected_proxy not in self.proxy_error_counts:
+                    #        self.proxy_error_counts[selected_proxy] = 1
+                    #    else:
+                    #        self.proxy_error_counts[selected_proxy] += 1
+                    #    self.update_error_text_signal.emit(
+                    #        f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>404 Not Found</b> proxy cannot find portal."
+                    #    )
+                    #    if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                    #        break
                     elif "ERROR: Not Found" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4486,19 +4524,22 @@ class MacAttack(QMainWindow):
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Not connecting</b> Proxy not connecting to server."
                         )
                         # Attempt to remove the proxy if it exceeds the allowed error count
-                        self.remove_proxy(selected_proxy, self.proxy_error_counts)
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "banned your IP" in res.text or "403: Forbidden" in res.text:
                         if ratelimit_timeout > 0: 
                             self.update_error_text_signal.emit(
                                 f"Error for Portal: <b>Banned</b> {selected_proxy}"
                             )
-                            self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                            if self.temp_remove_proxy(selected_proxy):  # Temp remove the proxy
+                                time.sleep(self.remove_for_seconds_spinbox.value()) #sleep the thread if alt speed enabled
                     elif "403 Forbidden" in res.text or "403: Forbidden" in res.text:
                         if ratelimit_timeout > 0: 
                             self.update_error_text_signal.emit(
                                 f"Error for Portal: <b>403 Forbidden</b> {selected_proxy} <b>Blacklisted</b> or <b>ratelimited</b>"
                             )
-                            self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                            if self.temp_remove_proxy(selected_proxy):  # Temp remove the proxy
+                                time.sleep(self.remove_for_seconds_spinbox.value()) # Sleep the thread if alt speed enabled
                     elif "Connection to server failed" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4509,7 +4550,8 @@ class MacAttack(QMainWindow):
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Not connecting</b> Proxy not connecting to server"
                         )
                         # Attempt to remove the proxy if it exceeds the allowed error count
-                        self.remove_proxy(selected_proxy, self.proxy_error_counts)
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     elif "Max retries exceeded" in res.text:
                         # Track error count for the proxy
                         if selected_proxy not in self.proxy_error_counts:
@@ -4520,7 +4562,8 @@ class MacAttack(QMainWindow):
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Not connecting</b> Proxy offline"
                         )
                         # Attempt to remove the proxy if it exceeds the allowed error count
-                        self.remove_proxy(selected_proxy, self.proxy_error_counts)
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
 
                     elif mac in res.text:
                         # good result, reset errors
@@ -4539,9 +4582,8 @@ class MacAttack(QMainWindow):
                         self.update_error_text_signal.emit(
                             f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: {selected_proxy} : <b>Proxy Server issue</b> Empty response"
                         )
-                        self.remove_proxy(
-                            selected_proxy, self.proxy_error_counts
-                        )  # remove the proxy if it exceeds the allowed error count
+                        if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                            break
                     else:
                         # Remove errorcounts
                         if selected_proxy in self.proxy_error_counts:
@@ -4565,7 +4607,8 @@ class MacAttack(QMainWindow):
                             self.update_error_text_signal.emit(
                                 f"Error for portal: <b>The target machine refused connection</b> {selected_proxy}"
                             )
-                            self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
+                            if self.temp_remove_proxy(selected_proxy):  # Temp remove the proxy
+                                time.sleep(self.remove_for_seconds_spinbox.value()) # Sleep the thread if alt speed enabled
                             del self.proxy_error_connect_counts[selected_proxy]
 
                 elif "Read timed out" in str(e):
@@ -4588,10 +4631,8 @@ class MacAttack(QMainWindow):
                             self.update_error_text_signal.emit(
                                 f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: <b>Read timed out</b> {selected_proxy}"
                             )
-                            self.remove_proxy(
-                                selected_proxy, self.proxy_error_counts
-                            )  # remove the proxy if it exceeds the allowed error count
-
+                            if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                                break
                             #self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
                             del self.proxy_error_connect_counts[selected_proxy]
 
@@ -4616,9 +4657,8 @@ class MacAttack(QMainWindow):
                             self.update_error_text_signal.emit(
                                 f"Error {self.proxy_error_counts[selected_proxy]} for Proxy: <b>Proxy Timing out</b> {selected_proxy}"
                             )
-                            self.remove_proxy(
-                                selected_proxy, self.proxy_error_counts
-                            )  # remove the proxy if it exceeds the allowed error count
+                            if self.remove_proxy(selected_proxy, self.proxy_error_counts):
+                                break
 
                             #self.temp_remove_proxy(selected_proxy)  # Temp remove the proxy
                             del self.proxy_error_connect_counts[selected_proxy]
@@ -4646,6 +4686,10 @@ class MacAttack(QMainWindow):
                 self.update_error_text_signal.emit(
                     f"Proxy {proxy} removed after exceeding {error_limit} consecutive errors."
                 )
+                if self.proxy_altspeed_checkbox.isChecked():
+                    return True # Allow the break command to execute
+                else:
+                    return False
 
     def temp_remove_proxy(self, proxy):
         """Temporarily remove a proxy for ratelimit_timeout seconds, then re-it."""
@@ -4664,6 +4708,10 @@ class MacAttack(QMainWindow):
                 self.update_error_text_signal.emit(
                     f"Proxy {proxy} temporarily removed."
                 )
+                if self.proxy_altspeed_checkbox.isChecked():
+                    return True # Allow the sleep command to execute
+                else:
+                    return False
 
                 # Define a function to re-the proxy after 10 seconds
                 def re_add_proxy():
