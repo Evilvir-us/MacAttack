@@ -2578,7 +2578,7 @@ class MacAttack(QMainWindow):
         )
         self.output_text.setPlainText("Output LOG:\nResults will appear here.\n")
         self.output_text.setReadOnly(True)
-        monospace_font = QFont("Cascadia Mono", 10)
+        monospace_font = QFont("Lucida Console", 10)
         self.output_text.setFont(monospace_font)
         layout.addWidget(self.output_text)
 
@@ -2860,9 +2860,6 @@ class MacAttack(QMainWindow):
             self.iptv_link_entry.setText(
                 config.get("Settings", "iptv_link", fallback="")
             )
-            self.concurrent_tests.setValue(
-                config.getint("Settings", "concurrent_tests", fallback=10)
-            )
             self.hostname_input.setText(config.get("Settings", "hostname", fallback=""))
             self.mac_input.setText(config.get("Settings", "mac", fallback=""))
             # Load checkbox states
@@ -2883,6 +2880,9 @@ class MacAttack(QMainWindow):
             )
             self.ludicrous_speed_checkbox.setChecked(
                 config.get("Settings", "ludicrous_speed", fallback="False") == "True"
+            )
+            self.concurrent_tests.setValue(
+                config.getint("Settings", "concurrent_tests", fallback=10)
             )
             self.deviceid_output_checkbox.setChecked(
                 config.get("Settings", "deviceid_output", fallback="False") == "True"
@@ -3864,7 +3864,7 @@ class MacAttack(QMainWindow):
                                         )
 
                                     if include_genres: # OK, I made this way too stupid(and it hurt my brain), but it works, and I like it!
-                                        title_max_length = 20 # Cut off end of titles afther this many chars
+                                        title_max_length = 16 # Cut off end of titles afther this many chars
                                         title_columns = 4
                                         titles_str = None
                                         titles_grid = None
@@ -3920,7 +3920,7 @@ class MacAttack(QMainWindow):
                                             logging.debug(f"Original Genres: {orig_genres}")
                                             logging.debug(f"Formatted Titles Grid:\n{titles_grid}")
                                     if include_vod:
-                                        title_max_length = 20 # Cut off end of titles afther this many chars
+                                        title_max_length = 16 # Cut off end of titles afther this many chars
                                         title_columns = 4
                                         vod_str = None
                                         vod_grid = None
