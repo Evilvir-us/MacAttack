@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.7.0"
+VERSION = "4.7.1"
 import semver
 import urllib.parse
 import webbrowser
@@ -2653,7 +2653,7 @@ class MacAttack(QMainWindow):
         # Update self.customprefix with the currently selected prefix
         self.customprefix = self.prefix_dropdown.currentText()
         self.customprefix = self.customprefix.replace(' (default)', '') #remove default
-        print(f"Updated customprefix: {self.customprefix}")
+        logging.info(f"Updated customprefix: {self.customprefix}")
 
 
     def set_portal_type_detected(self, index):
@@ -3359,12 +3359,12 @@ class MacAttack(QMainWindow):
                     selected_proxy = None
                 if not selected_proxy:  # Check only if no proxy is already set
                     if alt_speed_enabled:
-                        print("No proxy assigned")
+                        logging.info("No proxy assigned")
                         if not self.proxy_queue:  # If the deque is empty
-                            print("All proxies are used up, exiting thread.")
+                            logging.info("All proxies are used up, exiting thread.")
                             break  # Exit the thread if no proxies are left
                         selected_proxy = self.proxy_queue.popleft()
-                        print(f"{selected_proxy} chosen from deque")
+                        logging.info(f"{selected_proxy} chosen from deque")
                     else:
                         # Only choose a random proxy if alt_speed_enabled is not checked
                         selected_proxy = random.choice(proxies)
@@ -4219,7 +4219,7 @@ class MacAttack(QMainWindow):
                                 f"Error for Portal: <b>503 Rate Limited</b> {selected_proxy}"
                             )
                             if self.temp_remove_proxy(selected_proxy):  # Temp remove the proxy
-                                print("RATELIMITED ALT METHOD")
+                                logging.info("RATELIMITED ALT METHOD")
                                 time.sleep(self.remove_for_seconds_spinbox.value()) #sleep the thread if alt speed enabled
 
                     elif "ERR_ACCESS_DENIED" in res.text:
