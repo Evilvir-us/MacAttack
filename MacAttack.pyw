@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.7.2"
+VERSION = "4.7.3"
 import semver
 import urllib.parse
 import webbrowser
@@ -1040,6 +1040,7 @@ class VideoPlayerWorker(QThread):
 
 class MacAttack(QMainWindow):
     update_mac_label_signal = pyqtSignal(str)
+    update_hits_label_signal = pyqtSignal(str)
     update_output_text_signal = pyqtSignal(str)
     update_error_text_signal = pyqtSignal(str)
     macattack_update_proxy_textbox_signal = pyqtSignal(str)
@@ -1200,6 +1201,7 @@ class MacAttack(QMainWindow):
 
         # Connect the signals to for the Bigmacattack func
         self.update_mac_label_signal.connect(self.update_mac_label)
+        self.update_hits_label_signal.connect(self.update_hits_label)
         self.update_output_text_signal.connect(self.update_output_text)
         self.update_error_text_signal.connect(self.update_error_text)
         self.tabs.currentChanged.connect(self.on_tab_change)
@@ -1223,19 +1225,22 @@ class MacAttack(QMainWindow):
     def build_mac_videoPlayer_gui(self, parent):
         # Mac VideoPlayer Tab
         central_widget = QWidget(self)
-        parent.setLayout(QVBoxLayout())  # Set layout for the parent widget
+        parent.setLayout(QVBoxLayout())
         parent.layout().setContentsMargins(0, 0, 0, 0)
         parent.layout().setSpacing(0)
         parent.layout().addWidget(central_widget)
+
         # Main layout
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(10)
+
         # LEFT SECTION
         self.left_layout = QVBoxLayout()
         self.left_layout.setContentsMargins(0, 0, 0, 0)
         self.left_layout.setSpacing(10)
         self.left_layout.addSpacing(15)
+
         self.hostname_layout = QHBoxLayout()
         self.hostname_layout.setContentsMargins(0, 0, 0, 0)
         self.hostname_layout.setSpacing(0)
@@ -1244,6 +1249,7 @@ class MacAttack(QMainWindow):
         self.hostname_input = QLineEdit()
         self.hostname_layout.addWidget(self.hostname_input)
         self.left_layout.addLayout(self.hostname_layout)
+
         self.mac_layout = QHBoxLayout()
         self.mac_layout.setContentsMargins(0, 0, 0, 0)
         self.mac_layout.setSpacing(0)
@@ -1252,12 +1258,13 @@ class MacAttack(QMainWindow):
         self.mac_input = QLineEdit()
         self.mac_layout.addWidget(self.mac_input)
         self.left_layout.addLayout(self.mac_layout)
+
         self.playlist_layout = QHBoxLayout()
         self.playlist_layout.setContentsMargins(0, 0, 0, 0)
         self.playlist_layout.setSpacing(0)
         self.spacer = QSpacerItem(30, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
         self.playlist_layout.addItem(self.spacer)
-        # Proxy input
+
         self.proxy_layout = QHBoxLayout()
         self.proxy_layout.setContentsMargins(0, 0, 0, 0)
         self.proxy_layout.setSpacing(0)
@@ -1267,15 +1274,16 @@ class MacAttack(QMainWindow):
         self.proxy_input.setPlaceholderText("Optional")
         self.proxy_layout.addWidget(self.proxy_input)
         self.left_layout.addLayout(self.proxy_layout)
+
         self.get_playlist_button = QPushButton("Get Playlist")
         self.playlist_layout.addWidget(self.get_playlist_button)
         self.get_playlist_button.clicked.connect(self.get_playlist)
         self.left_layout.addLayout(self.playlist_layout)
         self.proxy_input.textChanged.connect(self.update_proxy)
-        # Playlist Tabs
+
         self.tab_widget = QTabWidget()
         self.left_layout.addWidget(self.tab_widget)
-        # Dictionary to hold tab data
+
         self.tab_data = {}
         for tab_name in ["Live", "Movies", "Series"]:
             tab = QWidget()
@@ -1286,14 +1294,10 @@ class MacAttack(QMainWindow):
 
             playlist_model = QStandardItemModel(playlist_view)
             playlist_view.setModel(playlist_model)
-
-            # Connect double-click signal
             playlist_view.doubleClicked.connect(self.on_playlist_selection_changed)
 
-            # Add the Tabs
             self.tab_widget.addTab(tab, tab_name)
 
-            # Store tab data
             self.tab_data[tab_name] = {
                 "tab_widget": tab,
                 "playlist_view": playlist_view,
@@ -1305,7 +1309,7 @@ class MacAttack(QMainWindow):
                 "current_series_info": [],
                 "current_view": "categories",
             }
-        # Progress bar
+
         self.progress_layout = QHBoxLayout()
         self.progress_layout.setContentsMargins(0, 0, 0, 0)
         self.progress_layout.setSpacing(0)
@@ -1313,35 +1317,49 @@ class MacAttack(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_layout.addWidget(self.progress_bar)
         self.left_layout.addLayout(self.progress_layout)
-        # Error Label
+
         self.error_label = QLabel("ERROR: Error message label")
-        self.error_label.setStyleSheet(
-            "color: red; font-size: 10pt; margin-bottom: 15px;"
-        )
+        self.error_label.setStyleSheet("color: red; font-size: 10pt; margin-bottom: 15px;")
         self.left_layout.addWidget(self.error_label, alignment=Qt.AlignRight)
-        self.error_label.setVisible(False)  # Initially hide the label
+        self.error_label.setVisible(False)
+
         self.left_widget = QWidget()
         self.left_widget.setLayout(self.left_layout)
         self.left_widget.setFixedWidth(240)
         main_layout.addWidget(self.left_widget)
+
         # RIGHT SECTION: Video area
         right_layout = QVBoxLayout()
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
-        # Video frame
+
         self.video_frame = QWidget(self)
         self.video_frame.setStyleSheet("background-color: black;")
         right_layout.addWidget(self.video_frame)
-        # right layout to main layout
+
+        # Video URL and Copy Button
+        link_layout = QHBoxLayout()
+        link_layout.addStretch() #Align it to the right
+        self.video_url_label = QLabel("No Video Loaded.")
+        self.video_url_label.setStyleSheet("color: gray; font-size: 10pt; margin-top: 5px; margin-right: 5px;")
+        link_layout.addWidget(self.video_url_label)
+
+        self.copy_button = QPushButton("Copy")
+        self.copy_button.setFixedWidth(60)
+        self.copy_button.setFixedHeight(25)
+        self.copy_button.setStyleSheet("padding: 0px; margin-top: 5px;")
+        self.copy_button.clicked.connect(lambda: QApplication.clipboard().setText(self.video_url_label.text()))
+        link_layout.addWidget(self.copy_button)
+        right_layout.addLayout(link_layout)
         main_layout.addLayout(right_layout)
-        # Configure the video player for the video frame
+
         if sys.platform.startswith("linux"):
             self.videoPlayer.set_xwindow(self.video_frame.winId())
         elif sys.platform == "win32":
             self.videoPlayer.set_hwnd(self.video_frame.winId())
         elif sys.platform == "darwin":
             self.videoPlayer.set_nsobject(int(self.video_frame.winId()))
-        # Load intro video
+
         if getattr(sys, "frozen", False):
             base_path = sys._MEIPASS
         else:
@@ -1349,11 +1367,10 @@ class MacAttack(QMainWindow):
         video_path = os.path.join(base_path, "include", "intro.mp4")
         self.videoPlayer.set_media(self.instance.media_new(video_path))
         logging.info(video_path)
-        self.startplay = 1  # play the video when switched to the video tab
-        # Disable mouse and key input for video
+        self.startplay = 1
         self.videoPlayer.video_set_mouse_input(False)
         self.videoPlayer.video_set_key_input(False)
-        # Progress Animation
+
         self.progress_animation = QPropertyAnimation(self.progress_bar, b"value")
         self.progress_animation.setDuration(1000)
         self.progress_animation.setEasingCurve(QEasingCurve.Linear)
@@ -2432,6 +2449,9 @@ class MacAttack(QMainWindow):
             self.concurrent_tests.setRange(1, 100)  # Default range
             # self.proxy_concurrent_tests.setRange(1, 100)
 
+    def update_hits_label(self, text):
+        """Update the MAC address label in the main thread."""
+        self.hits_label.setText(text)
     def update_mac_label(self, text):
         """Update the MAC address label in the main thread."""
         self.brute_mac_label.setText(text)
@@ -2527,12 +2547,12 @@ class MacAttack(QMainWindow):
         # Dropdown and MAC label layout
         dropdown_label_layout = QHBoxLayout()
         dropdown_label_layout.setContentsMargins(0, 0, 0, 0)
-        dropdown_label_layout.setSpacing(10)
+        dropdown_label_layout.setSpacing(0)
 
         # Spacer to the left of IPTV type label
         # left_spacer = QSpacerItem(10, 0, QSizePolicy.Fixed, QSizePolicy.Minimum)
         dropdown_label_layout.addItem(left_spacer)
-        dropdown_label_layout.addSpacing(20)  # Adds space
+        dropdown_label_layout.addSpacing(0)  # Adds space
 
         # IPTV type input
         self.iptv_type_label = QLabel("Type:")
@@ -2573,11 +2593,16 @@ class MacAttack(QMainWindow):
         dropdown_label_layout.addWidget(self.prefix_dropdown)
         self.prefix_dropdown.currentIndexChanged.connect(self.update_customprefix)
 
-
-
+        # Hits label
+        dropdown_label_layout.addSpacing(20)  # Adds space
+        self.hits_label = QLabel("Hits: 0")
+        dropdown_label_layout.addWidget(self.hits_label, alignment=Qt.AlignCenter)
+        dropdown_label_layout.addSpacing(20)  # Adds space
+        
         # Center spacer for label alignment
         center_spacer = QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum)
         dropdown_label_layout.addItem(center_spacer)
+
 
         # MAC address label
         self.brute_mac_label = QLabel("")
@@ -3311,7 +3336,7 @@ class MacAttack(QMainWindow):
         self.recentlyfound = []  # Erase recently found list
         iptv_url = self.iptv_link
         base_url = self.base_url
-
+        self.hits = 0
         alt_speed_enabled = self.proxy_altspeed_checkbox.isChecked()
 
 
@@ -3397,9 +3422,13 @@ class MacAttack(QMainWindow):
 
             if not proxies:
                 self.update_mac_label_signal.emit(f"Testing MAC: {mac}")
+                self.update_hits_label_signal.emit(f"Hits: {self.hits}  ")
             if proxies:
                 self.update_mac_label_signal.emit(
                     f"Testing MAC: {mac:<19} Using PROXY: {selected_proxy:<23}"
+                )
+                self.update_hits_label_signal.emit(
+                    f"Hits: {self.hits}"
                 )
             try:
 
@@ -4159,6 +4188,10 @@ class MacAttack(QMainWindow):
 
 
                                     if not mac in self.recentlyfound:
+                                        if not hasattr(self, "hits"):
+                                            self.hits = 1
+                                        else:
+                                            self.hits += 1
                                         self.add_recently_found(
                                             mac
                                         )
@@ -5530,6 +5563,7 @@ class MacAttack(QMainWindow):
         )
 
     def launch_media_player(self, stream_url):
+        self.video_url_label.setText(stream_url) #Put the video url in the label
         self.restart_vlc_instance()
         self.update_proxy()  # reset the vlc window with the proxy and referer
         self.error_label.setVisible(False)
