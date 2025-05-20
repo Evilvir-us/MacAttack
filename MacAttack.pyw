@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.7.3"
+VERSION = "4.7.5"
 import semver
 import urllib.parse
 import webbrowser
@@ -4203,9 +4203,13 @@ class MacAttack(QMainWindow):
                                         if include_genres and titles_str and titles_grid:
                                             result_message = result_message.replace(titles_grid, orig_genres)
                                             logging.debug("Replacing playlist grid with list for file")
+                                        if include_genres and titles_str and titles_grid and not include_vod:
+                                            result_message = result_message.replace(titles_grid, orig_genres)
+                                            logging.debug("VOD categories disabled")
                                         if include_vod and vod_str and vods_grid:
                                             result_message = result_message.replace(vods_grid, orig_vods)
                                             logging.debug("Replacing vod grid with list for file")
+
                                         self.output_file.write(result_message + "\n")
                                         self.output_file.flush()
 
