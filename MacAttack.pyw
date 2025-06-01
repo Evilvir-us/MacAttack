@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.7.3"
+VERSION = "4.7.5"
 import semver
 import urllib.parse
 import webbrowser
@@ -4176,13 +4176,15 @@ class MacAttack(QMainWindow):
 
                                     result_message += f"{'Exp date:':<10} {expiry}\n{'Channels:':<10} {count}\n"
 
-
+                                    file_message = result_message
                                     if include_genres and titles_str:
                                         result_message += f"{'Playlist:':<10} {titles_grid}\n"
+                                        file_message += f"{'Playlist:':<10} {orig_genres}\n"
                                         
                                         
                                     if include_vod and vod_str:
                                         result_message += f"{'VOD list:':<10} {vods_grid}\n"
+                                        file_message += f"{'VOD list:':<10} {orig_vods}\n"
                                         
 
 
@@ -4200,13 +4202,13 @@ class MacAttack(QMainWindow):
                                         )
 
                                         # Replace the grid with the list for the file
-                                        if include_genres and titles_str and titles_grid:
-                                            result_message = result_message.replace(titles_grid, orig_genres)
-                                            logging.debug("Replacing playlist grid with list for file")
-                                        if include_vod and vod_str and vods_grid:
-                                            result_message = result_message.replace(vods_grid, orig_vods)
-                                            logging.debug("Replacing vod grid with list for file")
-                                        self.output_file.write(result_message + "\n")
+                                        #if include_genres and titles_str and titles_grid:
+                                        #    result_message = result_message.replace(titles_grid, orig_genres)
+                                        #    logging.debug("Replacing playlist grid with list for file")
+                                        #if include_vod and vod_str and vods_grid:
+                                        #    result_message = result_message.replace(vods_grid, orig_vods)
+                                        #    logging.debug("Replacing vod grid with list for file")
+                                        self.output_file.write(file_message + "\n")
                                         self.output_file.flush()
 
                                         if self.successsound_checkbox.isChecked():
