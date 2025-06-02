@@ -4203,15 +4203,13 @@ class MacAttack(QMainWindow):
                                         )
 
                                         # Replace the grid with the list for the file
-
-                                        if include_genres and titles_str and titles_grid:
-                                            result_message = result_message.replace(titles_grid, orig_genres)
-                                            logging.debug("Replacing playlist grid with list for file")
-                                        if include_vod and vod_str and vods_grid:
-                                            result_message = result_message.replace(vods_grid, orig_vods)
-                                            logging.debug("Replacing vod grid with list for file")
+                                        #if include_genres and titles_str and titles_grid:
+                                        #    result_message = result_message.replace(titles_grid, orig_genres)
+                                        #    logging.debug("Replacing playlist grid with list for file")
+                                        #if include_vod and vod_str and vods_grid:
+                                        #    result_message = result_message.replace(vods_grid, orig_vods)
+                                        #    logging.debug("Replacing vod grid with list for file")
                                         self.output_file.write(file_message + "\n")
-
                                         self.output_file.flush()
 
                                         if self.successsound_checkbox.isChecked():
