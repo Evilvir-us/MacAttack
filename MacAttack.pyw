@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.7.5"
+VERSION = "4.7.6"
 import semver
 import urllib.parse
 import webbrowser
