@@ -81,15 +81,15 @@ Videoplayer Settings
 ---
 
 ## Compiling
-Install pyinstaller
-pip install pyinstaller
-
-Install requirements
-pip install -r requirements.txt
-
-*On Windows:
-python.exe .\BuildMacAttack.py
-
+Install pyinstaller  
+pip install pyinstaller  
+  
+Install requirements  
+pip install -r requirements.txt  
+  
+*On Windows:  
+python.exe .\BuildMacAttack.py  
+  
 ---
 
 **Disclaimer:** MacAttack is strictly a testing tool. Unauthorized use on others' portals may violate laws or terms of service. Always ensure you have permission to test a portal.
