@@ -1,6 +1,6 @@
 # TODO:
 # Clean up code, remove redundancy
-VERSION = "4.7.6"
+VERSION = "4.7.7"
 import semver
 import urllib.parse
 import webbrowser
@@ -2591,7 +2591,15 @@ class MacAttack(QMainWindow):
             '00:1A:79: (default)'
         ])
         self.prefix_dropdown.addItems(prefixes)
+        self.prefix_dropdown.addItem("Custom MAC")
         dropdown_label_layout.addWidget(self.prefix_dropdown)
+        self.custom_prefix_input = QLineEdit()
+        self.custom_prefix_input.setPlaceholderText("Ex: 00:AA:BB:")
+        self.custom_prefix_input.setFixedWidth(100)
+        self.custom_prefix_input.setVisible(False)
+        self.custom_prefix_input.setInputMask(">HH:HH:HH:")
+        dropdown_label_layout.addWidget(self.custom_prefix_input)
+        self.custom_prefix_input.textChanged.connect(self.update_customprefix)
         self.prefix_dropdown.currentIndexChanged.connect(self.update_customprefix)
 
         # Hits label
@@ -2676,10 +2684,13 @@ class MacAttack(QMainWindow):
 
 
     def update_customprefix(self):
-        # Update self.customprefix with the currently selected prefix
-        self.customprefix = self.prefix_dropdown.currentText()
-        self.customprefix = self.customprefix.replace(' (default)', '') #remove default
-        logging.info(f"Updated customprefix: {self.customprefix}")
+        selected = self.prefix_dropdown.currentText()
+        if selected == "Custom MAC":
+            self.custom_prefix_input.setVisible(True)
+            self.customprefix = self.validate_custom_prefix(self.custom_prefix_input.text())
+        else:
+            self.custom_prefix_input.setVisible(False)
+            self.customprefix = selected.replace(" (default)", "")
 
 
     def set_portal_type_detected(self, index):
@@ -5831,6 +5842,17 @@ class MacAttack(QMainWindow):
         # self.GiveUp()
         os._exit(0)
         event.accept()
+
+    def validate_custom_prefix(self, prefix):
+        pattern = r"^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){2}:$"
+        if re.match(pattern, prefix.strip()):
+            self.custom_prefix_input.setStyleSheet("")
+            return prefix.strip().upper()
+        else:
+            self.custom_prefix_input.setStyleSheet(
+                "border: 2px solid red; background-color: #451e1c;"
+            )
+            return "00:1A:79:"
 
 
 if __name__ == "__main__":
